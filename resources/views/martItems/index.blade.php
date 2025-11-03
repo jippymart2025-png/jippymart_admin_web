@@ -298,7 +298,7 @@
         var user_permissions = '<?php echo @session("user_permissions") ?>';
         user_permissions = Object.values(JSON.parse(user_permissions));
         var checkDeletePermission = false;
-        
+
         console.log('🔍 User permissions:', user_permissions);
         if($.inArray('mart-items.delete', user_permissions) >= 0) {
             checkDeletePermission = true;
@@ -308,9 +308,9 @@
         }
 
         var restaurantID = "{{$id}}";
-        
+
         console.log('🔍 Restaurant ID from URL:', restaurantID);
-        
+
         // URL parameters
         const urlParams = new URLSearchParams(location.search);
         var categoryID = '';
@@ -326,7 +326,7 @@
         window.selectedBrand = '';
         window.selectedFoodType = '';
         window.selectedFeature = '';
-        
+
         console.log('🎯 Initial filters:', {
             vendor: window.selectedVendor,
             category: window.selectedCategory,
@@ -339,7 +339,7 @@
         currentCurrency = '₹';
         currencyAtRight = false;
         decimal_degits = 0;
-        placeholderImage = '/images/placeholder.png';
+        placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
 
         // Load currency settings (async, but with defaults already set)
         $.ajax({
@@ -447,26 +447,26 @@
         <?php if ($id != '') { ?>
         // Load vendor data for tabs (only if valid vendor ID)
         console.log('🏪 Attempting to load vendor data for ID:', '<?php echo $id; ?>');
-        
+
         $.ajax({
             url: '{{ route("vendors.getById", ":id") }}'.replace(':id', '<?php echo $id; ?>'),
             method: 'GET',
             success: function(vendorData) {
                 console.log('✅ Vendor data loaded:', vendorData);
-                
+
                 if (vendorData && vendorData.vType && (vendorData.vType.toLowerCase() === 'mart' || vendorData.vType === 'Mart')) {
                     // Valid mart vendor - apply filter
                     window.selectedVendor = '<?php echo $id; ?>';
                     console.log('✅ Valid mart vendor found, applying filter:', window.selectedVendor);
-                    
+
                     walletRoute = "{{route('users.walletstransaction', ':id')}}";
                     walletRoute = walletRoute.replace(":id", vendorData.author);
                     $('#restaurant_wallet').append('<a href="' + walletRoute + '">{{trans("lang.wallet_transaction")}}</a>');
                     $('#subscription_plan').append('<a href="' + "{{route('vendor.subscriptionPlanHistory', ':id')}}".replace(':id', vendorData.author) + '">' + '{{trans('lang.subscription_history')}}' + '</a>');
-                    
+
                     // Update page title
                     $('.restaurantTitle').html('{{trans("lang.mart_item_plural")}} - ' + vendorData.title);
-                    
+
                     // Reload table with vendor filter
                     if (typeof $('#foodTable').DataTable === 'function') {
                         $('#foodTable').DataTable().ajax.reload();
@@ -490,7 +490,7 @@
             window.selectedCategory = $('.category_selector').val() || '';
             window.selectedFeature = $('.feature_selector').val() || '';
             window.selectedBrand = $('.brand_selector').val() || '';
-            
+
             $('#foodTable').DataTable().ajax.reload();
         });
         $(document).ready(function() {
@@ -498,7 +498,7 @@
             console.log('✅ jQuery version:', $.fn.jquery);
             console.log('✅ DataTable available:', typeof $.fn.DataTable);
             console.log('✅ Food table element exists:', $('#foodTable').length > 0);
-            
+
             $('.restaurant_selector').select2({
                 placeholder: "Mart",
                 minimumResultsForSearch: Infinity,
@@ -559,14 +559,14 @@
                 ],
                 fileName: "Mart Items",
             };
-            
+
             console.log('🎯 About to initialize DataTable on #foodTable');
             console.log('🎯 Table element:', $('#foodTable'));
             console.log('🎯 Current filters:', {
                 vendor: window.selectedVendor,
                 category: window.selectedCategory
             });
-            
+
             const table=$('#foodTable').DataTable({
                 pageLength: 10, // Number of rows per page
                 processing: false, // Show processing indicator
@@ -575,13 +575,13 @@
                 ajax: function(data, callback, settings) {
                     console.log('🔄 DataTable AJAX function called');
                     console.log('📊 DataTable data:', data);
-                    
+
                     $('#data-table_processing').show();
-                    
+
                     // Build AJAX request
                     var apiUrl = '{{ route("mart-items.data") }}';
                     console.log('🔗 API URL:', apiUrl);
-                    
+
                     var requestData = {
                         draw: data.draw,
                         start: data.start,
@@ -595,9 +595,9 @@
                         food_type: window.selectedFoodType,
                         feature: window.selectedFeature
                     };
-                    
+
                     console.log('📤 Request data being sent:', requestData);
-                    
+
                     $.ajax({
                         url: apiUrl,
                         type: 'GET',
@@ -608,7 +608,7 @@
                         success: function(response) {
                             console.log('📦 DataTable response:', response);
                             $('#data-table_processing').hide();
-                            
+
                             // Check if response has error
                             if (response.error) {
                                 console.error('❌ API Error:', response.error);
@@ -622,14 +622,14 @@
                                 });
                                 return;
                             }
-                            
+
                             $('.food_count').text(response.recordsTotal || 0);
-                            
+
                             // Build HTML for each row
                             var records = [];
                             if (Array.isArray(response.data)) {
                                 console.log('✅ Response data is an array with', response.data.length, 'items');
-                                
+
                                 response.data.forEach(function(item, index) {
                                     console.log('🔨 Building HTML for item', index + 1, ':', item.name);
                                     try {
@@ -644,16 +644,16 @@
                             } else {
                                 console.error('❌ Response data is not an array:', response.data);
                             }
-                            
+
                             console.log('📤 Calling DataTable callback with', records.length, 'records');
-                            
+
                             callback({
                                 draw: response.draw,
                                 recordsTotal: response.recordsTotal || 0,
                                 recordsFiltered: response.recordsFiltered || 0,
                                 data: records
                             });
-                            
+
                             console.log('✅ DataTable callback completed');
                         },
                         error: function(xhr, error, thrown) {
@@ -662,14 +662,14 @@
                             console.error("Status:", xhr.status);
                             $('#data-table_processing').hide();
                             $('.food_count').text(0);
-                            
+
                             // Show user-friendly error
                             if (xhr.status === 500) {
                                 alert('Server error loading items. Please check the logs.');
                             } else if (xhr.status === 404) {
                                 alert('API endpoint not found. Please check routes.');
                             }
-                            
+
                             callback({
                                 draw: data.draw,
                                 recordsTotal: 0,
@@ -804,7 +804,7 @@
             var caregoryroute='{{route("categories.edit", ":id")}}';
             caregoryroute=caregoryroute.replace(':id',val.categoryID);
             html.push('<a href="'+caregoryroute+'">'+(val.categoryTitle || '')+'</a>');
-            
+
             // Add brand display
             if(val.brandTitle && val.brandTitle !== '') {
                 html.push('<span class="badge badge-info">'+val.brandTitle+'</span>');
@@ -866,7 +866,7 @@
             var $checkbox = $(this);
             var ischeck = $checkbox.is(':checked');
             var id = this.id;
-            
+
             $.ajax({
                 url: '{{ route("mart-items.toggle-publish", ":id") }}'.replace(':id', id),
                 method: 'POST',
@@ -893,7 +893,7 @@
             var $checkbox = $(this);
             var ischeck = $checkbox.is(':checked');
             var id = this.id.replace('isAvailable_','');
-            
+
             $.ajax({
                 url: '{{ route("mart-items.toggle-availability", ":id") }}'.replace(':id', id),
                 method: 'POST',
@@ -919,11 +919,11 @@
         $(document).on("click","a[name='food-delete']",function(e) {
             e.preventDefault();
             var id = this.id;
-            
+
             if (!confirm('Are you sure you want to delete this mart item? This action cannot be undone.')) {
                 return;
             }
-            
+
             $.ajax({
                 url: '{{ route("mart-items.delete", ":id") }}'.replace(':id', id),
                 method: 'DELETE',
@@ -951,25 +951,25 @@
             var isChecked=$(this).prop('checked');
             $('input[type="checkbox"][name="record"]').prop('checked',isChecked);
         });
-        
+
         // Bulk delete
         $('#deleteAll').click(function() {
             if (!confirm("{{trans('lang.selected_delete_alert')}}")) {
                 return;
             }
-            
+
             var ids = [];
             $('input[type="checkbox"][name="record"]:checked').each(function() {
                 ids.push($(this).attr('dataId'));
             });
-            
+
             if (ids.length === 0) {
                 alert('Please select at least one item to delete');
                 return;
             }
-            
+
             jQuery("#data-table_processing").show();
-            
+
             $.ajax({
                 url: '{{ route("mart-items.bulk-delete") }}',
                 method: 'POST',

@@ -164,81 +164,54 @@
 @endsection
 @section('scripts')
 <script>
-var database = firebase.firestore();
-var promotionsRef = database.collection('promotions');
-var vendorsMap = {};
-var productsMap = {};
-var zonesMap = {};
 var selectedVTypeFilter = '';
 var selectedZoneFilter = '';
 
-function fetchVendorsAndProducts() {
-    return database.collection('vendors').get().then(function(vendorSnap) {
-        vendorSnap.forEach(function(doc) {
-            var data = doc.data();
-            vendorsMap[data.id] = data.title;
-        });
-        return database.collection('vendor_products').get();
-    }).then(function(productSnap) {
-        productSnap.forEach(function(doc) {
-            var data = doc.data();
-            productsMap[data.id] = data.name;
-        });
-        return database.collection('zone').get();
-    }).then(function(zoneSnap) {
-        zoneSnap.forEach(function(doc) {
-            var data = doc.data();
-            zonesMap[doc.id] = data.name || doc.id;
-        });
-    });
-}
-
-function formatDateTime(ts) {
-    if (!ts) return '';
-    var date = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
-    return date.toLocaleString();
+function formatDateTime(dateStr) {
+    if (!dateStr) return '';
+    try {
+        var date = new Date(dateStr);
+        return date.toLocaleString();
+    } catch (e) {
+        return dateStr;
+    }
 }
 
 function isExpired(endTime) {
     if (!endTime) return false;
-    var endDate = endTime.seconds ? new Date(endTime.seconds * 1000) : new Date(endTime);
-    var currentDate = new Date();
-    return endDate < currentDate;
+    try {
+        var endDate = new Date(endTime);
+        var currentDate = new Date();
+        return endDate < currentDate;
+    } catch (e) {
+        return false;
+    }
 }
 
 function renderTable(promotions) {
     var tbody = '';
     var visibleCount = 0;
     promotions.forEach(function(promo) {
-        var pType = (promo.vType || '').toString().toLowerCase();
-        var pZone = promo.zoneId || '';
-        if (selectedVTypeFilter && pType !== selectedVTypeFilter) return;
-        if (selectedZoneFilter && pZone !== selectedZoneFilter) return;
-
-        var isExpiredPromo = isExpired(promo.end_time);
+        var isExpiredPromo = promo.isExpired || false;
         var expiredText = isExpiredPromo ? '<br><span class="badge badge-danger">EXPIRED</span>' : '';
-
         var rowClass = isExpiredPromo ? 'table-danger' : '';
         
-        // Use stored titles if available, otherwise fall back to mapping
-        var restaurantName = promo.restaurant_title || vendorsMap[promo.restaurant_id] || promo.restaurant_id || '-';
-        var productName = promo.product_title || productsMap[promo.product_id] || promo.product_id || '-';
-        var typeText = pType ? (pType.charAt(0).toUpperCase() + pType.slice(1)) : '-';
-        var zoneText = zonesMap[pZone] || pZone || '-';
+        var typeText = promo.vType ? (promo.vType.charAt(0).toUpperCase() + promo.vType.slice(1)) : '-';
+        var zoneText = promo.zone_name || '-';
         
         tbody += '<tr class="' + rowClass + '">' +
             '<td class="delete-all"><input type="checkbox" id="is_open_' + promo.id + '" class="is_open" dataId="' + promo.id + '"><label class="col-3 control-label" for="is_open_' + promo.id + '"></label></td>' +
             '<td>' + typeText + '</td>' +
             '<td>' + zoneText + '</td>' +
-            '<td>' + restaurantName + '</td>' +
-            '<td>' + productName + '</td>' +
-            '<td>' + (promo.special_price !== undefined ? '₹' + promo.special_price : '-') + '</td>' +
-            '<td>' + (promo.item_limit !== undefined ? promo.item_limit : '2') + '</td>' +
-            '<td>' + (promo.extra_km_charge !== undefined ? promo.extra_km_charge : '-') + '</td>' +
-            '<td>' + (promo.free_delivery_km !== undefined ? promo.free_delivery_km : '-') + '</td>' +
+            '<td>' + promo.restaurant_title + '</td>' +
+            '<td>' + promo.product_title + '</td>' +
+            '<td>₹' + promo.special_price + '</td>' +
+            '<td>' + promo.item_limit + '</td>' +
+            '<td>' + promo.extra_km_charge + '</td>' +
+            '<td>' + promo.free_delivery_km + '</td>' +
             '<td>' + formatDateTime(promo.start_time) + '</td>' +
             '<td>' + formatDateTime(promo.end_time) + expiredText + '</td>' +
-            '<td>' + (promo.payment_mode || '-') + '</td>' +
+            '<td>' + promo.payment_mode + '</td>' +
             '<td>' + (promo.isAvailable ? '<label class="switch"><input type="checkbox" checked id="'+promo.id+'" name="isAvailable"><span class="slider round"></span></label>' : '<label class="switch"><input type="checkbox" id="'+promo.id+'" name="isAvailable"><span class="slider round"></span></label>') + '</td>' +
             '<td>' +
                 '<span class="action-btn">' +
@@ -259,59 +232,62 @@ function editUrl(id) {
 
 function loadPromotions() {
     jQuery('#data-table_processing').show();
-    fetchVendorsAndProducts().then(function() {
-        promotionsRef.get().then(function(snapshot) {
-            var promotions = [];
-            var updatePromises = [];
-
-            snapshot.forEach(function(doc) {
-                var data = doc.data();
-                data.id = doc.id;
-
-                // Check if promotion is expired and update isAvailable if needed
-                if (isExpired(data.end_time) && data.isAvailable !== false) {
-                    updatePromises.push(promotionsRef.doc(doc.id).update({isAvailable: false}));
-                }
-
-                promotions.push(data);
-            });
-
-            if (updatePromises.length > 0) {
-                Promise.all(updatePromises).catch(function(error) {
-                    console.error('Error updating expired promotions:', error);
+    
+    $.ajax({
+        url: '{{ route('promotions.data') }}',
+        method: 'GET',
+        data: {
+            vtype_filter: selectedVTypeFilter,
+            zone_filter: selectedZoneFilter
+        },
+        success: function(response) {
+            if (response.success) {
+                renderTable(response.data);
+                jQuery('#data-table_processing').hide();
+                
+                $('#promotionsTable').DataTable({
+                    destroy: true,
+                    pageLength: 10,
+                    responsive: true,
+                    searching: true,
+                    ordering: true,
+                    order: [[3, 'asc']],
+                    columnDefs: [
+                        { orderable: false, targets: [0, 12, 13] }
+                    ],
+                    "language": {
+                        "zeroRecords": "No records found",
+                        "emptyTable": "No records found",
+                        "processing": ""
+                    }
                 });
+            } else {
+                jQuery('#data-table_processing').hide();
+                alert('Error loading promotions: ' + response.error);
             }
-
-            renderTable(promotions);
+        },
+        error: function(xhr, status, error) {
             jQuery('#data-table_processing').hide();
-            $('#promotionsTable').DataTable({
-                destroy: true,
-                pageLength: 10,
-                responsive: true,
-                searching: true,
-                ordering: true,
-                order: [[3, 'asc']],
-                columnDefs: [
-                    { orderable: false, targets: [0, 12, 13] }
-                ],
-                "language": {
-                    "zeroRecords": "No records found",
-                    "emptyTable": "No records found",
-                    "processing": ""
-                }
-            });
-        });
+            console.error('Error loading promotions:', error);
+            alert('Error loading promotions');
+        }
     });
 }
 
 $(document).ready(function() {
     loadPromotions();
 
-    database.collection('zone').get().then(function(snap) {
-        snap.forEach(function(doc) {
-            var data = doc.data();
-            $('#promotion_zone_filter').append('<option value="'+doc.id+'">'+(data.name || doc.id)+'</option>');
-        });
+    // Load zones for filter
+    $.ajax({
+        url: '{{ route('promotions.zones') }}',
+        method: 'GET',
+        success: function(response) {
+            if (response.success) {
+                response.data.forEach(function(zone) {
+                    $('#promotion_zone_filter').append('<option value="'+zone.id+'">'+zone.name+'</option>');
+                });
+            }
+        }
     });
 
     $(document).on('change', '#promotion_vtype_filter', function() {
@@ -329,41 +305,36 @@ $(document).ready(function() {
     });
 
     // Delete selected
-    $("#deleteAll").click(async function () {
+    $("#deleteAll").click(function () {
         if ($('#promotionsTable .is_open:checked').length) {
             if (confirm("Are you sure you want to delete selected promotions?")) {
                 jQuery("#data-table_processing").show();
-                var selectedPromotions = [];
-                for (let i = 0; i < $('#promotionsTable .is_open:checked').length; i++) {
-                    var dataId = $('#promotionsTable .is_open:checked').eq(i).attr('dataId');
-                    try {
-                        const promoDoc = await promotionsRef.doc(dataId).get();
-                        if (promoDoc.exists) {
-                            const promoData = promoDoc.data();
-                            var restaurantName = promoData.restaurant_title || 'Unknown Restaurant';
-                            var productName = promoData.product_title || 'Unknown Product';
-                            selectedPromotions.push(restaurantName + ' - ' + productName + ' (₹' + (promoData.special_price || 0) + ')');
-                        }
-                    } catch (error) {
-                        console.error('Error getting promotion info:', error);
-                    }
-                }
+                var ids = [];
                 $('#promotionsTable .is_open:checked').each(function () {
-                    var dataId = $(this).attr('dataId');
-                    promotionsRef.doc(dataId).delete();
+                    ids.push($(this).attr('dataId'));
                 });
-                console.log('✅ Bulk promotion deletion completed, now logging activity...');
-                try {
-                    if (typeof logActivity === 'function') {
-                        await logActivity('promotions', 'bulk_deleted', 'Bulk deleted promotions: ' + selectedPromotions.join(', '));
-                    } else {
-                        console.error('❌ logActivity function is not available');
+                
+                $.ajax({
+                    url: '{{ route('promotions.bulk-delete') }}',
+                    method: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}',
+                        ids: ids
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            loadPromotions();
+                        } else {
+                            alert('Error deleting promotions: ' + response.error);
+                        }
+                        jQuery("#data-table_processing").hide();
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error deleting promotions:', error);
+                        alert('Error deleting promotions');
+                        jQuery("#data-table_processing").hide();
                     }
-                } catch (error) {
-                    console.error('❌ Error calling logActivity:', error);
-                }
-                loadPromotions();
-                jQuery("#data-table_processing").hide();
+                });
             }
         } else {
             alert("Please select promotions to delete");
@@ -371,82 +342,83 @@ $(document).ready(function() {
     });
 
     // Single delete
-    $(document).on("click", "a[name='promotion-delete']", async function() {
+    $(document).on("click", "a[name='promotion-delete']", function() {
         var id = this.id;
-        var promotionInfo = '';
-        try {
-            const promoDoc = await promotionsRef.doc(id).get();
-            if (promoDoc.exists) {
-                const promoData = promoDoc.data();
-                var restaurantName = promoData.restaurant_title || 'Unknown Restaurant';
-                var productName = promoData.product_title || 'Unknown Product';
-                promotionInfo = restaurantName + ' - ' + productName + ' (₹' + (promoData.special_price || 0) + ')';
-            }
-        } catch (error) {
-            console.error('Error getting promotion info:', error);
-        }
         if (confirm('Are you sure you want to delete this promotion?')) {
             jQuery('#data-table_processing').show();
-            promotionsRef.doc(id).delete().then(async function() {
-                console.log('✅ Promotion deleted successfully, now logging activity...');
-                try {
-                    if (typeof logActivity === 'function') {
-                        await logActivity('promotions', 'deleted', 'Deleted promotion: ' + promotionInfo);
+            $.ajax({
+                url: '{{ route('promotions.destroy', ['id' => 'PROMOTION_ID']) }}'.replace('PROMOTION_ID', id),
+                method: 'DELETE',
+                data: {
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        loadPromotions();
                     } else {
-                        console.error('❌ logActivity function is not available');
+                        alert('Error deleting promotion: ' + response.error);
                     }
-                } catch (error) {
-                    console.error('❌ Error calling logActivity:', error);
+                    jQuery('#data-table_processing').hide();
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error deleting promotion:', error);
+                    alert('Error deleting promotion');
+                    jQuery('#data-table_processing').hide();
                 }
-                loadPromotions();
-                jQuery('#data-table_processing').hide();
             });
         }
     });
 
     // Toggle isAvailable
-    $(document).on("click", "input[name='isAvailable']", async function(e) {
-        var ischeck = $(this).is(':checked');
-        var id = this.id;
-        var promotionInfo = '';
-        try {
-            const promoDoc = await database.collection('promotions').doc(id).get();
-            if (promoDoc.exists) {
-                const promoData = promoDoc.data();
-                var restaurantName = promoData.restaurant_title || 'Unknown Restaurant';
-                var productName = promoData.product_title || 'Unknown Product';
-                promotionInfo = restaurantName + ' - ' + productName + ' (₹' + (promoData.special_price || 0) + ')';
+    $(document).on("click", "input[name='isAvailable']", function(e) {
+        var checkbox = $(this);
+        var ischeck = checkbox.is(':checked');
+        var id = checkbox.attr('id');
+        
+        // Debug logging
+        console.log('Toggle clicked - ID:', id, 'Checked:', ischeck, 'Type:', typeof ischeck);
+        
+        if (!id || id === '') {
+            alert('Error: Promotion ID is missing');
+            checkbox.prop('checked', !ischeck);
+            return;
+        }
+        
+        // Build URL manually to ensure it works
+        var url = '{{ url("/promotions/toggle") }}/' + encodeURIComponent(id);
+        console.log('Toggle URL:', url);
+        console.log('Sending data:', {isAvailable: ischeck ? 1 : 0});
+        
+        $.ajax({
+            url: url,
+            method: 'POST',
+            data: {
+                _token: '{{ csrf_token() }}',
+                isAvailable: ischeck ? 1 : 0  // Send as integer
+            },
+            success: function(response) {
+                console.log('Toggle response:', response);
+                if (response.success) {
+                    console.log('✅ Successfully updated. Affected rows:', response.affected_rows);
+                    if (response.affected_rows === 0) {
+                        console.warn('⚠️ Warning: No rows were affected. Value might already be the same.');
+                    }
+                    // Reload the table to reflect changes
+                    loadPromotions();
+                } else {
+                    alert('Error updating promotion availability: ' + (response.error || 'Unknown error'));
+                    // Revert checkbox state
+                    checkbox.prop('checked', !ischeck);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('❌ Error updating promotion availability:', error);
+                console.error('Response:', xhr.responseText);
+                alert('Error updating promotion availability: ' + error);
+                // Revert checkbox state
+                checkbox.prop('checked', !ischeck);
             }
-        } catch (error) {
-            console.error('Error getting promotion info:', error);
-        }
-        if (ischeck) {
-            database.collection('promotions').doc(id).update({'isAvailable': true}).then(async function(result) {
-                console.log('✅ Promotion made available successfully, now logging activity...');
-                try {
-                    if (typeof logActivity === 'function') {
-                        await logActivity('promotions', 'made_available', 'Made promotion available: ' + promotionInfo);
-                    } else {
-                        console.error('❌ logActivity function is not available');
-                    }
-                } catch (error) {
-                    console.error('❌ Error calling logActivity:', error);
-                }
-            });
-        } else {
-            database.collection('promotions').doc(id).update({'isAvailable': false}).then(async function(result) {
-                console.log('✅ Promotion made unavailable successfully, now logging activity...');
-                try {
-                    if (typeof logActivity === 'function') {
-                        await logActivity('promotions', 'made_unavailable', 'Made promotion unavailable: ' + promotionInfo);
-                    } else {
-                        console.error('❌ logActivity function is not available');
-                    }
-                } catch (error) {
-                    console.error('❌ Error calling logActivity:', error);
-                }
-            });
-        }
+        });
     });
 });
 </script>

@@ -26,31 +26,45 @@ class ActivityLogger
             // Get user information
             $userType = $this->getUserType($user);
             $role = $this->getUserRole($user);
-            
+            $userName = $this->getUserName($user);
+            $userId = $user->id ?? null;
+
             // Get request information
             $ipAddress = $request ? $request->ip() : request()->ip();
             $userAgent = $request ? $request->userAgent() : request()->userAgent();
 
+            // Save to direct columns (not JSON context)
             ActivityLog::create([
-                'admin_user_id' => $user->id ?? null,
-                'action' => (string) $module . ':' . (string) $action,
+                'admin_id' => $userId,
+                'admin_name' => $userName,
+                'user_id' => $userId,
+                'user_name' => $userName,
+                'user_type' => $userType,
+                'role' => $role,
+                'module' => $module,
+                'action' => $action,
+                'description' => $description,
+                'resource_type' => $module,
+                'resource_id' => null,
+                'old_values' => null,
+                'new_values' => null,
                 'ip_address' => $ipAddress,
                 'user_agent' => $userAgent,
-                'context' => [
-                    'user_name' => $this->getUserName($user),
-                    'user_type' => $userType,
-                    'role' => $role,
-                    'module' => $module,
-                    'action' => $action,
-                    'description' => $description,
-                ],
+                'additional_data' => json_encode([
+                    'timestamp' => now()->toIso8601String(),
+                    'url' => $request ? $request->fullUrl() : null,
+                    'method' => $request ? $request->method() : null,
+                ]),
+                'timestamp' => now()->toIso8601String(),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
 
+            \Log::info("✅ Activity logged: {$userName} {$action} in {$module}");
             return true;
         } catch (\Exception $e) {
-            \Log::error('Activity Logger Error: ' . $e->getMessage());
+            \Log::error('❌ Activity Logger Error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
             return false;
         }
     }

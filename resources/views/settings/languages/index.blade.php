@@ -15,7 +15,7 @@
         </div>
     </div>
     <div class="container-fluid">
-       <div class="admin-top-section"> 
+       <div class="admin-top-section">
         <div class="row">
             <div class="col-12">
                 <div class="d-flex top-title-section pb-4 justify-content-between">
@@ -26,13 +26,13 @@
                     </div>
                     <div class="d-flex top-title-right align-self-center">
                         <div class="select-box pl-3">
-                           
+
                         </div>
                     </div>
                 </div>
             </div>
-        </div> 
-      
+        </div>
+
        </div>
        <div class="table-list">
        <div class="row">
@@ -44,10 +44,10 @@
                     <p class="mb-0 text-dark-2">{{trans('lang.language_table_text')}}</p>
                    </div>
                    <div class="card-header-right d-flex align-items-center">
-                    <div class="card-header-btn mr-3"> 
+                    <div class="card-header-btn mr-3">
                         <a class="btn-primary btn rounded-full" href="{!! route('settings.app.languages.create') !!}"><i class="mdi mdi-plus mr-2"></i>{{trans('lang.language_create')}}</a>
                      </div>
-                   </div>                
+                   </div>
                  </div>
                  <div class="card-body">
                          <div class="table-responsive m-t-10">
@@ -88,12 +88,7 @@
     var user_number = [];
     var languages = [];
     var ref = database.collection('settings').doc('languages');
-    var placeholderImage = '';
-    var placeholder = database.collection('settings').doc('placeHolderImage');
-    placeholder.get().then(async function (snapshotsimage) {
-        var placeholderImageData = snapshotsimage.data();
-        placeholderImage = placeholderImageData.image;
-    });
+    var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
     var append_list = '';
     var user_permissions = '<?php echo @session("user_permissions")?>';
     user_permissions = Object.values(JSON.parse(user_permissions));
@@ -155,7 +150,7 @@
         var html = '';
         var alldata = [];
         var number = [];
-        $('.total_count').text(snapshots.length); 
+        $('.total_count').text(snapshots.length);
         if (snapshots.length) {
             snapshots.forEach((listval) => {
                 var datas = listval;
@@ -202,7 +197,7 @@
         var language_key = '';
         var error = 0;
         var languageTitle = '';
-        
+
         ref.get().then(async function (snapshots) {
             snapshots = snapshots.data();
             snapshots = snapshots.list;
@@ -242,7 +237,7 @@
         var id = this.id;
         var languageTitle = '';
         var newlanguage = [];
-        
+
         // Get the language title before deleting
         languages.forEach((language) => {
             if (language.slug == id) {
@@ -255,7 +250,7 @@
                 deleteImageFromBucket(language.image);
             }
         });
-        
+
         jQuery("#data-table_processing").show();
         database.collection('settings').doc('languages').update({'list': newlanguage}).then(async function (result) {
             jQuery("#data-table_processing").hide();
@@ -273,11 +268,11 @@
                 jQuery("#data-table_processing").show();
                 var deletelanguage = [];
                 var selectedTitles = [];
-                
+
                 $('#languageTable .is_open:checked').each(function () {
                     var dataId = $(this).attr('dataId');
                     deletelanguage.push(dataId);
-                    
+
                     // Get the language title
                     languages.forEach((language) => {
                         if (language.slug == dataId) {
@@ -285,7 +280,7 @@
                         }
                     });
                 });
-                
+
                 var newlanguage = [];
                 languages.forEach((language) => {
                     if($.inArray(language.slug,deletelanguage) === -1) {
@@ -295,7 +290,7 @@
                         deleteImageFromBucket(language.image);
                     }
                 });
-                
+
                 database.collection('settings').doc('languages').update({'list': newlanguage}).then(async function (result) {
                     jQuery("#data-table_processing").hide();
                     // Log the activity

@@ -115,26 +115,105 @@
         var redirect_type = $(".redirect_type:checked").val();
         if (redirect_type == "store") {
             $('#vendor_div').show(); $('#product_div').hide(); $('#external_link_div').hide();
+            loadStores();
         } else if (redirect_type == "product") {
             $('#vendor_div').hide(); $('#product_div').show(); $('#external_link_div').hide();
+            loadProducts();
         } else {
             $('#vendor_div').hide(); $('#product_div').hide(); $('#external_link_div').show();
         }
     }
     $(document).on('change', "input[name='redirect_type']:radio", toggleRedirectUI);
-    $(document).ready(function(){
-        toggleRedirectUI();
-        // Load zones from SQL API
-        $('#zoneId').html('<option value="">Select Zone</option>');
-        $.get('{{ url('/zone/data') }}', function(resp){
-            if(resp && resp.data){
-                resp.data.forEach(function(z){
-                    $('#zoneId').append($('<option></option>').attr('value', z.id).text(z.name));
-                });
+    
+    // Load zones from SQL database
+    function loadZones() {
+        console.log('✅ Loading zones from SQL');
+        $.ajax({
+            url: '{{ url('/zone/data') }}',
+            method: 'GET',
+            success: function(response) {
+                if (response.success && response.data) {
+                    console.log('✅ Zones loaded:', response.data.length);
+                    $('#zoneId').html('<option value="">Select Zone</option>');
+                    response.data.forEach(function(zone) {
+                        $('#zoneId').append('<option value="' + zone.id + '">' + zone.name + '</option>');
+                    });
+                }
+            },
+            error: function(xhr) {
+                console.error('Error loading zones:', xhr);
             }
-        }).fail(function(xhr){
-            console.error('Failed to load zones', xhr.status, xhr.statusText);
         });
+    }
+
+    // Load stores from SQL database (vendors table)
+    function loadStores() {
+        console.log('✅ Loading stores from SQL');
+        var zoneId = $('#zoneId').val();
+        
+        $.ajax({
+            url: '{{ route('menu-items.stores') }}',
+            method: 'GET',
+            data: { zoneId: zoneId },
+            success: function(response) {
+                if (response.success && response.data) {
+                    console.log('✅ Stores loaded:', response.data.length);
+                    $('#storeId').html('<option value="">Select Store</option>');
+                    response.data.forEach(function(store) {
+                        $('#storeId').append('<option value="' + store.id + '">' + store.title + '</option>');
+                    });
+                }
+            },
+            error: function(xhr) {
+                console.error('Error loading stores:', xhr);
+            }
+        });
+    }
+
+    // Load products from SQL database (vendor_products table)
+    function loadProducts() {
+        console.log('✅ Loading products from SQL');
+        var storeId = $('#storeId').val();
+        
+        $.ajax({
+            url: '{{ route('menu-items.products') }}',
+            method: 'GET',
+            data: { storeId: storeId },
+            success: function(response) {
+                if (response.success && response.data) {
+                    console.log('✅ Products loaded:', response.data.length);
+                    $('#productId').html('<option value="">Select Product</option>');
+                    response.data.forEach(function(product) {
+                        $('#productId').append('<option value="' + product.id + '">' + product.name + '</option>');
+                    });
+                }
+            },
+            error: function(xhr) {
+                console.error('Error loading products:', xhr);
+            }
+        });
+    }
+    
+    // Zone change handler - reload stores
+    $('#zoneId').on('change', function() {
+        if ($("input[name=redirect_type][value=store]").is(':checked')) {
+            loadStores();
+        }
+    });
+
+    // Store change handler - reload products
+    $('#storeId').on('change', function() {
+        if ($("input[name=redirect_type][value=product]").is(':checked')) {
+            loadProducts();
+        }
+    });
+    
+    $(document).ready(function(){
+        console.log('✅ Initializing Menu Items Create page');
+        toggleRedirectUI();
+        
+        // Load zones from SQL
+        loadZones();
     });
 
     $(".save-setting-btn").click(function() {

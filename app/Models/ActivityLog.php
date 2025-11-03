@@ -36,6 +36,9 @@ class ActivityLog extends Model
         'updated_at' => 'datetime',
     ];
 
+    // Allow mass assignment for all tracking fields
+    protected $guarded = [];
+
     // Scope for filtering by module
     public function scopeByModule($query, $module)
     {

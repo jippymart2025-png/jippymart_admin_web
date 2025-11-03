@@ -8,6 +8,10 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use App\Models\VendorCuisine;
+use Carbon\Carbon;
+
+// Note: Cuisines table doesn't have timestamps yet
+// Run migration 2025_11_03_000001_add_timestamps_to_vendor_cuisines_table if needed
 
 class CuisineController extends Controller
 {
@@ -52,7 +56,9 @@ class CuisineController extends Controller
         $baseQuery = DB::table('vendor_cuisines');
         $total = $baseQuery->count();
 
-        $filteredQuery = DB::table('vendor_cuisines');
+        $filteredQuery = DB::table('vendor_cuisines')
+            ->select('id', 'title', 'description', 'photo', 'publish');
+
         if ($search !== '') {
             $filteredQuery->where(function($q) use ($search){
                 $q->where('title','like','%'.$search.'%')
@@ -69,7 +75,7 @@ class CuisineController extends Controller
         $pageRows = $filteredQuery->offset($start)->limit($length)->get();
         $filtered = ($search==='') ? $total : (clone $filteredQuery)->count();
 
-        $placeholder = asset('images/placeholder-image.png');
+        $placeholder = asset('assets/images/placeholder-image.png');
         $data = [];
         foreach ($pageRows as $row) {
             $imageHtml = '<img alt="" width="100%" style="width:70px;height:70px;" src="'.($row->photo ?: $placeholder).'" onerror="this.onerror=null;this.src=\''.$placeholder.'\'" alt="image">';

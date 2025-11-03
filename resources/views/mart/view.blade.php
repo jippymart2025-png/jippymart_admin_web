@@ -675,7 +675,7 @@
                 get: function(){
                     // settings/placeHolderImage
                     if (self._name === 'settings' && self._docId === 'placeHolderImage'){
-                        return Promise.resolve({ data: function(){ return { image: '{{ asset('images/placeholder.png') }}' }; } });
+                        return Promise.resolve({ data: function(){ return { image: '{{ asset('assets/images/placeholder-image.png') }}' }; } });
                     }
                     // settings/AdminCommission
                     if (self._name === 'settings' && self._docId === 'AdminCommission'){
@@ -715,12 +715,7 @@
     var timeslotworkFriday=[];
     var timeslotworkSatuarday=[];
     var timeslotworkThursday=[];
-    var placeholderImage='';
-    var placeholder=database.collection('settings').doc('placeHolderImage');
-    placeholder.get().then(async function(snapshotsimage) {
-        var placeholderImageData=snapshotsimage.data();
-        placeholderImage=placeholderImageData.image;
-    })
+    var placeholderImage='{{ asset('assets/images/placeholder-image.png') }}';
     var currentCurrency='';
     var currencyAtRight=false;
     var decimal_degits=0;
@@ -1038,7 +1033,7 @@
                 }
                 var image="";
                 if(restaurant.photo!=""&&restaurant.photo!=null) {
-                    image='<img onerror="this.onerror=null;this.src=\''+placeholderImage+'\'" width="200px" id="" height="auto" src="'+restaurant.photo+'">';
+                    image='<img onerror="this.onerror=null;this.src=\''+ placeholderImage +'\'" width="200px" id="" height="auto" src="'+restaurant.photo+'">';
                 } else {
                     image='<img width="200px" id="" height="auto" src="'+placeholderImage+'">';
                 }

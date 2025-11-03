@@ -326,7 +326,7 @@
             self.select2('close');
         }, 0);
     });
-    var placeholderImage = '{{ asset('images/placeholder.png') }}';
+    var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
     $(document).ready(function () {
         jQuery("#data-table_processing").show();
         $(document).on('click', '.dt-button-collection .dt-button', function () {

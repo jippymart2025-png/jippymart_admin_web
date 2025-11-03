@@ -113,7 +113,7 @@
                                     <?php } ?>
                                     <th>{{trans('lang.faq_category_name')}}</th>
                                     <th>Description</th>
-                                    <th> {{trans('lang.item_publish')}}</th>
+                                    <th>{{trans('lang.item_publish')}}</th>
                                     <th>{{trans('lang.actions')}}</th>
                                 </tr>
                                 </thead>

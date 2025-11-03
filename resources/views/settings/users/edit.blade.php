@@ -24,7 +24,7 @@ foreach ($countries as $keycountry => $valuecountry) {
             </ol>
         </div>
     </div>
-    <div class="container-fluid">  
+    <div class="container-fluid">
         <div class="resttab-sec mb-4">
             <div class="row justify-content-center">
                   <div class="col-md-4">
@@ -52,7 +52,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                               </div>
                           </div>
                       </a>
-                  </div>    
+                  </div>
             </div>
         </div>
 
@@ -95,7 +95,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                             <div class="form-group row">
                                 <label class="col-3 control-label">{{trans('lang.user_phone')}}</label>
                                 <div class="col-md-6">
-                                        <div class="phone-box position-relative" id="phone-box"> 
+                                        <div class="phone-box position-relative" id="phone-box">
                                             <select name="country" id="country_selector">
                                                 <?php foreach ($newcountries as $keycy => $valuecy) { ?>
                                                 <?php $selected = ""; ?>
@@ -163,12 +163,7 @@ foreach ($countries as $keycountry => $valuecountry) {
     var storage = firebase.storage();
     var fileName = "";
     var userImageFile = '';
-    var placeholderImage = '';
-    var placeholder = database.collection('settings').doc('placeHolderImage');
-    placeholder.get().then(async function(snapshotsimage) {
-        var placeholderImageData = snapshotsimage.data();
-        placeholderImage = placeholderImageData.image;
-    });
+    var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
     var refData = ref.get().then(async function(snapshots) {
         var userData = snapshots.docs[0].data();
         provider = userData.provider;

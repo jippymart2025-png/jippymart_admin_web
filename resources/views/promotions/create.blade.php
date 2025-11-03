@@ -139,7 +139,6 @@
 @endsection
 @section('scripts')
 <script>
-var database = firebase.firestore();
 var restaurantSelect = $('#promotion_restaurant');
 var productSelect = $('#promotion_product');
 var vtypeSelect = $('#promotion_vtype');
@@ -150,35 +149,38 @@ var productList = [];
 function populateZones(selectedId) {
     zoneSelect.empty();
     zoneSelect.append('<option value="">All Zones</option>');
-    database.collection('zone').where('publish','==',true).orderBy('name','asc').get().then(function(snapshots) {
-        snapshots.forEach(function(doc) {
-            var data = doc.data();
-            var selected = (selectedId && doc.id === selectedId) ? 'selected' : '';
-            zoneSelect.append('<option value="' + doc.id + '" ' + selected + '>' + (data.name || doc.id) + '</option>');
-        });
+    $.ajax({
+        url: '{{ route('promotions.zones') }}',
+        method: 'GET',
+        success: function(response) {
+            if (response.success) {
+                response.data.forEach(function(zone) {
+                    var selected = (selectedId && zone.id === selectedId) ? 'selected' : '';
+                    zoneSelect.append('<option value="' + zone.id + '" ' + selected + '>' + zone.name + '</option>');
+                });
+            }
+        }
     });
 }
 
 function populateRestaurants(selectedVType, selectedZoneId) {
     restaurantSelect.empty();
     restaurantSelect.append('<option value="">Select Restaurant / Mart</option>');
-    // Fetch all vendors and filter client-side to avoid composite index issues
-    database.collection('vendors').get().then(function(snapshot) {
-        restaurantList = [];
-        snapshot.forEach(function(doc) {
-            var data = doc.data();
-            restaurantList.push(data);
-            var vendorType = (data.vType || '').toString().toLowerCase();
-            var zoneId = data.zoneId || '';
-            if ((!
-                selectedVType || vendorType === selectedVType
-            ) && (
-                !selectedZoneId || zoneId === selectedZoneId
-            )) {
-                // Use Firestore doc id as value; include legacy id if present
-                restaurantSelect.append('<option value="' + doc.id + '" data-vtype="' + vendorType + '" data-zoneid="' + zoneId + '" data-legacy-id="' + (data.id || '') + '">' + (data.title || doc.id) + '</option>');
+    $.ajax({
+        url: '{{ route('promotions.vendors') }}',
+        method: 'GET',
+        data: {
+            vType: selectedVType,
+            zoneId: selectedZoneId
+        },
+        success: function(response) {
+            if (response.success) {
+                restaurantList = response.data;
+                response.data.forEach(function(vendor) {
+                    restaurantSelect.append('<option value="' + vendor.id + '" data-vtype="' + (vendor.vType || '') + '" data-zoneid="' + (vendor.zoneId || '') + '">' + vendor.title + '</option>');
+                });
             }
-        });
+        }
     });
 }
 
@@ -187,39 +189,28 @@ function populateProducts(restaurantId) {
     productSelect.append('<option value="">Select Product</option>');
     $('#actual_price_display').hide();
     if (!restaurantId) return;
+    
     var selectedOption = restaurantSelect.find('option:selected');
-    var legacyId = (selectedOption.data('legacy-id') || '').toString();
     var vendorType = (selectedOption.data('vtype') || vtypeSelect.val() || '').toString().toLowerCase();
 
-    var queries = [];
-    if (vendorType === 'mart') {
-        queries.push(database.collection('mart_items').where('vendorID', '==', restaurantId).get());
-        if (legacyId && legacyId !== restaurantId) {
-            queries.push(database.collection('mart_items').where('vendorID', '==', legacyId).get());
-        }
-    } else {
-        queries.push(database.collection('vendor_products').where('vendorID', '==', restaurantId).get());
-        if (legacyId && legacyId !== restaurantId) {
-            queries.push(database.collection('vendor_products').where('vendorID', '==', legacyId).get());
-        }
-    }
-
-    Promise.all(queries).then(function(results) {
-        var seen = {};
-        var total = 0;
-        results.forEach(function(snapshot) {
-            snapshot.forEach(function(doc) {
-                if (seen[doc.id]) return;
-                seen[doc.id] = true;
-                var data = doc.data();
-                var title = data.name || data.item_name || data.title || 'Item';
-                var displayPrice = data.disPrice && data.disPrice > 0 ? data.disPrice : (data.price || data.item_price || 0);
-                productSelect.append('<option value="' + (data.id || doc.id) + '" data-price="' + displayPrice + '">' + title + '</option>');
-                total++;
-            });
-        });
-        if (total === 0) {
-            productSelect.append('<option value="">No products found</option>');
+    $.ajax({
+        url: '{{ route('promotions.products') }}',
+        method: 'GET',
+        data: {
+            vendor_id: restaurantId,
+            vType: vendorType
+        },
+        success: function(response) {
+            if (response.success) {
+                productList = response.data;
+                if (response.data.length === 0) {
+                    productSelect.append('<option value="">No products found</option>');
+                } else {
+                    response.data.forEach(function(product) {
+                        productSelect.append('<option value="' + product.id + '" data-price="' + product.price + '">' + product.name + '</option>');
+                    });
+                }
+            }
         }
     });
 }
@@ -273,7 +264,7 @@ $(document).ready(function () {
             $('#actual_price_display').hide();
         }
     });
-    $('.save-promotion-btn').click(async function () {
+    $('.save-promotion-btn').click(function () {
         var restaurant_id = restaurantSelect.val();
         var product_id = productSelect.val();
         var special_price = parseFloat($('#promotion_special_price').val()) || 0;
@@ -297,11 +288,6 @@ $(document).ready(function () {
         var restaurant_title = restaurantSelect.find('option:selected').text();
         var product_title = productSelect.find('option:selected').text();
 
-        // Create formatted document name: restaurantTitle-productTitle
-        var documentName = restaurant_title + '-' + product_title;
-        // Clean the document name to be Firestore-compatible (remove special characters, spaces, etc.)
-        documentName = documentName.replace(/[^a-zA-Z0-9-_]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-
         // Check if end time is expired
         var endDateTime = new Date(end_time);
         var currentDateTime = new Date();
@@ -312,51 +298,40 @@ $(document).ready(function () {
         $('.error_top').hide();
         jQuery('#data-table_processing').show();
 
-        // Check if document with this name already exists
-        var docRef = database.collection('promotions').doc(documentName);
-        var docExists = await docRef.get().then(function(doc) {
-            return doc.exists;
-        });
-
-        if (docExists) {
-            // If document exists, append timestamp to make it unique
-            documentName = documentName + '-' + Date.now();
-        }
-
-        await database.collection('promotions').doc(documentName).set({
-            restaurant_id,
-            restaurant_title,
-            product_id,
-            product_title,
-            vType,
-            zoneId,
-            special_price,
-            item_limit,
-            extra_km_charge,
-            free_delivery_km,
-            start_time: new Date(start_time),
-            end_time: new Date(end_time),
-            payment_mode,
-            isAvailable
-        }).then(async function () {
-            console.log('✅ Promotion saved successfully with document name:', documentName);
-            try {
-                if (typeof logActivity === 'function') {
-                    console.log('🔍 Calling logActivity for promotion creation...');
-                    await logActivity('promotions', 'created', 'Created new promotion: ' + restaurant_title + ' - ' + product_title + ' (Special price: ₹' + special_price + ')');
-                    console.log('✅ Activity logging completed successfully');
+        $.ajax({
+            url: '{{ route('promotions.store') }}',
+            method: 'POST',
+            data: {
+                _token: '{{ csrf_token() }}',
+                restaurant_id: restaurant_id,
+                restaurant_title: restaurant_title,
+                product_id: product_id,
+                product_title: product_title,
+                vType: vType,
+                zoneId: zoneId,
+                special_price: special_price,
+                item_limit: item_limit,
+                extra_km_charge: extra_km_charge,
+                free_delivery_km: free_delivery_km,
+                start_time: start_time,
+                end_time: end_time,
+                payment_mode: payment_mode,
+                isAvailable: isAvailable
+            },
+            success: function(response) {
+                jQuery('#data-table_processing').hide();
+                if (response.success) {
+                    window.location.href = '{!! route('promotions') !!}';
                 } else {
-                    console.error('❌ logActivity function is not available');
+                    $('.error_top').show().html('<p>' + response.error + '</p>');
+                    window.scrollTo(0, 0);
                 }
-            } catch (error) {
-                console.error('❌ Error calling logActivity:', error);
+            },
+            error: function(xhr, status, error) {
+                jQuery('#data-table_processing').hide();
+                $('.error_top').show().html('<p>Error creating promotion: ' + error + '</p>');
+                window.scrollTo(0, 0);
             }
-            jQuery('#data-table_processing').hide();
-            window.location.href = '{!! route('promotions') !!}';
-        }).catch(function (error) {
-            jQuery('#data-table_processing').hide();
-            $('.error_top').show().html('<p>' + error + '</p>');
-            window.scrollTo(0, 0);
         });
     });
 });

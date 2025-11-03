@@ -58,19 +58,10 @@
 @section('scripts')
 <script>
 var id = "<?php echo $id;?>";
-var database = firebase.firestore();
-var ref = database.collection('notifications').where("id", "==", id);
-var users = database.collection('users').where("fcmToken", "!=", "");
 var pagesize = 20;
 var start = '';
 $(document).ready(function () {
-    ref.get().then(async function (snapshots) {
-        if (snapshots.docs.length) {
-            var np = snapshots.docs[0].data();
-            $("#message").val(np.message);
-            $("#role").val(np.role);
-        }
-    });
+    // If editing existing notification in future, load via SQL endpoint (not implemented yet)
     $(".save-form-btn").click(async function () {
         $(".success_top").hide();
         $(".error_top").hide();
@@ -104,14 +95,6 @@ $(document).ready(function () {
                 success:function(response) {
                     jQuery("#data-table_processing").hide();
                     if(response.success == true){
-                        var id = database.collection("tmp").doc().id;
-                        database.collection('notifications').doc(id).set({
-                            id: id,
-                            message: message,
-                            subject: subject,
-                            role: role,
-                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                        });
                         $(".success_top").show();
                         $(".success_top").html("");
                         $(".success_top").append("<p>"+response.message+"</p>");

@@ -1,4 +1,4 @@
-@extends('layouts.app') 
+@extends('layouts.app')
 @section('content')
     <div class="page-wrapper">
         <div class="row page-titles">
@@ -126,12 +126,12 @@
 <script>
     var photo = "";
     var fileName='';
-    var placeholderImage = '';
+    var placeholderImage = '{{ asset("assets/images/placeholder-image.png") }}';
     var storageRef = firebase.storage().ref('images');
 
     $(document).ready(function () {
         jQuery("#data-table_processing").show();
-        
+
         // Load review attributes from SQL database
         $.ajax({
             url: '/api/review-attributes',
@@ -160,7 +160,7 @@
             var category_order = parseInt($("#category_order").val()) || 1;
             var item_publish = $("#item_publish").is(":checked");
             var show_in_homepage = $("#show_in_homepage").is(":checked");
-            
+
             console.log('📝 Form values:', {
                 title: title,
                 description: description,
@@ -184,7 +184,7 @@
                 window.scrollTo(0, 0);
             } else {
                 jQuery("#data-table_processing").show();
-                
+
                 try {
                     // Upload image to Firebase Storage if exists
                     let IMG = '';
@@ -215,8 +215,8 @@
                             jQuery("#data-table_processing").hide();
                             $(".error_top").show();
                             $(".error_top").html("");
-                            var errorMessage = xhr.responseJSON && xhr.responseJSON.error 
-                                ? xhr.responseJSON.error 
+                            var errorMessage = xhr.responseJSON && xhr.responseJSON.error
+                                ? xhr.responseJSON.error
                                 : 'Error saving category';
                             $(".error_top").append("<p>" + errorMessage + "</p>");
                             window.scrollTo(0, 0);

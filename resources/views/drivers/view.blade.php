@@ -181,23 +181,12 @@
 <script>
     var id = "<?php echo $id; ?>";
     var photo = "";
-    var placeholderImage = '';
+    var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
     var currentCurrency = '';
     var currencyAtRight = false;
     var decimal_degits = 0;
     var emailTemplatesData = null;
-    
-    // Load placeholder image from SQL
-    $.ajax({
-        url: '{{route("vendors.placeholder-image")}}',
-        type: 'GET',
-        success: function(response) {
-            if(response.success && response.image) {
-                placeholderImage = response.image;
-            }
-        }
-    });
-    
+
     // Load currency from SQL
     $.ajax({
         url: '{{url("/payments/currency")}}',
@@ -210,7 +199,7 @@
             }
         }
     });
-    
+
     // Load email template from SQL
     $.ajax({
         url: '{{url("/api/email-templates/wallet_topup")}}',
@@ -221,10 +210,10 @@
             }
         }
     });
-    
+
     $(document).ready(async function () {
         jQuery("#data-table_processing").show();
-        
+
         // Load driver data from SQL
         console.log('Loading driver with ID:', id);
         $.ajax({
@@ -313,7 +302,7 @@
         }
     });
     });
-    
+
     $(".save-form-btn").click(function () {
         var amount = $('#amount').val();
         if(amount==''){
@@ -321,7 +310,7 @@
             return false;
         }
         var note = $('#note').val();
-        
+
         // Add wallet amount via AJAX
         $.ajax({
             url: '{{url("/api/users/wallet/add")}}',
@@ -342,7 +331,7 @@
                         amountFormatted = currentCurrency + parseInt(amount).toFixed(decimal_degits);
                         newWalletFormatted = currentCurrency + parseFloat(response.newWalletAmount).toFixed(decimal_degits);
                     }
-                    
+
                     var formattedDate = new Date();
                     var month = formattedDate.getMonth() + 1;
                     var day = formattedDate.getDate();
@@ -350,7 +339,7 @@
                     month = month < 10 ? '0' + month : month;
                     day = day < 10 ? '0' + day : day;
                     formattedDate = day + '-' + month + '-' + year;
-                    
+
                     if(emailTemplatesData) {
                         var message = emailTemplatesData.message;
                         message = message.replace(/{username}/g, response.user.firstName + ' ' + response.user.lastName);
@@ -359,7 +348,7 @@
                         message = message.replace(/{paymentmethod}/g, 'Wallet');
                         message = message.replace(/{transactionid}/g, response.transaction_id);
                         message = message.replace(/{newwalletbalance}/g, newWalletFormatted);
-                        
+
                         var url = "{{url('send-email')}}";
                         sendEmail(url, emailTemplatesData.subject, message, [response.user.email]).then(function(sendEmailStatus) {
                             if(sendEmailStatus) {

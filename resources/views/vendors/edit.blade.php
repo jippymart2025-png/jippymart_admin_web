@@ -217,7 +217,7 @@
     <script>
         var user_id = "<?php echo $id; ?>";
         var rest_id = null;
-        var placeholderImage = '';
+        var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
         var ownerFileName = '';
         var ownerOldImageFile = '';
         var ownerphoto = '';
@@ -241,17 +241,6 @@
             }
         });
 
-        // Load placeholder image from SQL
-        $.ajax({
-            url: '{{ route("vendors.placeholder-image") }}',
-            method: 'GET',
-            success: function(response) {
-                if (response.success) {
-                    placeholderImage = response.image;
-                }
-            }
-        });
-
         $("#send_mail").click(function() {
             if ($("#reset_password").is(":checked")) {
                 var email = $(".user_email").val();
@@ -264,7 +253,7 @@
 
         $(document).ready(async function() {
             jQuery("#data-table_processing").show();
-            
+
             jQuery("#country_selector").select2({
                 templateResult: formatState,
                 templateSelection: formatState2,
@@ -281,15 +270,15 @@
                     console.log('✅ Vendor data received:', response);
                     if (response.success && response.data) {
                         var user = response.data;
-                        
+
                         console.log('📝 Populating form with vendor data:', user);
                         $(".user_first_name").val(user.firstName);
                         $(".user_last_name").val(user.lastName);
-                        
+
                         if (user.subscriptionPlanId) {
                             $('#restaurant_subscription_model').val(user.subscriptionPlanId);
                         }
-                        
+
                         if (user.subscriptionExpiryDate) {
                             const expiresAt = new Date(user.subscriptionExpiryDate);
                             const formattedDate = expiresAt.toISOString().slice(0, 10);
@@ -299,21 +288,21 @@
                         if (user.countryCode) {
                             $("#country_selector").val(user.countryCode.replace('+', '')).trigger('change');
                         }
-                        
+
                         if (user.email) {
                             $(".user_email").val(user.email);
                         }
-                        
+
                         if (user.phoneNumber) {
                             $(".user_phone").val(user.phoneNumber);
                         }
-                        
+
                         if (user.provider == "email") {
                             $(".provider_type").show();
                         } else {
                             $(".provider_type").hide();
                         }
-                        
+
                         if (user.profilePictureURL) {
                             ownerphoto = user.profilePictureURL;
                             ownerOldImageFile = user.profilePictureURL;
@@ -323,16 +312,16 @@
                             $(".uploaded_image_owner").html();
                             $(".uploaded_image_owner").show('<img id="uploaded_image_owner" width="150px" height="150px;" src="'+placeholderImage+'" alt="image">');
                         }
-                        
+
                         if (user.active) {
                             restaurant_active = true;
                             $("#is_active").prop("checked", true);
                         }
-                        
+
                         if (user.vType) {
                             $("#vendor_type").val(user.vType);
                         }
-                        
+
                         if (user.userBankDetails) {
                             const bankDetails = user.userBankDetails;
                             if (bankDetails.bankName) {
@@ -351,7 +340,7 @@
                                 $("#otherDetails").val(bankDetails.otherDetails);
                             }
                         }
-                        
+
                         if (user.vendorID) {
                             rest_id = user.vendorID;
                             $('.restaurantRouteLi').show();
@@ -359,7 +348,7 @@
                             route1 = route1.replace(':id', user.vendorID);
                             $('.restaurantRoute').attr('href', route1);
                         }
-                        
+
                         jQuery("#data-table_processing").hide();
                     } else {
                         console.error('❌ No data in response or request failed');
@@ -372,7 +361,7 @@
                     console.error('❌ Status:', status);
                     console.error('❌ Response:', xhr.responseText);
                     jQuery("#data-table_processing").hide();
-                    
+
                     var errorMessage = 'Error loading vendor data. ';
                     if (xhr.responseJSON && xhr.responseJSON.message) {
                         errorMessage += xhr.responseJSON.message;
@@ -382,7 +371,7 @@
                     showError(errorMessage);
                 }
             });
-            
+
             $(".edit-form-btn").click(async function() {
                 var userFirstName = $(".user_first_name").val();
                 var userLastName = $(".user_last_name").val();
@@ -390,21 +379,21 @@
                 var countryCode = '+' + jQuery("#country_selector").val();
                 var userPhone = $(".user_phone").val();
                 var vendorType = $("#vendor_type").val();
-                
+
                 // Set default vendor type to 'restaurant' if empty or not selected
                 if(vendorType=='' || vendorType==null || vendorType==undefined) {
                     vendorType='restaurant';
                 }
-                
+
                 var subscriptionPlanId = $('#restaurant_subscription_model').val();
                 var change_expiry_date = $('#change_expiry_date').val();
                 var subscriptionExpiryDate = change_expiry_date;
-                
+
                 var restaurant_active = false;
                 if ($("#is_active").is(':checked')) {
                     restaurant_active = true;
                 }
-                
+
                 if (userFirstName == '') {
                     showError("{{ trans('lang.enter_owners_name_error') }}");
                 } else if (userLastName == '') {
@@ -415,7 +404,7 @@
                     showError("{{ trans('lang.subscriptionplan_error') }}");
                 } else {
                     jQuery("#data-table_processing").show();
-                    
+
                     var bankDetails = {
                         'bankName': $("#bankName").val(),
                         'branchName': $("#branchName").val(),
@@ -423,7 +412,7 @@
                         'accountNumber': $("#accountNumber").val(),
                         'otherDetails': $("#otherDetails").val()
                     };
-                    
+
                     // Upload image if changed
                     var profilePictureURL = ownerphoto;
                     if (ownerphoto != ownerOldImageFile && ownerphoto != '') {
@@ -431,7 +420,7 @@
                         // For now, we'll use the base64 data
                         profilePictureURL = ownerphoto;
                     }
-                    
+
                     // Update vendor via AJAX
                     $.ajax({
                         url: '/vendors/' + user_id,
@@ -512,7 +501,7 @@
         }
         var newcountriesjs = '<?php echo json_encode($newcountriesjs); ?>';
         var newcountriesjs = JSON.parse(newcountriesjs);
-        
+
         function handleFileSelectowner(evt) {
             var f = evt.target.files[0];
             var reader = new FileReader();

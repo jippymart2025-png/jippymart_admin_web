@@ -139,7 +139,6 @@
 @endsection
 @section('scripts')
 <script>
-var database = firebase.firestore();
 var restaurantSelect = $('#promotion_restaurant');
 var productSelect = $('#promotion_product');
 var vtypeSelect = $('#promotion_vtype');
@@ -152,12 +151,17 @@ console.log('Promotion ID from controller:', '{{ $id ?? "NOT_SET" }}');
 function populateZones(selectedId) {
     zoneSelect.empty();
     zoneSelect.append('<option value="">All Zones</option>');
-    database.collection('zone').where('publish','==',true).orderBy('name','asc').get().then(function(snapshots) {
-        snapshots.forEach(function(doc) {
-            var data = doc.data();
-            var selected = (selectedId && doc.id === selectedId) ? 'selected' : '';
-            zoneSelect.append('<option value="' + doc.id + '" ' + selected + '>' + (data.name || doc.id) + '</option>');
-        });
+    $.ajax({
+        url: '{{ route('promotions.zones') }}',
+        method: 'GET',
+        success: function(response) {
+            if (response.success) {
+                response.data.forEach(function(zone) {
+                    var selected = (selectedId && zone.id === selectedId) ? 'selected' : '';
+                    zoneSelect.append('<option value="' + zone.id + '" ' + selected + '>' + zone.name + '</option>');
+                });
+            }
+        }
     });
 }
 
@@ -165,20 +169,26 @@ function populateRestaurants(selectedId, selectedVType, selectedZoneId) {
     console.log('Populating restaurants with selected ID:', selectedId);
     restaurantSelect.empty();
     restaurantSelect.append('<option value="">Select Restaurant</option>');
-    database.collection('vendors').get().then(function(snapshot) {
-        console.log('Found', snapshot.docs.length, 'restaurants');
-        snapshot.forEach(function(doc) {
-            var data = doc.data();
-            restaurantList.push(data);
-            var vendorType = (data.vType || '').toString().toLowerCase();
-            var zoneId = data.zoneId || '';
-            if ((!selectedVType || vendorType === selectedVType) && (!selectedZoneId || zoneId === selectedZoneId)) {
-                var selected = (selectedId && (doc.id === selectedId || data.id === selectedId)) ? 'selected' : '';
-                restaurantSelect.append('<option value="' + doc.id + '" data-vtype="' + vendorType + '" data-zoneid="' + zoneId + '" data-legacy-id="' + (data.id || '') + '" ' + selected + '>' + (data.title || doc.id) + '</option>');
+    $.ajax({
+        url: '{{ route('promotions.vendors') }}',
+        method: 'GET',
+        data: {
+            vType: selectedVType,
+            zoneId: selectedZoneId
+        },
+        success: function(response) {
+            if (response.success) {
+                console.log('Found', response.data.length, 'restaurants');
+                restaurantList = response.data;
+                response.data.forEach(function(vendor) {
+                    var selected = (selectedId && vendor.id === selectedId) ? 'selected' : '';
+                    restaurantSelect.append('<option value="' + vendor.id + '" data-vtype="' + (vendor.vType || '') + '" data-zoneid="' + (vendor.zoneId || '') + '" ' + selected + '>' + vendor.title + '</option>');
+                });
             }
-        });
-    }).catch(function(error) {
-        console.error('Error loading restaurants:', error);
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading restaurants:', error);
+        }
     });
 }
 
@@ -188,84 +198,71 @@ function populateProducts(restaurantId, selectedProductId) {
     productSelect.append('<option value="">Select Product</option>');
     $('#actual_price_display').hide();
     if (!restaurantId) return;
+    
     var selectedOption = restaurantSelect.find('option:selected');
-    var legacyId = (selectedOption.data('legacy-id') || '').toString();
     var vendorType = (selectedOption.data('vtype') || vtypeSelect.val() || '').toString().toLowerCase();
-    var queries = [];
-    if (vendorType === 'mart') {
-        queries.push(database.collection('mart_items').where('vendorID', '==', restaurantId).get());
-        if (legacyId && legacyId !== restaurantId) {
-            queries.push(database.collection('mart_items').where('vendorID', '==', legacyId).get());
-        }
-    } else {
-        queries.push(database.collection('vendor_products').where('vendorID', '==', restaurantId).get());
-        if (legacyId && legacyId !== restaurantId) {
-            queries.push(database.collection('vendor_products').where('vendorID', '==', legacyId).get());
-        }
-    }
-    Promise.all(queries).then(function(results) {
-        console.log('Found product query result sets:', results.length, 'for vendor:', restaurantId, 'legacy:', legacyId);
-        var seen = {};
-        var total = 0;
-        results.forEach(function(snapshot) {
-            snapshot.forEach(function(doc) {
-                if (seen[doc.id]) return;
-                seen[doc.id] = true;
-                var data = doc.data();
-                var selected = (selectedProductId && (data.id === selectedProductId || doc.id === selectedProductId)) ? 'selected' : '';
-                var title = data.name || data.item_name || data.title || 'Item';
-                var displayPrice = data.disPrice && data.disPrice > 0 ? data.disPrice : (data.price || data.item_price || 0);
-                productSelect.append('<option value="' + (data.id || doc.id) + '" data-price="' + displayPrice + '" ' + selected + '>' + title + '</option>');
-                total++;
-            });
-        });
-        if (selectedProductId) {
-            var selectedOption2 = productSelect.find('option[value="' + selectedProductId + '"]');
-            var price = selectedOption2.data('price');
-            if (price && price > 0) {
-                $('#actual_price_display').show().text('Actual price: ₹' + price);
+    
+    $.ajax({
+        url: '{{ route('promotions.products') }}',
+        method: 'GET',
+        data: {
+            vendor_id: restaurantId,
+            vType: vendorType
+        },
+        success: function(response) {
+            if (response.success) {
+                console.log('Found', response.data.length, 'products');
+                productList = response.data;
+                if (response.data.length === 0) {
+                    productSelect.append('<option value="">No products found</option>');
+                } else {
+                    response.data.forEach(function(product) {
+                        var selected = (selectedProductId && product.id === selectedProductId) ? 'selected' : '';
+                        productSelect.append('<option value="' + product.id + '" data-price="' + product.price + '" ' + selected + '>' + product.name + '</option>');
+                    });
+                    
+                    if (selectedProductId) {
+                        var selectedProduct = response.data.find(function(p) { return p.id === selectedProductId; });
+                        if (selectedProduct && selectedProduct.price > 0) {
+                            $('#actual_price_display').show().text('Actual price: ₹' + selectedProduct.price);
+                        }
+                    }
+                }
             }
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading products:', error);
         }
-        if (total === 0) {
-            productSelect.append('<option value="">No products found</option>');
-        }
-    }).catch(function(error) {
-        console.error('Error loading products:', error);
     });
 }
 
 function formatDateTimeForInput(timestamp) {
     if (!timestamp) return '';
     
-    let date;
-    if (timestamp.seconds) {
-        // Firebase Timestamp
-        date = new Date(timestamp.seconds * 1000);
-    } else if (timestamp.toDate) {
-        // Firebase Timestamp with toDate method
-        date = timestamp.toDate();
-    } else if (timestamp instanceof Date) {
-        // Already a Date object
-        date = timestamp;
-    } else {
-        // Try to parse as regular date
-        date = new Date(timestamp);
+    try {
+        // Remove quotes if present
+        timestamp = timestamp.toString().replace(/"/g, '');
+        
+        let date = new Date(timestamp);
+        
+        console.log('Original timestamp:', timestamp);
+        console.log('Parsed date:', date);
+        
+        // Format for datetime-local input (YYYY-MM-DDTHH:MM)
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        
+        const formatted = `${year}-${month}-${day}T${hours}:${minutes}`;
+        console.log('Formatted for input:', formatted);
+        
+        return formatted;
+    } catch (e) {
+        console.error('Error formatting date:', e);
+        return timestamp;
     }
-    
-    console.log('Original timestamp:', timestamp);
-    console.log('Parsed date:', date);
-    
-    // Format for datetime-local input (YYYY-MM-DDTHH:MM)
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    
-    const formatted = `${year}-${month}-${day}T${hours}:${minutes}`;
-    console.log('Formatted for input:', formatted);
-    
-    return formatted;
 }
 
 function loadPromotionData() {
@@ -275,45 +272,49 @@ function loadPromotionData() {
     }
     console.log('Loading promotion data for ID:', promotionId);
 
-    // First, let's check if there are any promotions in the database
-    database.collection('promotions').get().then(function(snapshot) {
-        console.log('Total promotions in database:', snapshot.docs.length);
-        snapshot.docs.forEach(function(doc) {
-            console.log('Promotion ID:', doc.id, 'Data:', doc.data());
-        });
-    });
-
-    database.collection('promotions').doc(promotionId).get().then(function(doc) {
-        if (doc.exists) {
-            var data = doc.data();
-            console.log('Promotion data loaded:', data);
-            // Pre-fill fields
-            if (data.vType) {
-                vtypeSelect.val((data.vType || '').toString().toLowerCase());
+    $.ajax({
+        url: '{{ route('promotions.show', ['id' => 'PROMOTION_ID']) }}'.replace('PROMOTION_ID', promotionId),
+        method: 'GET',
+        success: function(response) {
+            if (response.success) {
+                var data = response.data;
+                console.log('Promotion data loaded:', data);
+                
+                // Pre-fill fields
+                if (data.vType) {
+                    vtypeSelect.val((data.vType || '').toString().toLowerCase());
+                }
+                if (data.zoneId) {
+                    zoneSelect.val(data.zoneId);
+                }
+                
+                populateRestaurants(data.restaurant_id, (data.vType || '').toString().toLowerCase(), data.zoneId || '');
+                
+                setTimeout(function() {
+                    populateProducts(data.restaurant_id, data.product_id);
+                }, 500); // Wait for restaurant dropdown to populate
+                
+                $('#promotion_special_price').val(data.special_price || 0);
+                $('#promotion_item_limit').val(data.item_limit || 2);
+                $('#promotion_extra_km_charge').val(data.extra_km_charge || 7);
+                $('#promotion_free_delivery_km').val(data.free_delivery_km || 3);
+                $('#promotion_is_available').prop('checked', data.isAvailable ? true : false);
+                
+                if (data.start_time) {
+                    $('#promotion_start_time').val(formatDateTimeForInput(data.start_time));
+                }
+                if (data.end_time) {
+                    $('#promotion_end_time').val(formatDateTimeForInput(data.end_time));
+                }
+            } else {
+                console.log('Promotion not found:', response.error);
+                alert('Promotion not found');
             }
-            if (data.zoneId) {
-                zoneSelect.val(data.zoneId);
-            }
-            populateRestaurants(data.restaurant_id, (data.vType || '').toString().toLowerCase(), data.zoneId || '');
-            setTimeout(function() {
-                populateProducts(data.restaurant_id, data.product_id);
-            }, 400); // Wait for restaurant dropdown to populate
-            $('#promotion_special_price').val(data.special_price || 0);
-            $('#promotion_item_limit').val(data.item_limit || 2);
-            $('#promotion_extra_km_charge').val(data.extra_km_charge || 7);
-            $('#promotion_free_delivery_km').val(data.free_delivery_km || 3);
-            $('#promotion_is_available').prop('checked', data.isAvailable !== false);
-            if (data.start_time) {
-                $('#promotion_start_time').val(formatDateTimeForInput(data.start_time));
-            }
-            if (data.end_time) {
-                $('#promotion_end_time').val(formatDateTimeForInput(data.end_time));
-            }
-        } else {
-            console.log('Promotion not found with ID:', promotionId);
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading promotion data:', error);
+            alert('Error loading promotion data');
         }
-    }).catch(function(error) {
-        console.error('Error loading promotion data:', error);
     });
 }
 
@@ -372,7 +373,7 @@ $(document).ready(function () {
             $('#actual_price_display').hide();
         }
     });
-    $('.save-promotion-btn').click(async function () {
+    $('.save-promotion-btn').click(function () {
         var restaurant_id = restaurantSelect.val();
         var product_id = productSelect.val();
         var special_price = parseFloat($('#promotion_special_price').val()) || 0;
@@ -383,6 +384,7 @@ $(document).ready(function () {
         var end_time = $('#promotion_end_time').val();
         var payment_mode = 'prepaid';
         var isAvailable = $('#promotion_is_available').is(':checked');
+        
         // Resolve vType and zone to save on document
         var selectedVendorOption = restaurantSelect.find('option:selected');
         var vType = (vtypeSelect.val() || selectedVendorOption.data('vtype') || '').toString().toLowerCase();
@@ -397,11 +399,6 @@ $(document).ready(function () {
         // Get restaurant and product titles
         var restaurant_title = restaurantSelect.find('option:selected').text();
         var product_title = productSelect.find('option:selected').text();
-        
-        // Create formatted document name: restaurantTitle-productTitle
-        var newDocumentName = restaurant_title + '-' + product_title;
-        // Clean the document name to be Firestore-compatible (remove special characters, spaces, etc.)
-        newDocumentName = newDocumentName.replace(/[^a-zA-Z0-9-_]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 
         // Check if end time is expired
         var endDateTime = new Date(end_time);
@@ -412,97 +409,42 @@ $(document).ready(function () {
 
         $('.error_top').hide();
         jQuery('#data-table_processing').show();
-        
-        // If document name has changed, we need to create a new document and delete the old one
-        if (newDocumentName !== promotionId) {
-            // Check if new document name already exists
-            var newDocRef = database.collection('promotions').doc(newDocumentName);
-            var newDocExists = await newDocRef.get().then(function(doc) {
-                return doc.exists;
-            });
 
-            if (newDocExists) {
-                // If document exists, append timestamp to make it unique
-                newDocumentName = newDocumentName + '-' + Date.now();
+        $.ajax({
+            url: '{{ route('promotions.update', ['id' => 'PROMOTION_ID']) }}'.replace('PROMOTION_ID', promotionId),
+            method: 'PUT',
+            data: {
+                _token: '{{ csrf_token() }}',
+                restaurant_id: restaurant_id,
+                restaurant_title: restaurant_title,
+                product_id: product_id,
+                product_title: product_title,
+                vType: vType,
+                zoneId: zoneId,
+                special_price: special_price,
+                item_limit: item_limit,
+                extra_km_charge: extra_km_charge,
+                free_delivery_km: free_delivery_km,
+                start_time: start_time,
+                end_time: end_time,
+                payment_mode: payment_mode,
+                isAvailable: isAvailable
+            },
+            success: function(response) {
+                jQuery('#data-table_processing').hide();
+                if (response.success) {
+                    window.location.href = '{!! route('promotions') !!}';
+                } else {
+                    $('.error_top').show().html('<p>' + response.error + '</p>');
+                    window.scrollTo(0, 0);
+                }
+            },
+            error: function(xhr, status, error) {
+                jQuery('#data-table_processing').hide();
+                $('.error_top').show().html('<p>Error updating promotion: ' + error + '</p>');
+                window.scrollTo(0, 0);
             }
-
-            // Create new document with updated data
-            await database.collection('promotions').doc(newDocumentName).set({
-                restaurant_id,
-                restaurant_title,
-                product_id,
-                product_title,
-                vType,
-                zoneId,
-                special_price,
-                item_limit,
-                extra_km_charge,
-                free_delivery_km,
-                start_time: new Date(start_time),
-                end_time: new Date(end_time),
-                payment_mode,
-                isAvailable
-            }).then(async function () {
-                // Delete old document
-                await database.collection('promotions').doc(promotionId).delete();
-                
-                console.log('✅ Promotion updated successfully with new document name:', newDocumentName);
-                try {
-                    if (typeof logActivity === 'function') {
-                        console.log('🔍 Calling logActivity for promotion update...');
-                        await logActivity('promotions', 'updated', 'Updated promotion: ' + restaurant_title + ' - ' + product_title + ' (Special price: ₹' + special_price + ')');
-                        console.log('✅ Activity logging completed successfully');
-                    } else {
-                        console.error('❌ logActivity function is not available');
-                    }
-                } catch (error) {
-                    console.error('❌ Error calling logActivity:', error);
-                }
-                jQuery('#data-table_processing').hide();
-                window.location.href = '{!! route('promotions') !!}';
-            }).catch(function (error) {
-                jQuery('#data-table_processing').hide();
-                $('.error_top').show().html('<p>' + error + '</p>');
-                window.scrollTo(0, 0);
-            });
-        } else {
-            // Document name hasn't changed, just update the existing document
-            await database.collection('promotions').doc(promotionId).update({
-                restaurant_id,
-                restaurant_title,
-                product_id,
-                product_title,
-                vType,
-                zoneId,
-                special_price,
-                item_limit,
-                extra_km_charge,
-                free_delivery_km,
-                start_time: new Date(start_time),
-                end_time: new Date(end_time),
-                payment_mode,
-                isAvailable
-            }).then(async function () {
-                console.log('✅ Promotion updated successfully');
-                try {
-                    if (typeof logActivity === 'function') {
-                        console.log('🔍 Calling logActivity for promotion update...');
-                        await logActivity('promotions', 'updated', 'Updated promotion: ' + restaurant_title + ' - ' + product_title + ' (Special price: ₹' + special_price + ')');
-                        console.log('✅ Activity logging completed successfully');
-                    } else {
-                        console.error('❌ logActivity function is not available');
-                    }
-                } catch (error) {
-                    console.error('❌ Error calling logActivity:', error);
-                }
-                jQuery('#data-table_processing').hide();
-                window.location.href = '{!! route('promotions') !!}';
-            }).catch(function (error) {
-                jQuery('#data-table_processing').hide();
-                $('.error_top').show().html('<p>' + error + '</p>');
-                window.scrollTo(0, 0);
-            });
-        }
+        });
     });
 });
 </script>

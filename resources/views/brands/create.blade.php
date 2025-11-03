@@ -95,16 +95,11 @@
     var logo_url = "";
     var storageRef = firebase.storage().ref('images');
     var storage = firebase.storage();
-    var placeholderImage = '';
-    var placeholder = database.collection('settings').doc('placeHolderImage');
-    placeholder.get().then(async function (snapshotsimage) {
-        var placeholderImageData = snapshotsimage.data();
-        placeholderImage = placeholderImageData.image;
-    })
+    var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
 
     $(document).ready(function () {
         jQuery("#data-table_processing").show();
-        
+
         // Auto-generate slug from name
         $('.brand_name').on('input', function () {
             const name = $(this).val();
@@ -117,7 +112,7 @@
         });
 
         jQuery("#data-table_processing").hide();
-        
+
         $(".save-form-btn").click(async function () {
             var name = $(".brand_name").val();
             var slug = $(".brand_slug").val();
@@ -145,13 +140,13 @@
                 return;
             } else {
                 $(".error_top").hide();
-                
+
                 // Check for duplicate brand names
                 jQuery("#data-table_processing").show();
                 const existingBrands = await database.collection('brands')
                     .where('name', '==', name.trim())
                     .get();
-                
+
                 if (!existingBrands.empty) {
                     jQuery("#data-table_processing").hide();
                     $(".error_top").show();
@@ -160,14 +155,14 @@
                     window.scrollTo(0, 0);
                     return;
                 }
-                
+
                 var id = database.collection("tmp").doc().id;
-                
+
                 await storeLogoData().then(async (logo) => {
                     if (logo) {
                         logo_url = logo;
                     }
-                    
+
                     var brandData = {
                         'name': name,
                         'slug': slug || name.toLowerCase().replace(/[^a-z0-9 -]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim('-'),
@@ -213,13 +208,13 @@
                 // Upload base64 image to Firebase Storage
                 var filename = 'brand_logo_' + Date.now() + '.jpg';
                 var storageRef = firebase.storage().ref('images/brands/' + filename);
-                
+
                 // Convert base64 to blob
                 var base64Data = logo_url.replace(/^data:image\/[a-z]+;base64,/, "");
                 var uploadTask = await storageRef.putString(base64Data, 'base64', {
                     contentType: 'image/jpeg'
                 });
-                
+
                 // Get download URL
                 logo = await uploadTask.ref.getDownloadURL();
                 console.log('✅ Logo uploaded to Firebase Storage:', logo);
@@ -238,7 +233,7 @@
             var filename = $('#brand_logo').val().replace(/C:\\fakepath\\/i, '')
             var timestamp = Number(new Date());
             var filename = filename.split('.')[0] + "_" + timestamp + '.' + ext;
-            
+
             var logo_html = '<span class="image-item" id="logo_1"><span class="remove-btn" data-id="1" data-img="' + base64str + '"><i class="fa fa-remove"></i></span><img class="rounded" width="50px" id="" height="auto" src="' + base64str + '"></span>'
             $(".brand_logo_preview").append(logo_html);
             logo_url = base64str;

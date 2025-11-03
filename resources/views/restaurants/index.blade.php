@@ -317,13 +317,13 @@
     var currentCurrency = '';
     var currencyAtRight = false;
     var decimal_degits = 0;
-    
+
     // Filter variables for SQL queries
     window.selectedZone = '';
     window.selectedRestaurantType = '';
     window.selectedBusinessModel = '';
     window.selectedCuisine = '';
-    
+
     // Load currency from SQL (if you have a currency endpoint, otherwise hardcode)
     $.ajax({
         url: '/payments/currency',
@@ -403,7 +403,7 @@
         return vendorIds;
     }
     var append_list = '';
-    var placeholderImage = '';
+    var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
     var user_permissions = '<?php echo @session("user_permissions") ?>';
     user_permissions = Object.values(JSON.parse(user_permissions));
     var checkDeletePermission = false;
@@ -477,7 +477,7 @@
         }, 0);
     });
     // Load placeholder image from SQL
-    var placeholderImage = '';
+    var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
     $.ajax({
         url: '{{ route("vendors.placeholder-image") }}',
         method: 'GET',
@@ -520,13 +520,13 @@
                 const start = data.start;
                 const length = data.length;
                 const searchValue = data.search.value.toLowerCase();
-                
+
                 if (searchValue.length >= 3 || searchValue.length === 0) {
                     $('#data-table_processing').show();
                 }
-                
+
                 console.log('Fetching restaurants from SQL...');
-                
+
                 // Build request data with filters
                 var requestData = {
                     start: start,
@@ -537,7 +537,7 @@
                     restaurant_type: window.selectedRestaurantType || '',
                     vType: window.selectedBusinessModel || ''
                 };
-                
+
                 // Fetch from SQL backend
                 $.ajax({
                     url: '{{ route("restaurants.data") }}',
@@ -545,7 +545,7 @@
                     data: requestData,
                     success: async function(response) {
                         console.log('Restaurants loaded from SQL:', response.data.length);
-                        
+
                         if (response.data.length === 0) {
                             $('.rest_count').text('00');
                             $('.rest_active_count').text('00');
@@ -560,20 +560,20 @@
                             });
                             return;
                         }
-                        
+
                         // Update statistics from response
                         $('.rest_count').text(response.stats.total);
                         $('.rest_active_count').text(response.stats.active);
                         $('.rest_inactive_count').text(response.stats.inactive);
                         $('.new_joined_rest').text(response.stats.new_joined);
-                        
+
                         // Build table rows
                         let records = [];
                         for (let restaurant of response.data) {
                             var rowData = await buildHTML(restaurant);
                             records.push(rowData);
                         }
-                        
+
                         $('#data-table_processing').hide();
                         callback({
                             draw: data.draw,

@@ -99,41 +99,164 @@
             </div>
         </div>
     </div>
-    <div class="form-group col-12 text-center">
-        <?php if (in_array('banners.edit', json_decode(@session('user_permissions'), true))) { ?>
-        <button type="button" class="btn btn-primary  edit-setting-btn"><i class="fa fa-save"></i> {{trans('lang.save')}}</button>
-        <?php } ?>
-        <a href="{!! route('setting.banners') !!}" class="btn btn-default"><i class="fa fa-undo"></i>{{trans('lang.cancel')}}</a>
+    <div class="form-group col-12 text-center btm-btn">
+        <button type="button" class="btn btn-primary edit-setting-btn">
+            <i class="fa fa-save"></i> {{trans('lang.save')}}
+        </button>
+        <a href="{!! route('setting.banners') !!}" class="btn btn-default">
+            <i class="fa fa-undo"></i> {{trans('lang.cancel')}}
+        </a>
     </div>
 </div>
 @endsection
 @section('scripts')
 <script>
     var id = "<?php echo $id; ?>";
+    var currentData = null;
+    
     function toggleRedirectUI(){
         var redirect_type = $(".redirect_type:checked").val();
         if (redirect_type == "store") {
             $('#vendor_div').show(); $('#product_div').hide(); $('#external_link_div').hide();
+            loadStores();
         } else if (redirect_type == "product") {
             $('#vendor_div').hide(); $('#product_div').show(); $('#external_link_div').hide();
+            loadProducts();
         } else {
             $('#vendor_div').hide(); $('#product_div').hide(); $('#external_link_div').show();
         }
     }
     $("input[name='redirect_type']:radio").change(toggleRedirectUI);
 
+    // Load zones from SQL database
+    function loadZones() {
+        console.log('✅ Loading zones from SQL');
+        $.ajax({
+            url: '{{ url('/zone/data') }}',
+            method: 'GET',
+            success: function(response) {
+                if (response.success && response.data) {
+                    console.log('✅ Zones loaded:', response.data.length);
+                    $('#zoneId').html('<option value="">Select Zone</option>');
+                    response.data.forEach(function(zone) {
+                        $('#zoneId').append('<option value="' + zone.id + '">' + zone.name + '</option>');
+                    });
+                    
+                    // Set selected zone if editing
+                    if (currentData && currentData.zoneId) {
+                        $('#zoneId').val(currentData.zoneId);
+                    }
+                }
+            },
+            error: function(xhr) {
+                console.error('Error loading zones:', xhr);
+            }
+        });
+    }
+
+    // Load stores from SQL database (vendors table)
+    function loadStores() {
+        console.log('✅ Loading stores from SQL');
+        var zoneId = $('#zoneId').val();
+        
+        $.ajax({
+            url: '{{ route('menu-items.stores') }}',
+            method: 'GET',
+            data: { zoneId: zoneId },
+            success: function(response) {
+                if (response.success && response.data) {
+                    console.log('✅ Stores loaded:', response.data.length);
+                    $('#storeId').html('<option value="">Select Store</option>');
+                    response.data.forEach(function(store) {
+                        $('#storeId').append('<option value="' + store.id + '">' + store.title + '</option>');
+                    });
+                    
+                    // Set selected store if editing
+                    if (currentData && currentData.redirect_type === 'store' && currentData.redirect_id) {
+                        setTimeout(function() {
+                            $('#storeId').val(currentData.redirect_id);
+                        }, 100);
+                    }
+                }
+            },
+            error: function(xhr) {
+                console.error('Error loading stores:', xhr);
+            }
+        });
+    }
+
+    // Load products from SQL database (vendor_products table)
+    function loadProducts() {
+        console.log('✅ Loading products from SQL');
+        var storeId = $('#storeId').val();
+        
+        $.ajax({
+            url: '{{ route('menu-items.products') }}',
+            method: 'GET',
+            data: { storeId: storeId },
+            success: function(response) {
+                if (response.success && response.data) {
+                    console.log('✅ Products loaded:', response.data.length);
+                    $('#productId').html('<option value="">Select Product</option>');
+                    response.data.forEach(function(product) {
+                        $('#productId').append('<option value="' + product.id + '">' + product.name + '</option>');
+                    });
+                    
+                    // Set selected product if editing
+                    if (currentData && currentData.redirect_type === 'product' && currentData.redirect_id) {
+                        setTimeout(function() {
+                            $('#productId').val(currentData.redirect_id);
+                        }, 100);
+                    }
+                }
+            },
+            error: function(xhr) {
+                console.error('Error loading products:', xhr);
+            }
+        });
+    }
+    
+    // Zone change handler - reload stores
+    $('#zoneId').on('change', function() {
+        if ($("input[name=redirect_type][value=store]").is(':checked')) {
+            loadStores();
+        }
+    });
+
+    // Store change handler - reload products
+    $('#storeId').on('change', function() {
+        if ($("input[name=redirect_type][value=product]").is(':checked')) {
+            loadProducts();
+        }
+    });
+
     $(document).ready(function(){
+        console.log('✅ Initializing Menu Items Edit page');
+        
+        // Load zones first
+        loadZones();
+        
         // Load existing record
         $.get('{{ route('menu-items.json', ['id'=>':id']) }}'.replace(':id', id), function(data){
+            console.log('✅ Menu item data loaded:', data);
+            currentData = data;
+            
             $(".title").val(data.title || '');
             $("#position").val(data.position || 'top');
             $(".set_order").val(data.set_order || 0);
             $(".extlink").val(data.redirect_id || '');
-            if (data.zoneId) { $("#zoneId").val(data.zoneId); }
+            
+            // Set zone after zones are loaded
+            setTimeout(function() {
+                if (data.zoneId) { $("#zoneId").val(data.zoneId); }
+            }, 500);
+            
             if (data.is_publish) { $("#is_publish").prop("checked", true); }
             if (data.photo) { $(".user_image").append('<img class="rounded" style="width:50px" src="' + data.photo + '" alt="image">'); }
-            if (data.redirect_type) { $("input[name=redirect_type][value=" + data.redirect_type + "]").prop('checked', true); }
-            toggleRedirectUI();
+            if (data.redirect_type) { 
+                $("input[name=redirect_type][value=" + data.redirect_type + "]").prop('checked', true); 
+                toggleRedirectUI();
+            }
         });
 
         $(".edit-setting-btn").click(function(){

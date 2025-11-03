@@ -198,20 +198,12 @@
     ) {
         checkDeletePermission=true;
     }
-    
+
     var placeholderImage='';
     var zoneIdToName = {};
 
     // Load placeholder image from SQL
-    $.ajax({
-        url: '{{ route("vendors.placeholder-image") }}',
-        method: 'GET',
-        success: function(response) {
-            if (response.success) {
-                placeholderImage = response.image;
-            }
-        }
-    });
+    placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
 
     // Load zones from SQL
     console.log('🌍 Loading zones from SQL...');
@@ -230,7 +222,7 @@
                 });
                 window.zoneIdToName = zoneIdToName;
                 console.log('🗺️ Zone map created:', zoneIdToName);
-                
+
                 // Initialize DataTable after zones are loaded
                 console.log('🚀 Initializing vendor DataTable...');
                 initializeVendorDataTable();
@@ -251,7 +243,7 @@
             window.location.href=url;
         });
         jQuery("#data-table_processing").show();
-        
+
         $(document).on('click', '.dt-button-collection .dt-button', function () {
             $('.dt-button-collection').hide();
             $('.dt-button-background').hide();
@@ -262,7 +254,7 @@
                 $('.dt-button-background').hide();
             }
         });
-        
+
         var fieldConfig = {
             columns: [
                 { key: 'fullName', header: "{{trans('lang.vendor_info')}}" },
@@ -274,7 +266,7 @@
             ],
             fileName: "{{trans('lang.vendor_list')}}",
         };
-        
+
         try {
             const table=$('#userTable').DataTable({
                 pageLength: 10,
@@ -288,11 +280,11 @@
                     const start=data.start;
                     const length=data.length;
                     const searchValue=data.search.value.toLowerCase();
-                    
+
                     if(searchValue.length>=3||searchValue.length===0) {
                         $('#data-table_processing').show();
                     }
-                    
+
                     // Build request data
                     var requestData = {
                         start: start,
@@ -305,14 +297,14 @@
                         zone: window.selectedZone || '',
                         zone_sort: window.selectedZoneSort || ''
                     };
-                    
+
                     // Add date range if selected
                     var daterangepicker = $('#daterange').data('daterangepicker');
                     if ($('#daterange span').html() != '{{trans("lang.select_range")}}' && daterangepicker) {
                         requestData.start_date = daterangepicker.startDate.format('YYYY-MM-DD');
                         requestData.end_date = daterangepicker.endDate.format('YYYY-MM-DD');
                     }
-                    
+
                     // Fetch vendors from SQL database
                     console.log('🔍 Starting vendor data fetch from SQL...');
                     $.ajax({
@@ -321,7 +313,7 @@
                         data: requestData,
                         success: function(response) {
                             console.log('📊 Found', response.data.length, 'vendors from SQL');
-                            
+
                             if(response.data.length === 0) {
                                 $('.vendor_count').text(0);
                                 console.log("No vendors found in SQL database.");
@@ -334,18 +326,18 @@
                                 });
                                 return;
                             }
-                            
+
                             let records = [];
-                            
+
                             // Process each vendor
                             response.data.forEach(function(vendor) {
                                 var rowData = buildHTML(vendor);
                                 records.push(rowData);
                             });
-                            
+
                             $('.vendor_count').text(response.vendor_count);
                             $('#data-table_processing').hide();
-                            
+
                             callback({
                                 draw: data.draw,
                                 recordsTotal: response.recordsTotal,
@@ -433,7 +425,7 @@
             $('#data-table_processing').hide();
             $('#userTable').html('<div class="alert alert-danger">Error loading vendor data. Please refresh the page.</div>');
         }
-        
+
         function debounce(func,wait) {
             let timeout;
             const context=this;
@@ -442,7 +434,7 @@
                 timeout=setTimeout(() => func.apply(context,args),wait);
             };
         }
-        
+
         $('#search-input').on('input',debounce(function() {
             const searchValue=$(this).val();
             if(searchValue.length>=3) {
@@ -454,7 +446,7 @@
             }
         },300));
     }
-    
+
     $('.vendor_type_selector').select2({
         placeholder: '{{trans("lang.vendor_type")}}',
         minimumResultsForSearch: Infinity,
@@ -482,7 +474,7 @@
             self.select2('close');
         }, 0);
     });
-    
+
     function setDate() {
         $('#daterange span').html('{{trans("lang.select_range")}}');
         $('#daterange').daterangepicker({
@@ -501,18 +493,18 @@
         });
     }
     setDate();
-    
+
     // Initialize filter variables
     window.selectedVendorType = '';
     window.selectedZone = '';
     window.selectedZoneSort = '';
-    
+
     $('.filteredRecords').change(async function() {
         var status = $('.status_selector').val();
         var vendorType = $('.vendor_type_selector').val();
         var zone = $('.zone_selector').val();
         var zoneSort = $('.zone_sort_selector').val();
-        
+
         console.log('🔍 Filter change detected:');
         console.log('  Status:', status);
         console.log('  Vendor Type:', vendorType);
@@ -523,11 +515,11 @@
         window.selectedVendorType = vendorType;
         window.selectedZone = zone;
         window.selectedZoneSort = zoneSort;
-        
+
         // Reload the DataTable with new filters
         $('#userTable').DataTable().ajax.reload();
     });
-    
+
     function buildHTML(val) {
         var html=[];
         var id=val.id;
@@ -548,7 +540,7 @@
         } else {
            imageHtml='<img onerror="this.onerror=null;this.src=\''+placeholderImage+'\'" class="rounded" width="100%" style="width:70px;height:70px;" src="'+val.profilePictureURL+'" alt="image">';
         }
-        
+
         if(val.fullName) {
             html.push(imageHtml+'<a  href="'+route1+'">'+val.fullName+'</a>');
         } else {
@@ -636,19 +628,19 @@
 
         return html;
     }
-    
+
     $("#is_active").click(function() {
         $("#userTable .is_open").prop('checked',$(this).prop('checked'));
     });
-    
+
     $("#deleteAll").click(async function() {
         if($('#userTable .is_open:checked').length) {
             if(confirm("{{trans('lang.selected_delete_alert')}}")) {
                 jQuery("#data-table_processing").show();
-                
+
                 $('#userTable .is_open:checked').each(function() {
                     var dataId=$(this).attr('dataId');
-                    
+
                     // Delete vendor via AJAX
                     $.ajax({
                         url: '/vendors/' + dataId,
@@ -664,7 +656,7 @@
                         }
                     });
                 });
-                
+
                 setTimeout(function() {
                     window.location.reload();
                 }, 2000);
@@ -673,13 +665,13 @@
             alert("{{trans('lang.select_delete_alert')}}");
         }
     });
-    
+
     $(document).on("click","a[name='vendor-delete']",async function(e) {
         var id=this.id;
-        
+
         if(confirm("Are you sure you want to delete this vendor?")) {
             jQuery("#data-table_processing").show();
-            
+
             $.ajax({
                 url: '/vendors/' + id,
                 method: 'DELETE',
@@ -700,13 +692,13 @@
             });
         }
     });
-    
+
     $(document).on("click","input[name='isActive']",async function(e) {
         var ischeck=$(this).is(':checked');
         var id=this.id;
 
         jQuery("#data-table_processing").show();
-        
+
         $.ajax({
             url: '/vendors/' + id + '/toggle-status',
             method: 'POST',

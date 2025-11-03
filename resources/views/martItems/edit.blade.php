@@ -717,17 +717,12 @@
         var new_added_photos_filename = []; // DISABLED: Using single photo field only
         var photosToDelete = []; // DISABLED: Using single photo field only
         var product_specification = {};
-        var placeholderImage = '';
+        var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
         var productImagesCount = 0;
         var variant_photos=[];
         var variant_filename=[];
         var variantImageToDelete=[];
         var variant_vIds=[];
-        var placeholder = database.collection('settings').doc('placeHolderImage');
-        placeholder.get().then(async function (snapshotsimage) {
-            var placeholderImageData = snapshotsimage.data();
-            placeholderImage = placeholderImageData.image;
-        })
         var refCurrency = database.collection('currencies').where('isActive', '==', true);
         refCurrency.get().then(async function (snapshots) {
             var currencyData = snapshots.docs[0].data();
@@ -812,14 +807,14 @@
                 $('[id="variant_' + variant + '_url"]').val('');
             });
             jQuery("#data-table_processing").show();
-            
+
             // Load item data from SQL database via AJAX
             $.ajax({
                 url: '/mart-items/' + id + '/data',
                 method: 'GET',
                 success: async function(product) {
                     console.log('✅ Loaded item from SQL:', product);
-                    
+
                     // Fetch vendors from SQL
                     $.ajax({
                         url: '{{ route("mart-items.vendors") }}',

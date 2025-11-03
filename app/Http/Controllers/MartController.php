@@ -105,7 +105,7 @@ class MartController extends Controller
                 }
 
                 // Mart info (image + title link)
-                $placeholder = asset('images/placeholder.png');
+                $placeholder = asset('assets/images/placeholder-image.png');
                 $imgSrc = $row->photo ? e($row->photo) : e($placeholder);
                 $martInfo = '<img onerror="this.onerror=null;this.src=\'' . $placeholder . '\'" style="width:70px;height:70px;" src="' . $imgSrc . '">';
                 $martInfo .= ' <a href="' . e($viewUrl) . '">' . e($vendorTitle ?: 'UNKNOWN') . '</a>';

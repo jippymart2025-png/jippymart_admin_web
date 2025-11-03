@@ -88,7 +88,7 @@
     var vendorId;
     var ref;
     var append_list = '';
-    var placeholderImage = '';
+    var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
     var dineInOrderAcceptedSubject = '';
     var dineInOrderAcceptedMsg = '';
     var dineInOrderRejectedSubject = '';
@@ -122,11 +122,6 @@
             window.location.href = url;
         });
         jQuery("#data-table_processing").show();
-        var placeholder = database.collection('settings').doc('placeHolderImage');
-        placeholder.get().then(async function (snapshotsimage) {
-            var placeholderImageData = snapshotsimage.data();
-            placeholderImage = placeholderImageData.image;
-        })
         const table = $('#bookTable').DataTable({
             pageLength: 10, // Number of rows per page
             processing: false, // Show processing indicator

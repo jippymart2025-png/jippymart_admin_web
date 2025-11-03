@@ -5,16 +5,19 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\VendorUsers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Carbon\Carbon;
 use Google\Client as Google_Client;
 
 class NotificationController extends Controller
-{   
+{
 
     public function __construct()
     {
         $this->middleware('auth');
     }
-    
+
     public function index($id='')
     {
         return view("notification.index")->with('id',$id);
@@ -23,6 +26,71 @@ class NotificationController extends Controller
     public function send($id='')
     {
         return view('notification.send')->with('id',$id);
+    }
+
+    /**
+     * Server-side data for DataTables (SQL based)
+     */
+    public function data(Request $request)
+    {
+        $draw   = (int) $request->input('draw', 1);
+        $start  = (int) $request->input('start', 0);
+        $length = (int) $request->input('length', 10);
+        $search = strtolower((string) data_get($request->input('search'), 'value', ''));
+
+        $base = DB::table('notifications');
+        $total = $base->count();
+
+        $q = DB::table('notifications')
+            ->select('id', 'subject', 'message', 'role', 'createdAt');
+
+        if ($search !== '') {
+            $q->where(function($qq) use ($search){
+                $qq->where('subject','like','%'.$search.'%')
+                   ->orWhere('message','like','%'.$search.'%')
+                   ->orWhere('role','like','%'.$search.'%');
+            });
+        }
+
+        // Order by createdAt (not created_at)
+        $q->orderBy('createdAt', 'desc');
+        $rows = $q->offset($start)->limit($length)->get();
+        $filtered = ($search==='') ? $total : (clone $q)->count();
+
+        $canDelete = in_array('notification.delete', json_decode(@session('user_permissions'), true) ?: []);
+        $data = [];
+        foreach ($rows as $row) {
+            $rowArr = [];
+            if ($canDelete) {
+                $rowArr[] = '<td class="delete-all"><input type="checkbox" class="is_open" dataId="'.$row->id.'"><label class="col-3 control-label"></label></td>';
+            }
+            $rowArr[] = e($row->subject ?? '');
+            $rowArr[] = e($row->message ?? '');
+
+            // Format createdAt - it's stored as varchar in ISO format
+            $createdAt = '-';
+            if ($row->createdAt) {
+                try {
+                    // Format as: Oct 06, 2025 07:24 AM
+                    $createdAt = Carbon::parse($row->createdAt)->format('M d, Y h:i A');
+                } catch (\Exception $e) {
+                    $createdAt = $row->createdAt; // Show as-is if can't parse
+                }
+            }
+            $rowArr[] = $createdAt;
+
+            if ($canDelete) {
+                $rowArr[] = '<span class="action-btn"><a id="'.$row->id.'" name="notifications-delete" class="delete-btn" href="javascript:void(0)"><i class="mdi mdi-delete"></i></a></span>';
+            }
+            $data[] = $rowArr;
+        }
+
+        return response()->json([
+            'draw' => $draw,
+            'recordsTotal' => $total,
+            'recordsFiltered' => $filtered,
+            'data' => $data,
+        ]);
     }
 
     public function broadcastnotification(Request $request)
@@ -35,7 +103,7 @@ class NotificationController extends Controller
         ]);
 
         if(Storage::disk('local')->has('firebase/serviceAccount.json')){
-            
+
             try {
                 $client = new Google_Client();
                 $client->setAuthConfig(storage_path('app/firebase/serviceAccount.json'));
@@ -43,7 +111,7 @@ class NotificationController extends Controller
                 $client->setAccessType('offline');
                 $client->refreshTokenWithAssertion();
                 $client_token = $client->getAccessToken();
-                
+
                 if (!$client_token || !isset($client_token['access_token'])) {
                     \Log::error('Failed to get access token from Google Client');
                     return response()->json([
@@ -51,7 +119,7 @@ class NotificationController extends Controller
                         'message' => 'Failed to authenticate with Firebase.'
                     ]);
                 }
-                
+
                 $access_token = $client_token['access_token'];
                 \Log::info('Successfully obtained Firebase access token');
             } catch (\Exception $e) {
@@ -63,7 +131,7 @@ class NotificationController extends Controller
             }
 
             $role = $request->role;
-            
+
             if(!empty($access_token) && !empty($role)){
 
                 $projectId = env('FIREBASE_PROJECT_ID', 'jippymart-27c08');
@@ -72,12 +140,12 @@ class NotificationController extends Controller
                 // Map roles to topics
                 $topicMap = [
                     'vendor' => 'restaurant',
-                    'customer' => 'customer', 
+                    'customer' => 'customer',
                     'driver' => 'driver'
                 ];
-                
+
                 $topic = $topicMap[$role] ?? 'default';
-                
+
                 \Log::info('Sending notification', [
                     'project_id' => $projectId,
                     'role' => $role,
@@ -125,18 +193,18 @@ class NotificationController extends Controller
                 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
                 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
                 curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-                
+
                 $result = curl_exec($ch);
                 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 $curlError = curl_error($ch);
                 curl_close($ch);
-                
+
                 \Log::info('FCM Response', [
                     'http_code' => $httpCode,
                     'result' => $result,
                     'curl_error' => $curlError
                 ]);
-                
+
                 if ($result === FALSE || !empty($curlError)) {
                     \Log::error('FCM Send Error: ' . $curlError);
                     return response()->json([
@@ -144,14 +212,28 @@ class NotificationController extends Controller
                         'message' => 'FCM Send Error: ' . $curlError
                     ]);
                 }
-                
+
                 $resultData = json_decode($result, true);
-                
+
                 if ($httpCode >= 200 && $httpCode < 300) {
+                    // Persist notification in SQL for admin history/audit
+                    try {
+                        $notificationId = (string) Str::uuid();
+                        DB::table('notifications')->insert([
+                            'id' => $notificationId,
+                            'subject' => $request->subject,
+                            'message' => $request->message,
+                            'role' => $request->role,
+                            'createdAt' => now()->toIso8601String(), // Use createdAt (camelCase) to match table
+                        ]);
+                        \Log::info('✅ Notification saved to SQL database', ['id' => $notificationId]);
+                    } catch (\Throwable $e) {
+                        \Log::error('❌ Failed to persist notification in SQL: '.$e->getMessage());
+                    }
                     \Log::info('Notification sent successfully', ['result' => $resultData]);
                     return response()->json([
                         'success' => true,
-                        'message' => 'Notification successfully sent to ' . $role . ' topic: ' . $topic,
+                        'message' => 'Notification sent and saved to database',
                         'result' => $resultData
                     ]);
                 } else {
@@ -182,7 +264,7 @@ class NotificationController extends Controller
             ]);
         }
     }
-    
+
     public function sendNotification(Request $request)
     {
         \Log::info('Individual notification request', [
@@ -192,7 +274,7 @@ class NotificationController extends Controller
         ]);
 
         if(Storage::disk('local')->has('firebase/serviceAccount.json')){
-            
+
             try {
                 $client = new Google_Client();
                 $client->setAuthConfig(storage_path('app/firebase/serviceAccount.json'));
@@ -200,7 +282,7 @@ class NotificationController extends Controller
                 $client->setAccessType('offline');
                 $client->refreshTokenWithAssertion();
                 $client_token = $client->getAccessToken();
-                
+
                 if (!$client_token || !isset($client_token['access_token'])) {
                     \Log::error('Failed to get access token from Google Client');
                     return response()->json([
@@ -208,7 +290,7 @@ class NotificationController extends Controller
                         'message' => 'Failed to authenticate with Firebase.'
                     ]);
                 }
-                
+
                 $access_token = $client_token['access_token'];
                 \Log::info('Successfully obtained Firebase access token for individual notification');
             } catch (\Exception $e) {
@@ -220,7 +302,7 @@ class NotificationController extends Controller
             }
 
             $fcm_token = $request->fcm;
-            
+
             if(!empty($access_token) && !empty($fcm_token)){
 
                 $projectId = env('FIREBASE_PROJECT_ID', 'jippymart-27c08');
@@ -266,18 +348,18 @@ class NotificationController extends Controller
                 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
                 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
                 curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-                
+
                 $result = curl_exec($ch);
                 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 $curlError = curl_error($ch);
                 curl_close($ch);
-                
+
                 \Log::info('FCM Individual Response', [
                     'http_code' => $httpCode,
                     'result' => $result,
                     'curl_error' => $curlError
                 ]);
-                
+
                 if ($result === FALSE || !empty($curlError)) {
                     \Log::error('FCM Send Error: ' . $curlError);
                     return response()->json([
@@ -285,9 +367,9 @@ class NotificationController extends Controller
                         'message' => 'FCM Send Error: ' . $curlError
                     ]);
                 }
-                
+
                 $resultData = json_decode($result, true);
-                
+
                 if ($httpCode >= 200 && $httpCode < 300) {
                     \Log::info('Individual notification sent successfully', ['result' => $resultData]);
                     return response()->json([

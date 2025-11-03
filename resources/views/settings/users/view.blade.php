@@ -2,13 +2,13 @@
 @section('content')
 <div class="page-wrapper">
     <div class="container-fluid">
-      <div class="admin-top-section pt-4"> 
+      <div class="admin-top-section pt-4">
         <div class="row">
             <div class="col-12">
                 <div class="d-flex top-title-section pb-4 justify-content-between">
                     <div class="d-flex top-title-left align-self-center">
                         <span class="icon mr-3"><img src="{{ asset('images/building-four.png') }}"></span>
-                       <div class="top-title-breadcrumb"> 
+                       <div class="top-title-breadcrumb">
                         <h3 class="mb-0 restaurantTitle">{{trans('lang.user_plural')}}</h3>
                           <ol class="breadcrumb">
                             <li class="breadcrumb-item"><a href="{{url('/dashboard')}}">{{trans('lang.dashboard')}}</a></li>
@@ -18,15 +18,15 @@
                        </div>
                     </div>
                     <div class="d-flex top-title-right align-self-center">
-                       <div class="card-header-right"> 
+                       <div class="card-header-right">
                             <a href="javascript:void(0)" data-toggle="modal" data-target="#addWalletModal"class="btn-primary btn rounded-full add-wallate"><i class="mdi mdi-plus mr-2"></i>{{trans('lang.add_wallet_amount')}}</a>
                        </div>
                     </div>
                 </div>
             </div>
-        </div> 
+        </div>
       </div>
-      <div class="resttab-sec mb-4">  
+      <div class="resttab-sec mb-4">
         <div class="menu-tab">
             <ul>
                 <li class="active">
@@ -39,7 +39,7 @@
                     <a href="{{route('users.walletstransaction',$id)}}">{{trans('lang.wallet_transaction')}}</a>
                 </li>
             </ul>
-        </div>  
+        </div>
         <div class="row">
             <div class="col-md-3">
                 <div class="card card-box-with-icon bg--1">
@@ -63,7 +63,7 @@
                     </div>
                 </div>
             </div>
-        </div>   
+        </div>
        </div>
        <div class="restaurant_info-section">
          <div class="card border">
@@ -162,80 +162,108 @@
 @endsection
 @section('scripts')
     <script>
+        // ✅ SQL API VERSION - No Firebase!
+        console.log('✅ User View using SQL API');
+
         var id = "{{$id}}";
-        var database = firebase.firestore();
-        var ref = database.collection('users').where("id", "==", id);
         var photo = "";
-        var placeholderImage = '';
-        var placeholder = database.collection('settings').doc('placeHolderImage');
-        placeholder.get().then(async function (snapshotsimage) {
-            var placeholderImageData = snapshotsimage.data();
-            placeholderImage = placeholderImageData.image;
-        });
+        var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
         var currentCurrency = '';
         var currencyAtRight = false;
         var decimal_degits = 0;
-        var refCurrency = database.collection('currencies').where('isActive', '==', true);
-        refCurrency.get().then(async function (snapshots) {
-            var currencyData = snapshots.docs[0].data();
-            currentCurrency = currencyData.symbol;
-            currencyAtRight = currencyData.symbolAtRight;
-            if (currencyData.decimal_degits) {
-                decimal_degits = currencyData.decimal_degits;
-            }
-            $(".currentCurrency").text(currencyData.symbol);
-        });
-        var email_templates = database.collection('email_templates').where('type', '==', 'wallet_topup');
         var emailTemplatesData = null;
-        database.collection('restaurant_orders').where('authorID', '==', id).get().then(async function (orderSnapshots) {
-            var paymentData = orderSnapshots.docs;
-            $("#total_orders").text(paymentData.length);
-        })
+
+        // Get currency settings from window.settings (loaded by settings-loader.js)
+        function initializeCurrencySettings() {
+            if (window.settings && window.settings.currency) {
+                currentCurrency = window.settings.currency.symbol || '₹';
+                currencyAtRight = window.settings.currency.symbolAtRight || false;
+                decimal_degits = window.settings.currency.decimal_degits || 2;
+                $(".currentCurrency").text(currentCurrency);
+            }
+        }
+
+        // Wait for settings to load
+        async function waitForSettings() {
+            let attempts = 0;
+            while (!window.settings && attempts < 50) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                attempts++;
+            }
+            initializeCurrencySettings();
+        }
+
         $(document).ready(async function () {
+            console.log('✅ Loading user data from SQL API');
+            await waitForSettings();
             jQuery("#data-table_processing").show();
-            await email_templates.get().then(async function (snapshots) {
-                emailTemplatesData = snapshots.docs[0].data();
-            });
-            ref.get().then(async function (snapshots) {
-                var user = snapshots.docs[0].data();
-                $(".user_name").text(user.firstName + ' ' + user.lastName);
-                if (user.hasOwnProperty('email') && user.email) {
-                    $(".email").text(shortEmail(user.email));
-                } else {
-                    $('.email').html("{{trans('lang.not_mentioned')}}");
-                }
-                if (user.hasOwnProperty('phoneNumber') && user.phoneNumber) {
-                    $(".phone").text(shortEditNumber(user.phoneNumber));
-                } else {
-                    $('.phone').html("{{trans('lang.not_mentioned')}}");
-                }
-                var wallet_balance = 0;
-                if (user.hasOwnProperty('wallet_amount') && user.wallet_amount != null && !isNaN(user.wallet_amount)) {
-                    wallet_balance = user.wallet_amount;
-                }
-                if (currencyAtRight) {
-                    wallet_balance = parseFloat(wallet_balance).toFixed(decimal_degits) + "" + currentCurrency;
-                } else {
-                    wallet_balance = currentCurrency + "" + parseFloat(wallet_balance).toFixed(decimal_degits);
-                }
-                $('.wallet_balance').html(wallet_balance);
-                var image = "";
-                if (user.profilePictureURL != "" && user.profilePictureURL != null) {
-                    image = '<img onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" width="100px" id="" height="auto" src="' + user.profilePictureURL + '">';
-                } else {
-                    image = '<img width="100px" id="" height="auto" src="' + placeholderImage + '">';
-                }
-                $('.profile_image').html(image);
-                var address = '';
-                if (user.hasOwnProperty('shippingAddress') && Array.isArray(user.shippingAddress)) {
-                    shippingAddress = user.shippingAddress;
-                    address+='<div id="append_list1" class="res-search-list row">';
-                    shippingAddress.forEach((listval) => {
+
+            // Load user data from SQL API
+            $.ajax({
+                url: '{{ url("/users/data") }}/' + id,
+                method: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    if (!response.success || !response.data) {
+                        console.error('❌ Failed to load user data');
+                        jQuery("#data-table_processing").hide();
+                        return;
+                    }
+
+                    console.log('✅ User data loaded from SQL:', response);
+                    var user = response.data;
+                    // Display user name
+                    $(".user_name").text(user.firstName + ' ' + user.lastName);
+
+                    // Display email
+                    if (user.email) {
+                        $(".email").text(shortEmail(user.email));
+                    } else {
+                        $('.email').html("{{trans('lang.not_mentioned')}}");
+                    }
+
+                    // Display phone
+                    if (user.phoneNumber) {
+                        $(".phone").text(shortEditNumber(user.phoneNumber));
+                    } else {
+                        $('.phone').html("{{trans('lang.not_mentioned')}}");
+                    }
+
+                    // Display total orders
+                    $("#total_orders").text(user.totalOrders || 0);
+
+                    // Display wallet balance
+                    var wallet_balance = 0;
+                    if (user.wallet_amount != null && !isNaN(user.wallet_amount)) {
+                        wallet_balance = user.wallet_amount;
+                    }
+                    if (currencyAtRight) {
+                        wallet_balance = parseFloat(wallet_balance).toFixed(decimal_degits) + "" + currentCurrency;
+                    } else {
+                        wallet_balance = currentCurrency + "" + parseFloat(wallet_balance).toFixed(decimal_degits);
+                    }
+                    $('.wallet_balance').html(wallet_balance);
+
+                    // Display profile image
+                    var image = "";
+                    if (user.profilePictureURL != "" && user.profilePictureURL != null) {
+                        image = '<img onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" width="100px" id="" height="auto" src="' + user.profilePictureURL + '">';
+                    } else {
+                        image = '<img width="100px" id="" height="auto" src="' + placeholderImage + '">';
+                    }
+                    $('.profile_image').html(image);
+
+                    // Display shipping addresses
+                    var address = '';
+                    if (user.shippingAddress && Array.isArray(user.shippingAddress)) {
+                        shippingAddress = user.shippingAddress;
+                        address+='<div id="append_list1" class="res-search-list row">';
+                        shippingAddress.forEach((listval) => {
                         var defaultBtnHtml = '';
                         if (listval.isDefault == true) {
                             if (listval.hasOwnProperty('location') && listval.location) {
-                                var lat = listval.location.latitude; 
-                                var lng = listval.location.longitude; 
+                                var lat = listval.location.latitude;
+                                var lng = listval.location.longitude;
                                 var mapSrc = `https://maps.google.com/maps?width=600&height=225&hl=en&q=${lat},${lng}&t=&z=14&ie=UTF8&iwloc=B&output=embed`;
                                 $(".mapouter").show();
                                 $(".gmap_iframe").attr("src", mapSrc);
@@ -251,82 +279,74 @@
                         address = address + '<div class="media-body"><h6>' + listval.address + "," + listval.locality + " " + listval.landmark + '</h6>';
                         address = address + '<span class="badge badge-info py-2 px-2">' + listval.addressAs + '</span>' + defaultBtnHtml ;
                         address += '</div></div>';
-                        address = address + '</div> </div></div>';    
-                     });
-                    address +='</div>';
-                } 
-                if (address != "") {
-                    $('.address').html(address);
-                } else {
-                    $('.address').html("<h5>{{trans('lang.not_mentioned')}}</h5>");
+                        address = address + '</div> </div></div>';
+                        });
+                        address +='</div>';
+                    }
+                    if (address != "") {
+                        $('.address').html(address);
+                    } else {
+                        $('.address').html("<h5>{{trans('lang.not_mentioned')}}</h5>");
+                    }
+
+                    jQuery("#data-table_processing").hide();
+                },
+                error: function(xhr, status, error) {
+                    console.error('❌ Error loading user data:', error);
+                    console.error('Response:', xhr.responseText);
+                    jQuery("#data-table_processing").hide();
                 }
-               
-                jQuery("#data-table_processing").hide();
             });
         });
         $(".save-form-btn").click(function () {
-            var date = firebase.firestore.FieldValue.serverTimestamp();
             var amount = $('#amount').val();
             if (amount == '') {
                 $('#wallet_error').text('{{trans("lang.add_wallet_amount_error")}}')
                 return false;
             }
             var note = $('#note').val();
-            database.collection('users').where('id', '==', id).get().then(async function (snapshot) {
-                if (snapshot.docs.length > 0) {
-                    var data = snapshot.docs[0].data();
-                    var walletAmount = 0;
-                    if (data.hasOwnProperty('wallet_amount') && !isNaN(data.wallet_amount) && data.wallet_amount != null) {
-                        walletAmount = data.wallet_amount;
+
+            console.log('✅ Adding wallet amount via SQL API');
+
+            // Add wallet amount via SQL API
+            $.ajax({
+                url: '{{ url("/users/wallet") }}/' + id,
+                method: 'POST',
+                dataType: 'json',
+                data: {
+                    amount: amount,
+                    note: note,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        console.log('✅ Wallet amount added successfully:', response);
+
+                        // Show success message
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Success!',
+                            text: 'Wallet amount added successfully',
+                            confirmButtonText: 'OK'
+                        }).then(() => {
+                            window.location.reload();
+                        });
+                    } else {
+                        console.error('❌ Failed to add wallet amount:', response.message);
+                        $('#user_account_not_found_error').text(response.message || '{{trans("lang.user_detail_not_found")}}');
                     }
-                    var newWalletAmount = parseFloat(walletAmount) + parseFloat(amount);
-                    database.collection('users').doc(id).update({
-                        'wallet_amount': newWalletAmount
-                    }).then(function (result) {
-                        var tempId = database.collection("tmp").doc().id;
-                        database.collection('wallet').doc(tempId).set({
-                            'amount': parseFloat(amount),
-                            'date': date,
-                            'isTopUp': true,
-                            'id': tempId,
-                            'order_id': '',
-                            'payment_method': 'Wallet',
-                            'payment_status': 'success',
-                            'user_id': id,
-                            'note': note,
-                            'transactionUser': "user",
-                        }).then(async function (result) {
-                            if (currencyAtRight) {
-                                amount = parseInt(amount).toFixed(decimal_degits) + "" + currentCurrency;
-                                newWalletAmount = newWalletAmount.toFixed(decimal_degits) + "" + currentCurrency;
-                            } else {
-                                amount = currentCurrency + "" + parseInt(amount).toFixed(decimal_degits);
-                                newWalletAmount = currentCurrency + "" + newWalletAmount.toFixed(decimal_degits);
-                            }
-                            var formattedDate = new Date();
-                            var month = formattedDate.getMonth() + 1;
-                            var day = formattedDate.getDate();
-                            var year = formattedDate.getFullYear();
-                            month = month < 10 ? '0' + month : month;
-                            day = day < 10 ? '0' + day : day;
-                            formattedDate = day + '-' + month + '-' + year;
-                            var message = emailTemplatesData.message;
-                            message = message.replace(/{username}/g, data.firstName + ' ' + data.lastName);
-                            message = message.replace(/{date}/g, formattedDate);
-                            message = message.replace(/{amount}/g, amount);
-                            message = message.replace(/{paymentmethod}/g, 'Wallet');
-                            message = message.replace(/{transactionid}/g, tempId);
-                            message = message.replace(/{newwalletbalance}/g, newWalletAmount);
-                            emailTemplatesData.message = message;
-                            var url = "{{url('send-email')}}";
-                            var sendEmailStatus = await sendEmail(url, emailTemplatesData.subject, emailTemplatesData.message, [data.email]);
-                            if (sendEmailStatus) {
-                                window.location.reload();
-                            }
-                        })
-                    })
-                } else {
-                    $('#user_account_not_found_error').text('{{trans("lang.user_detail_not_found")}}');
+                },
+                error: function(xhr, status, error) {
+                    console.error('❌ Error adding wallet amount:', error);
+                    console.error('Response:', xhr.responseText);
+
+                    // Show error message
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'Failed to add wallet amount. Please try again.',
+                        confirmButtonText: 'OK'
+                    });
                 }
             });
         });

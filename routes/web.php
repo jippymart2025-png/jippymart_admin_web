@@ -61,7 +61,8 @@ Route::middleware(['permission:users,users.create'])->group(function () {
 });
 Route::middleware(['permission:users,users.view'])->group(function () {
     Route::get('/users/view/{id}', [App\Http\Controllers\UserController::class, 'view'])->name('users.view');
-
+    Route::get('/users/data/{id}', [App\Http\Controllers\UserController::class, 'getUserData'])->name('users.getData');
+    Route::post('/users/wallet/{id}', [App\Http\Controllers\UserController::class, 'addWalletAmount'])->name('users.addWallet');
 });
 Route::middleware(['permission:vendors,vendors'])->group(function () {
     Route::get('/vendors', [App\Http\Controllers\RestaurantController::class, 'vendors'])->name('vendors');
@@ -391,15 +392,28 @@ Route::middleware(['permission:cuisines,cuisines.delete'])->group(function () {
 
 Route::middleware(['permission:promotions,promotions'])->group(function () {
     Route::get('/promotions', [App\Http\Controllers\PromotionController::class, 'index'])->name('promotions');
+    Route::get('/promotions/data', [App\Http\Controllers\PromotionController::class, 'getData'])->name('promotions.data');
+    Route::get('/promotions/zones', [App\Http\Controllers\PromotionController::class, 'getZones'])->name('promotions.zones');
+    Route::get('/promotions/vendors', [App\Http\Controllers\PromotionController::class, 'getVendors'])->name('promotions.vendors');
+    Route::get('/promotions/products', [App\Http\Controllers\PromotionController::class, 'getProducts'])->name('promotions.products');
+    Route::get('/promotions/show/{id}', [App\Http\Controllers\PromotionController::class, 'show'])->name('promotions.show');
+});
+
+// Toggle route - separate for better visibility
+Route::middleware(['permission:promotions,promotions'])->group(function () {
+    Route::post('/promotions/toggle/{id}', [App\Http\Controllers\PromotionController::class, 'toggleAvailability'])->name('promotions.toggle');
 });
 Route::middleware(['permission:promotions,promotions.edit'])->group(function () {
     Route::get('/promotions/edit/{id}', [App\Http\Controllers\PromotionController::class, 'edit'])->name('promotions.edit');
+    Route::put('/promotions/update/{id}', [App\Http\Controllers\PromotionController::class, 'update'])->name('promotions.update');
 });
 Route::middleware(['permission:promotions,promotions.create'])->group(function () {
     Route::get('/promotions/create', [App\Http\Controllers\PromotionController::class, 'create'])->name('promotions.create');
+    Route::post('/promotions/store', [App\Http\Controllers\PromotionController::class, 'store'])->name('promotions.store');
 });
 Route::middleware(['permission:promotions,promotions.delete'])->group(function () {
-    Route::get('/promotions/delete/{id}', [App\Http\Controllers\PromotionController::class, 'delete'])->name('promotions.delete');
+    Route::delete('/promotions/delete/{id}', [App\Http\Controllers\PromotionController::class, 'destroy'])->name('promotions.destroy');
+    Route::post('/promotions/bulk-delete', [App\Http\Controllers\PromotionController::class, 'bulkDelete'])->name('promotions.bulk-delete');
 });
 
 Route::middleware(['permission:menu-periods,menu-periods'])->group(function () {
@@ -557,16 +571,23 @@ Route::post('order-status-notification', [App\Http\Controllers\OrderController::
 
 Route::middleware(['permission:dynamic-notifications,dynamic-notification.index'])->group(function () {
     Route::get('dynamic-notification', [App\Http\Controllers\DynamicNotificationController::class, 'index'])->name('dynamic-notification.index');
+    Route::get('dynamic-notification/data', [App\Http\Controllers\DynamicNotificationController::class, 'data'])->name('dynamic-notification.data');
 });
 Route::middleware(['permission:dynamic-notifications,dynamic-notification.save'])->group(function () {
     Route::get('dynamic-notification/save/{id?}', [App\Http\Controllers\DynamicNotificationController::class, 'save'])->name('dynamic-notification.save');
-
+    Route::get('api/dynamic-notification/{id}', [App\Http\Controllers\DynamicNotificationController::class, 'show'])->name('dynamic-notification.show');
+    Route::post('dynamic-notification/upsert', [App\Http\Controllers\DynamicNotificationController::class, 'upsert'])->name('dynamic-notification.upsert');
 });
 Route::middleware(['permission:dynamic-notifications,dynamic-notification.delete'])->group(function () {
     Route::get('dynamic-notification/delete/{id}', [App\Http\Controllers\DynamicNotificationController::class, 'delete'])->name('dynamic-notification.delete');
+    Route::delete('dynamic-notification/{id}', [App\Http\Controllers\DynamicNotificationController::class, 'delete']);
 });
 Route::middleware(['permission:god-eye,map'])->group(function () {
     Route::get('/map', [App\Http\Controllers\MapController::class, 'index'])->name('map');
+    Route::get('/map/data', [App\Http\Controllers\MapController::class, 'getData'])->name('map.getData');
+    Route::get('/map/driver/{driverId}/location', [App\Http\Controllers\MapController::class, 'getDriverLocation'])->name('map.getDriverLocation');
+    Route::get('/map/user/{userId}', [App\Http\Controllers\MapController::class, 'getUserDetail'])->name('map.getUserDetail');
+    Route::get('/map/driver/{driverId}', [App\Http\Controllers\MapController::class, 'getDriverDetail'])->name('map.getDriverDetail');
     Route::post('/map/get_order_info', [App\Http\Controllers\MapController::class, 'getOrderInfo'])->name('map.getOrderInfo');
 });
 Route::prefix('settings')->group(function () {
@@ -676,6 +697,11 @@ Route::middleware(['permission:general-notifications,notification.send'])->group
 
 });
 Route::post('broadcastnotification', [App\Http\Controllers\NotificationController::class, 'broadcastnotification'])->name('broadcastnotification');
+// SQL-based notifications data + delete
+Route::get('/notification/data', [App\Http\Controllers\NotificationController::class, 'data'])->name('notification.data');
+Route::delete('/notification/{id}', function($id){
+    try { \Illuminate\Support\Facades\DB::table('notifications')->where('id',$id)->delete(); return response()->json(['success'=>true]); } catch (\Throwable $e) { return response()->json(['success'=>false,'message'=>$e->getMessage()],500); }
+})->name('notification.delete');
 
 // Debug route for testing notifications (remove in production)
 Route::get('debug/notification-test', function () {
@@ -750,6 +776,8 @@ Route::middleware(['permission:banners,setting.banners'])->group(function () {
     Route::get('/settings/menu-items', [App\Http\Controllers\MenuItemController::class, 'index'])->name('setting.banners');
     Route::get('/menu-items/data', [App\Http\Controllers\MenuItemController::class, 'data'])->name('menu-items.data');
     Route::get('/menu-items/json/{id}', [App\Http\Controllers\MenuItemController::class, 'json'])->name('menu-items.json');
+    Route::get('/menu-items/stores', [App\Http\Controllers\MenuItemController::class, 'getStores'])->name('menu-items.stores');
+    Route::get('/menu-items/products', [App\Http\Controllers\MenuItemController::class, 'getProducts'])->name('menu-items.products');
 });
 Route::middleware(['permission:banners,setting.banners.create'])->group(function () {
     Route::get('/settings/menu-items/create', [App\Http\Controllers\MenuItemController::class, 'create'])->name('setting.banners.create');

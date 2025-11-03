@@ -49,7 +49,7 @@ class GiftCardController extends Controller
         $rows = $q->orderBy('g.title','asc')->offset($start)->limit($length)->get();
 
         $canDelete = in_array('gift-card.delete', json_decode(@session('user_permissions'), true) ?: []);
-        $placeholder = asset('images/placeholder-image.png');
+        $placeholder = asset('assets/images/placeholder-image.png');
         $data = [];
         foreach ($rows as $r) {
             $editUrl = route('gift-card.edit', $r->id);

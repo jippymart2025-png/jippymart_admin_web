@@ -48,12 +48,7 @@
         var frontFileName = '';
         var backFileOld = '';
         var frontFileOld = '';
-    var placeholderImage = '';
-        var placeholder = database.collection('settings').doc('placeHolderImage');
-        placeholder.get().then(async function (snapshotsimage) {
-            var placeholderImageData = snapshotsimage.data();
-            placeholderImage = placeholderImageData.image;
-        })
+    var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
         $(document).ready(function () {
             jQuery("#data-table_processing").show();
             var html = '';
@@ -199,7 +194,7 @@
             })(f);
             reader.readAsDataURL(f);
         }
-        $(document).on('click', '.save-form-btn', function () { 
+        $(document).on('click', '.save-form-btn', function () {
             var status = 'approved';
             var type='restaurant';
             var docId = $("#docId").val();

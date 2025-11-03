@@ -99,19 +99,14 @@
         var logo_url = "";
         var new_logo_url = "";
         var logoToDelete = [];
-        var placeholderImage = '';
-        var placeholder = database.collection('settings').doc('placeHolderImage');
-        placeholder.get().then(async function (snapshotsimage) {
-            var placeholderImageData = snapshotsimage.data();
-            placeholderImage = placeholderImageData.image;
-        })
+        var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
 
         $(document).ready(function () {
             jQuery("#data-table_processing").show();
-            
+
             ref.get().then(async function (snapshots) {
                 var brand = snapshots.data();
-                
+
                 if (brand.hasOwnProperty('logo_url')) {
                     logo_url = brand.logo_url;
                     if (logo_url && logo_url != '') {
@@ -124,7 +119,7 @@
                 $(".brand_name").val(brand.name);
                 $(".brand_slug").val(brand.slug);
                 $("#brand_description").val(brand.description);
-                
+
                 if (brand.status) {
                     $(".brand_status").prop('checked', true);
                 }
@@ -170,20 +165,20 @@
                     return;
                 } else {
                     $(".error_top").hide();
-                    
+
                     // Check for duplicate brand names (excluding current brand)
                     jQuery("#data-table_processing").show();
                     const existingBrands = await database.collection('brands')
                         .where('name', '==', name.trim())
                         .get();
-                    
+
                     let duplicateFound = false;
                     existingBrands.forEach(doc => {
                         if (doc.id !== id) { // Exclude current brand
                             duplicateFound = true;
                         }
                     });
-                    
+
                     if (duplicateFound) {
                         jQuery("#data-table_processing").hide();
                         $(".error_top").show();
@@ -192,14 +187,14 @@
                         window.scrollTo(0, 0);
                         return;
                     }
-                    
+
                     await storeLogoData().then(async (logo) => {
                         if (logo) {
                             new_logo_url = logo;
                         } else {
                             new_logo_url = logo_url;
                         }
-                        
+
                         database.collection('brands').doc(id).update({
                             'name': name,
                             'slug': slug || name.toLowerCase().replace(/[^a-z0-9 -]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim('-'),
@@ -235,7 +230,7 @@
 
         async function storeLogoData() {
             var logo = '';
-            
+
             // Delete old logos if marked for deletion
             if (logoToDelete.length > 0) {
                 await Promise.all(logoToDelete.map(async (delImage) => {
@@ -256,7 +251,7 @@
                     }
                 }));
             }
-            
+
             // Handle new logo upload
             if (new_logo_url && new_logo_url != '') {
                 try {
@@ -265,13 +260,13 @@
                         // Upload new base64 image to Firebase Storage
                         var filename = 'brand_logo_' + Date.now() + '.jpg';
                         var storageRef = firebase.storage().ref('images/brands/' + filename);
-                        
+
                         // Convert base64 to blob
                         var base64Data = new_logo_url.replace(/^data:image\/[a-z]+;base64,/, "");
                         var uploadTask = await storageRef.putString(base64Data, 'base64', {
                             contentType: 'image/jpeg'
                         });
-                        
+
                         // Get download URL
                         logo = await uploadTask.ref.getDownloadURL();
                         console.log('✅ New logo uploaded to Firebase Storage:', logo);
@@ -289,7 +284,7 @@
                 logo = logo_url;
                 console.log('ℹ️ Using existing logo:', logo);
             }
-            
+
             return logo;
         }
 
@@ -300,7 +295,7 @@
                 var filename = $('#brand_logo').val().replace(/C:\\fakepath\\/i, '')
                 var timestamp = Number(new Date());
                 var filename = filename.split('.')[0] + "_" + timestamp + '.' + ext;
-                
+
                 var logo_html = '<span class="image-item" id="logo_1"><span class="remove-btn" data-id="1" data-img="' + base64str + '" data-status="new"><i class="fa fa-remove"></i></span><img class="rounded" width="50px" id="" height="auto" src="' + base64str + '"></span>'
                 $(".brand_logo_preview").append(logo_html);
                 new_logo_url = base64str;
@@ -312,11 +307,11 @@
             var id = $(this).attr('data-id');
             var logo_remove = $(this).attr('data-img');
             var status = $(this).attr('data-status');
-            
+
             if (status == "old") {
                 logoToDelete.push(firebase.storage().refFromURL(logo_remove));
             }
-            
+
             $("#logo_" + id).remove();
             logo_url = '';
             new_logo_url = '';

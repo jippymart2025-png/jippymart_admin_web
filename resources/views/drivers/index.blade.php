@@ -122,18 +122,10 @@
     ) {
         checkDeletePermission=true;
     }
-    
+
     // Load placeholder image from SQL
-    $.ajax({
-        url: '{{route("vendors.placeholder-image")}}',
-        type: 'GET',
-        success: function(response) {
-            if(response.success && response.image) {
-                placeholderImage = response.image;
-            }
-        }
-    });
-    
+    placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
+
     $('.status_selector').select2({
         placeholder: "{{trans('lang.select_status')}}",
         minimumResultsForSearch: Infinity,
@@ -197,18 +189,18 @@
                 const start=data.start;
                 const length=data.length;
                 const searchValue=data.search.value;
-                
+
                 // Get filter values
                 var status=$('.status_selector').val();
                 var daterangepicker = $('#daterange').data('daterangepicker');
                 var startDate = '';
                 var endDate = '';
-                
+
                 if ($('#daterange span').html() != '{{trans("lang.select_range")}}' && daterangepicker) {
                     startDate = moment(daterangepicker.startDate).format('YYYY-MM-DD');
                     endDate = moment(daterangepicker.endDate).format('YYYY-MM-DD');
                 }
-                
+
                 // Determine isDocumentVerify filter based on type
                 var isDocumentVerify = '';
                 if(type == 'pending') {
@@ -216,11 +208,11 @@
                 } else if(type == 'approved') {
                     isDocumentVerify = '1';
                 }
-                
+
                 if(searchValue.length>=3||searchValue.length===0) {
                     $('#data-table_processing').show();
                 }
-                
+
                 // AJAX call to SQL backend
                 $.ajax({
                     url: '{{route("drivers.data")}}',
@@ -237,11 +229,11 @@
                     },
                     success: function(response) {
                         $('#data-table_processing').hide();
-                        
+
                         if(response.stats) {
                             $('.driver_count').text(response.stats.total);
                         }
-                        
+
                         let records=[];
                         response.data.forEach(function(childData) {
                             var id=childData.firebase_id || childData.id;
@@ -256,13 +248,13 @@
                             trroute2=trroute2.replace(':id','driverId='+id);
                             var walletTransactions='{{route("users.walletstransaction", ":id")}}';
                             walletTransactions=walletTransactions.replace(':id',id);
-                            
+
                             // Format date from SQL response
                             var createdAt = childData.createdAt || '';
-                            
+
                             var driverImage=childData.profilePictureURL == '' || childData.profilePictureURL == null ? '<img alt="" width="100%" style="width:70px;height:70px;" src="' + placeholderImage + '" alt="image">' : '<img onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" alt="" width="100%" style="width:70px;height:70px;" src="' + childData.profilePictureURL + '" alt="image">'
                             var shortedEmail = shortEmail(childData.email || '');
-                            
+
                             records.push([
                                 checkDeletePermission? '<td class="delete-all"><input type="checkbox" id="is_open_'+id+'" class="is_open" dataId="'+id+'"><label class="col-3 control-label"\n'+'for="is_open_'+id+'" ></label></td>':'',
                                 driverImage+'<a href="'+driverView+'" class="redirecttopage">'+fullName+'</a>',
@@ -277,7 +269,7 @@
                                 '<span class="action-btn"><a href="'+driverView+'"><i class="mdi mdi-eye"></i></a><a href="'+route1+'"><i class="mdi mdi-lead-pencil" title="Edit"></i></a><?php if (in_array('drivers.edit', json_decode(@session('user_permissions'), true))) { ?> <a id="'+id+'" name="clear-order-request-data" class="clear-order-data-btn" href="javascript:void(0)" title="Clear restaurantorders Request Data"><i class="mdi mdi-refresh"></i></a><?php } ?><?php if (in_array('driver.delete', json_decode(@session('user_permissions'), true))) { ?> <a id="'+id+'" name="driver-delete" class="delete-btn" href="javascript:void(0)"><i class="mdi mdi-delete"></i></a><?php } ?></span>'
                             ]);
                         });
-                        
+
                         callback({
                             draw: response.draw,
                             recordsTotal: response.recordsTotal,
@@ -381,7 +373,7 @@
         var ischeck=$(this).is(':checked');
         var id=this.id;
         var switchElement=$(this);
-        
+
         if(ischeck) {
             // Check if driver exists and is verified via SQL
             $.ajax({
@@ -429,7 +421,7 @@
         jQuery("#data-table_processing").show();
         var ischeck=$(this).is(':checked');
         var id=this.id;
-        
+
         // Toggle driver active status via SQL
         $.ajax({
             url: '/drivers/' + id + '/toggle-status',
@@ -461,7 +453,7 @@
             if(confirm("{{trans('lang.selected_delete_alert')}}")) {
                 jQuery("#data-table_processing").show();
                 var deletePromises = [];
-                
+
                 $('#driverTable .is_open:checked').each(function() {
                     var dataId=$(this).attr('dataId');
                     deletePromises.push(
@@ -474,7 +466,7 @@
                         })
                     );
                 });
-                
+
                 Promise.all(deletePromises).then(function() {
                     if (typeof logActivity === 'function') {
                         logActivity('drivers', 'bulk_deleted', 'Bulk deleted ' + deletePromises.length + ' drivers');
@@ -496,10 +488,10 @@
     });
     $(document).on("click","a[name='driver-delete']",async function(e) {
         var id=this.id;
-        
+
         if(confirm("{{trans('lang.delete_confirmation')}}")) {
             jQuery("#data-table_processing").show();
-            
+
             $.ajax({
                 url: '/drivers/' + id,
                 type: 'DELETE',

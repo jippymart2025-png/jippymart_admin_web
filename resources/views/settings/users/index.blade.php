@@ -163,7 +163,7 @@
     <script type="text/javascript">
         // SQL mode: fetch via API instead of Firebase
         var apiBase = '{{ url('/api') }}';
-        var placeholderImage = '';
+        var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
         var user_permissions = '<?php echo @session("user_permissions") ?>';
         user_permissions = Object.values(JSON.parse(user_permissions));
         var checkDeletePermission = false;
@@ -253,11 +253,6 @@
                 window.location.href = url;
             });
             jQuery("#data-table_processing").show();
-            var placeholder = database.collection('settings').doc('placeHolderImage');
-            placeholder.get().then(async function (snapshotsimage) {
-                var placeholderImageData = snapshotsimage.data();
-                placeholderImage = placeholderImageData.image;
-            });
             $(document).on('click', '.dt-button-collection .dt-button', function () {
                 $('.dt-button-collection').hide();
                 $('.dt-button-background').hide();
@@ -327,7 +322,8 @@
                                 var user_view = '{{route("users.view",":id")}}'.replace(':id', id);
                                 var vendorImage = childData.profilePictureURL == '' || childData.profilePictureURL == null ? '<img alt="" width="100%" style="width:70px;height:70px;" src="' + placeholderImage + '" alt="image">' : '<img onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" alt="" width="100%" style="width:70px;height:70px;" src="' + childData.profilePictureURL + '" alt="image">'
                                 var zoneName = zoneIdToName[childData.zoneId] || ' ';
-                                var createdAt = childData.createdAt || '';
+                                // Format date with the new format: Oct 06, 2025 07:24 AM
+                                var createdAt = formatDateTime(childData.createdAt) || '-';
                                 records.push([
                                     checkDeletePermission ? '<td class="delete-all"><input type="checkbox" id="is_open_' + id + '" class="is_open" dataId="' + id + '"><label class="col-3 control-label" for="is_open_' + id + '" ></label></td>' : '',
                                     vendorImage + '<a href="' + user_view + '" class="redirecttopage">' + (childData.fullName || '') + '</a>',
@@ -444,18 +440,11 @@
                 if (confirm("{{trans('lang.selected_delete_alert')}}")) {
                     jQuery("#data-table_processing").show();
                     var selectedUsers = [];
-                    for (let i = 0; i < $('#userTable .is_open:checked').length; i++) {
-                        var dataId = $('#userTable .is_open:checked').eq(i).attr('dataId');
-                        try {
-                            var doc = await database.collection('users').doc(dataId).get();
-                            if (doc.exists) {
-                                var userData = doc.data();
-                                selectedUsers.push((userData.firstName || '') + ' ' + (userData.lastName || 'Unknown'));
-                            }
-                        } catch (error) {
-                            console.error('Error getting user name:', error);
-                        }
-                    }
+                    // Get selected user IDs for logging
+                    $('#userTable .is_open:checked').each(function() {
+                        var dataId = $(this).attr('dataId');
+                        selectedUsers.push('User ID: ' + dataId);
+                    });
 
                     $('#userTable .is_open:checked').each(async function () {
                         var dataId = $(this).attr('dataId');
@@ -484,51 +473,16 @@
         });
 
         async function deleteUserData(userId) {
-            await database.collection('wallet').where('user_id', '==', userId).get().then(async function (snapshotsItem) {
-                if (snapshotsItem.docs.length > 0) {
-                    snapshotsItem.docs.forEach((temData) => {
-                        var item_data = temData.data();
-                        database.collection('wallet').doc(item_data.id).delete().then(function () {
-                        });
-                    });
-                }
-            });
-            //delete user from mysql
-            database.collection('settings').doc("Version").get().then(function (snapshot) {
-                var settingData = snapshot.data();
-                if (settingData && settingData.websiteUrl) {
-                    var siteurl = settingData.websiteUrl + "/api/delete-user";
-                    var dataObject = {"uuid": userId};
-                    jQuery.ajax({
-                        url: siteurl,
-                        method: 'POST',
-                        contentType: "application/json; charset=utf-8",
-                        data: JSON.stringify(dataObject),
-                        success: function (data) {
-                            console.log('Delete user from sql success:', data);
-                        },
-                        error: function (error) {
-                            console.log('Delete user from sql error:', error.responseJSON.message);
-                        }
-                    });
-                }
-            });
-            //delete user from authentication
-            var dataObject = {"data": {"uid": userId}};
-            var projectId = '<?php echo env('FIREBASE_PROJECT_ID') ?>';
-            jQuery.ajax({
-                url: 'https://us-central1-' + projectId + '.cloudfunctions.net/deleteUser',
-                method: 'POST',
-                contentType: "application/json; charset=utf-8",
-                data: JSON.stringify(dataObject),
-                success: function (data) {
-                    console.log('Delete user success:', data.result);
-                },
-                error: function (xhr, status, error) {
-                    var responseText = JSON.parse(xhr.responseText);
-                    console.log('Delete user error:', responseText.error);
-                }
-            });
+            // Delete user via SQL API
+            try {
+                const response = await DB.delete(`/users/${userId}`);
+                console.log('✅ User deleted successfully');
+                return true;
+            } catch (error) {
+                console.error('❌ Error deleting user:', error);
+                return false;
+            }
+
         }
 
         $(document).on("click", "a[name='user-delete']", async function (e) {

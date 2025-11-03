@@ -15,7 +15,7 @@
         </div>
     </div>
     <div class="container-fluid">
-       <div class="admin-top-section"> 
+       <div class="admin-top-section">
         <div class="row">
             <div class="col-12">
                 <div class="d-flex top-title-section pb-4 justify-content-between">
@@ -26,12 +26,12 @@
                     </div>
                     <div class="d-flex top-title-right align-self-center">
                         <div class="select-box pl-3">
-                           
+
                         </div>
                     </div>
                 </div>
             </div>
-        </div> 
+        </div>
        </div>
        <div class="table-list">
        <div class="row">
@@ -43,10 +43,10 @@
                     <p class="mb-0 text-dark-2">{{trans('lang.notifications_table_text')}}</p>
                    </div>
                    <div class="card-header-right d-flex align-items-center">
-                    <div class="card-header-btn mr-3"> 
+                    <div class="card-header-btn mr-3">
                         <!-- <a class="btn-primary btn rounded-full" href="{!! route('users.create') !!}"><i class="mdi mdi-plus mr-2"></i>{{trans('lang.user_create')}}</a> -->
                      </div>
-                   </div>                
+                   </div>
                  </div>
                  <div class="card-body">
                          <div class="table-responsive m-t-10">
@@ -74,9 +74,7 @@
 @endsection
 @section('scripts')
 <script type="text/javascript">
-    var database = firebase.firestore();
-    var refData = database.collection('dynamic_notification');
-    var ref = refData.orderBy('createdAt', 'desc');
+    // SQL-based implementation
     var append_list = '';
     $(document).ready(function () {
         jQuery("#data-table_processing").show();
@@ -96,86 +94,29 @@
                 if (searchValue.length >= 3 || searchValue.length === 0) {
                     $('#data-table_processing').show();
                 }
-                await ref.get().then(async function (querySnapshot) {
-                    if (querySnapshot.empty) {
-                        $('.notification_count').text(0); 
-                        console.error("No data found in Firestore.");
-                        $('#data-table_processing').hide(); // Hide loader
-                        callback({
-                            draw: data.draw,
-                            recordsTotal: 0,
-                            recordsFiltered: 0,
-                            data: [] // No data
-                        });
-                        return;
+                $.ajax({
+                    url: '{{ route("dynamic-notification.data") }}',
+                    method: 'GET',
+                    data: {
+                        draw: data.draw,
+                        start: start,
+                        length: length,
+                        'search[value]': searchValue,
+                        'order[0][column]': orderColumnIndex,
+                        'order[0][dir]': orderDirection
                     }
-                    let records = [];
-                    let filteredRecords = [];
-                    await Promise.all(querySnapshot.docs.map(async (doc) => {
-                        let childData = doc.data();
-                        childData.id = doc.id; // Ensure the document ID is included in the data              
-                        if (searchValue) {
-                            var date = '';
-                            var time = '';
-                            if (childData.hasOwnProperty("createdAt")) {
-                                try {
-                                    date = childData.createdAt.toDate().toDateString();
-                                    time = childData.createdAt.toDate().toLocaleTimeString('en-US');
-                                } catch (err) {
-                                }
-                            }
-                            var createdAt = date + ' ' + time;
-                            if (
-                                (childData.type && childData.type.toLowerCase().toString().includes(searchValue)) ||
-                                (childData.subject && childData.subject.toLowerCase().toString().includes(searchValue)) ||
-                                (createdAt && createdAt.toString().toLowerCase().indexOf(searchValue) > -1) ||
-                                (childData.message && childData.message.toLowerCase().toString().includes(searchValue))
-                            ) {
-                                filteredRecords.push(childData);
-                            }
-                        } else {
-                            filteredRecords.push(childData);
-                        }
-                    }));
-                    filteredRecords.sort((a, b) => {
-                        let aValue = a[orderByField] ? a[orderByField].toString().toLowerCase() : '';
-                        let bValue = b[orderByField] ? b[orderByField].toString().toLowerCase() : '';
-                        if (orderByField === 'createdAt') {
-                            try {
-                                aValue = a[orderByField] ? new Date(a[orderByField].toDate()).getTime() : 0;
-                                bValue = b[orderByField] ? new Date(b[orderByField].toDate()).getTime() : 0;
-                            } catch (err) {
-                            }
-                        }
-                        if (orderDirection === 'asc') {
-                            return (aValue > bValue) ? 1 : -1;
-                        } else {
-                            return (aValue < bValue) ? 1 : -1;
-                        }
-                    });
-                    const totalRecords = filteredRecords.length;
-                    $('.notification_count').text(totalRecords); 
-                    const paginatedRecords = filteredRecords.slice(start, start + length);
-                    await Promise.all(paginatedRecords.map(async (childData) => {
-                        var getData = await buildHTML(childData);
-                        records.push(getData);
-                    }));
-                    $('#data-table_processing').hide(); // Hide loader
+                }).done(function(resp){
+                    $('.notification_count').text(resp.recordsTotal || 0);
+                    $('#data-table_processing').hide();
                     callback({
-                        draw: data.draw,
-                        recordsTotal: totalRecords, // Total number of records in Firestore
-                        recordsFiltered: totalRecords, // Number of records after filtering (if any)
-                        data: records // The actual data to display in the table
+                        draw: resp.draw,
+                        recordsTotal: resp.recordsTotal,
+                        recordsFiltered: resp.recordsFiltered,
+                        data: resp.data
                     });
-                }).catch(function (error) {
-                    console.error("Error fetching data from Firestore:", error);
-                    $('#data-table_processing').hide(); // Hide loader
-                    callback({
-                        draw: data.draw,
-                        recordsTotal: 0,
-                        recordsFiltered: 0,
-                        data: [] // No data due to error
-                    });
+                }).fail(function(){
+                    $('#data-table_processing').hide();
+                    callback({ draw: data.draw, recordsTotal:0, recordsFiltered:0, data: [] });
                 });
             },
             order: [[3, 'desc']],
@@ -184,7 +125,12 @@
                     targets: 3,
                     type: 'date',
                     render: function (data) {
-                        return data;
+                        // Format date as: Oct 06, 2025 07:24 AM
+                        try {
+                            return window.formatDateTime(data);
+                        } catch(e) {
+                            return data || '-';
+                        }
                     }
                 },
                 { orderable: false, targets: [4] },
@@ -203,12 +149,13 @@
         if ($('#notificationTable .is_open:checked').length) {
             if (confirm("{{trans('lang.selected_delete_alert')}}")) {
                 jQuery("#data-table_processing").show();
+                var promises=[];
                 $('#notificationTable .is_open:checked').each(function () {
                     var dataId = $(this).attr('dataId');
-                    database.collection('dynamic_notification').doc(dataId).delete().then(function () {
-                        window.location.reload();
-                    });
+                    promises.push($.ajax({ url: '{{ url('/dynamic-notification') }}/'+dataId, method: 'DELETE', headers: {'X-CSRF-TOKEN':'{{ csrf_token() }}'} }));
                 });
+                Promise.all(promises).then(function(){ window.location.reload(); })
+                .catch(function(){ jQuery("#data-table_processing").hide(); alert('Error deleting'); });
             }
         } else {
             alert("{{trans('lang.select_delete_alert')}}");
@@ -280,9 +227,10 @@
     }
     $(document).on("click", "a[name='notifications-delete']", function (e) {
         var id = this.id;
-        database.collection('dynamic_notification').doc(id).delete().then(function () {
-            window.location.reload();
-        });
+        if(!confirm("{{trans('lang.delete_alert')}}")) return;
+        $.ajax({ url: '{{ url('/dynamic-notification') }}/'+id, method: 'DELETE', headers: {'X-CSRF-TOKEN':'{{ csrf_token() }}'} })
+        .done(function(){ window.location.reload(); })
+        .fail(function(){ alert('Delete failed'); });
     });
 </script>
 @endsection

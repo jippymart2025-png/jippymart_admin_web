@@ -63,20 +63,15 @@
     @section('scripts')
     <script>
         var requestId = "<?php echo $id; ?>";
-        var database = firebase.firestore();
-        var createdAt = firebase.firestore.FieldValue.serverTimestamp();
-        var id = (requestId == '') ? database.collection("tmp").doc().id : requestId;
+        var id = requestId || '';
         var pagesize = 20;
         var start = '';
         $(document).ready(function () {
             if (requestId != '') {
-                var ref = database.collection('dynamic_notification').where('id','==',id);
                 jQuery("#data-table_processing").show();
-                ref.get().then(async function (snapshots) {
-                    if (snapshots.docs.length) {
-                        var np = snapshots.docs[0].data();
-                        $("#message").val(np.message);
-                        $("#subject").val(np.subject);
+                $.get('{{ url('api/dynamic-notification') }}/'+id, function(np){
+                        $("#message").val(np.message || '');
+                        $("#subject").val(np.subject || '');
             if(np.type=="restaurant_rejected"){
                 type="{{trans('lang.order_rejected_by_restaurant')}}";
             }
@@ -113,9 +108,9 @@
                 type="Driver reached your Doorstep";
             }
             $('#type').val(type);
-        }
+
                 jQuery("#data-table_processing").hide();
-                });
+                }).fail(function(){ jQuery("#data-table_processing").hide(); });
             }
         });
         $(".send_message").click(async function () {
@@ -138,39 +133,20 @@
                 return false;
             } else {
                 jQuery("#data-table_processing").show();
-                requestId == '' ? (database.collection('dynamic_notification').doc(id).set({
-                    'id': id,
-                    'subject': subject,
-                    'message': message,
-                    'type':type,
-                    'createdAt': createdAt
-                }).then(function (result) {
+                $.ajax({
+                    url: '{{ route('dynamic-notification.upsert') }}',
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    data: { id: id, subject: subject, message: message, type: type }
+                }).done(function(resp){
                     jQuery("#data-table_processing").hide();
-                    $(".success_top").show();
-                    $(".success_top").html("");
-                    $(".success_top").append("<p>{{trans('lang.notification_created_success')}}</p>");
+                    $(".success_top").show().html("<p>{{trans('lang.notification_created_success')}}</p>");
                     window.scrollTo(0, 0);
                     window.location.href = '{{ route("dynamic-notification.index")}}';
-                }).catch(function (error) {
-                    $(".error_top").show();
-                    $(".error_top").html("");
-                    $(".error_top").append("<p>" + error + "</p>");
-                })) :
-                    (database.collection('dynamic_notification').doc(id).update({
-                        'subject': subject,
-                        'message': message,
-                    }).then(function (result) {
-                        jQuery("#data-table_processing").hide();
-                        $(".success_top").show();
-                        $(".success_top").html("");
-                        $(".success_top").append("<p>{{trans('lang.notification_updated_success')}}</p>");
-                        window.scrollTo(0, 0);
-                        window.location.href = '{{ route("dynamic-notification.index")}}';
-                    }).catch(function (error) {
-                        $(".error_top").show();
-                        $(".error_top").html("");
-                        $(".error_top").append("<p>" + error + "</p>");
-                    }));
+                }).fail(function(xhr){
+                    jQuery("#data-table_processing").hide();
+                    $(".error_top").show().html("<p>" + (xhr.responseJSON?.message || 'Error') + "</p>");
+                });
             }
         });
     </script>

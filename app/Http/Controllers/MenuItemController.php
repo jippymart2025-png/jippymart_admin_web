@@ -175,6 +175,70 @@ class MenuItemController extends Controller
         MenuItem::whereIn('id', $ids)->delete();
         return response()->json(['success' => true]);
     }
+
+    /**
+     * Get all stores from vendors table (for dropdown)
+     */
+    public function getStores(Request $request)
+    {
+        try {
+            $zoneId = $request->input('zoneId', '');
+            
+            $query = DB::table('vendors')
+                ->select('id', 'title', 'zoneId')
+                ->where('reststatus', 1)
+                ->orderBy('title', 'asc');
+
+            if ($zoneId) {
+                $query->where('zoneId', $zoneId);
+            }
+
+            $stores = $query->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $stores
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching stores: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching stores'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all products from vendor_products table (for dropdown)
+     */
+    public function getProducts(Request $request)
+    {
+        try {
+            $storeId = $request->input('storeId', '');
+            
+            $query = DB::table('vendor_products')
+                ->select('id', 'name', 'vendorID')
+                ->where('publish', 1)
+                ->orderBy('name', 'asc');
+
+            if ($storeId) {
+                $query->where('vendorID', $storeId);
+            }
+
+            $products = $query->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $products
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching products: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching products'
+            ], 500);
+        }
+    }
 }
 
 

@@ -926,7 +926,7 @@ foreach ($countries as $keycountry => $valuecountry) {
     var photocount = 0;
     var ownerPhoto = '';
     var ownerId = '';
-    var placeholderImage = '';
+    var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
     var workingHours = [];
     var timeslotworkSunday = [];
     var timeslotworkMonday = [];
@@ -952,11 +952,6 @@ foreach ($countries as $keycountry => $valuecountry) {
     var storyCount = 0;
     var storyRef = firebase.storage().ref('Story');
     var storyImagesRef = firebase.storage().ref('Story/images');
-    var placeholder = database.collection('settings').doc('placeHolderImage');
-    placeholder.get().then(async function(snapshotsimage) {
-        var placeholderImageData = snapshotsimage.data();
-        placeholderImage = placeholderImageData.image;
-    });
     var FinalData = refData.get().then(async function(snapshots) {
         var userData = snapshots.docs[0].data();
         provider = userData.provider;

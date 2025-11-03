@@ -79,18 +79,9 @@ class ActivityLogController extends Controller
             $data = [];
             foreach ($logs as $log) {
                 $data[] = [
-                    'user_id' => '<div class="d-flex align-items-center">
-                        <div class="bg-light rounded-circle">
-                            <div class="font-weight-bold">' . ($log->user_id ?? 'N/A') . '</div>
-                        </div>
-                    </div>',
+                    'user_id' => '<span class="font-weight-bold">' . ($log->user_id ?? 'N/A') . '</span>',
 
-                    'user_name' => '<div class="d-flex align-items-center">
-                        <span class="avatar-sm mr-3">
-                            <i class="mdi mdi-account"></i>
-                            <span class="font-weight-bold">' . ($log->user_name ?? 'Unknown User') . '</span>
-                        </span>
-                    </div>',
+                    'user_name' => '<span class="font-weight-bold">' . ($log->user_name ?? 'Unknown User') . '</span>',
 
                     'user_type' => '<span class="badge badge-' . $this->getUserTypeBadge($log->user_type) . '">'
                         . ($log->user_type ?? 'N/A') . '</span>',
@@ -106,7 +97,7 @@ class ActivityLogController extends Controller
                         . ($log->description ?? 'N/A') . '</span>',
 
                     'created_at' => '<span class="font-weight-semibold">'
-                        . ($log->created_at ? $log->created_at->format('Y-m-d H:i:s') : 'N/A') . '</span>'
+                        . ($log->created_at ? $log->created_at->format('d/m/Y, H:i:s') : 'N/A') . '</span>'
                 ];
             }
 
@@ -248,6 +239,13 @@ class ActivityLogController extends Controller
             case 'updated': return 'warning';
             case 'deleted': return 'danger';
             case 'viewed': return 'info';
+            case 'activated': return 'success';
+            case 'deactivated': return 'danger';
+            case 'status_updated': return 'warning';
+            case 'approved': return 'success';
+            case 'rejected': return 'danger';
+            case 'published': return 'success';
+            case 'unpublished': return 'secondary';
             default: return 'secondary';
         }
     }

@@ -23,12 +23,12 @@ foreach ($countries as $keycountry => $valuecountry) {
                 <li class="breadcrumb-item active">{{trans('lang.driver_edit')}}</li>
             </ol>
         </div>
-     
+
     </div>
-  
-     
+
+
         <div class="container-fluid">
-            
+
       <div class="resttab-sec mb-4">
         <div class="row justify-content-center">
             <div class="col-md-4">
@@ -57,8 +57,8 @@ foreach ($countries as $keycountry => $valuecountry) {
                     </div>
                 </a>
             </div>
-         
-          
+
+
         </div>
       </div>
 
@@ -94,7 +94,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                             <div class="form-group row">
                                 <label class="col-3 control-label">{{trans('lang.user_phone')}}</label>
                                 <div class="col-md-6">
-                                    <div class="phone-box position-relative" id="phone-box"> 
+                                    <div class="phone-box position-relative" id="phone-box">
                                         <select name="country" id="country_selector">
                                             <?php foreach ($newcountries as $keycy => $valuecy) { ?>
                                             <?php $selected = ""; ?>
@@ -232,24 +232,13 @@ foreach ($countries as $keycountry => $valuecountry) {
     var photo = "";
     var fileName='';
     var userImageFile='';
-    var placeholderImage = '';
+    var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
     var user_active_deactivate = false;
     var currentCurrency = '';
     var provider  = '';
     var currencyAtRight = false;
     var decimal_degits = 0;
-    
-    // Load placeholder image from SQL
-    $.ajax({
-        url: '{{route("vendors.placeholder-image")}}',
-        type: 'GET',
-        success: function(response) {
-            if(response.success && response.image) {
-                placeholderImage = response.image;
-            }
-        }
-    });
-    
+
     // Load currency from SQL
     $.ajax({
         url: '{{url("/payments/currency")}}',
@@ -262,7 +251,7 @@ foreach ($countries as $keycountry => $valuecountry) {
             }
         }
     });
-    
+
     // Load zones from SQL
     $.ajax({
         url: '{{route("drivers.zones")}}',
@@ -307,7 +296,7 @@ foreach ($countries as $keycountry => $valuecountry) {
             placeholder: "Select Country",
             allowClear: true
         });
-        
+
         // Load driver data from SQL
         $.ajax({
             url: '/drivers/' + id + '/data',
@@ -316,14 +305,14 @@ foreach ($countries as $keycountry => $valuecountry) {
                 if(response.success && response.data) {
                     var user = response.data;
                     provider = user.provider || 'email';
-                    
+
                     // Show/hide provider type based on provider
                     if(!user.provider || user.provider == "email"){
                         $(".provider_type").show();
                     } else {
                         $(".provider_type").hide();
                     }
-                $(".user_first_name").val(user.firstName);  
+                $(".user_first_name").val(user.firstName);
                 $(".user_last_name").val(user.lastName);
                 if(user.email != ""){
                     $(".user_email").val(shortEmail(user.email));
@@ -369,7 +358,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                 if (user.hasOwnProperty('zoneId') && user.zoneId != '') {
                     $("#zone").val(user.zoneId);
                 }
-                
+
                 // Get driver stats from SQL (includes total orders)
                 $.ajax({
                     url: '/drivers/' + id + '/stats',
@@ -422,7 +411,7 @@ foreach ($countries as $keycountry => $valuecountry) {
             }
         });
     });
-    
+
     $(".edit-form-btn").click(function() {
             var userFirstName = $(".user_first_name").val();
             var userLastName = $(".user_last_name").val();
@@ -457,7 +446,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                 $(".error_top").html("");
                 $(".error_top").append("<p>{{trans('lang.select_zone_help')}}</p>");
                 window.scrollTo(0, 0);
-            } 
+            }
             else {
                 var bankName = $("#bankName").val();
                 var branchName = $("#branchName").val();
@@ -473,7 +462,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                     'otherDetails': otherDetails,
                 };
                 jQuery("#data-table_processing").show();
-                
+
                 // Update driver via AJAX SQL
                 $.ajax({
                     url: '/drivers/' + id,
@@ -579,5 +568,5 @@ foreach ($countries as $keycountry => $valuecountry) {
             return true;
         }
     }
-</script>   
+</script>
 @endsection

@@ -257,12 +257,7 @@
                 decimal_degits=currencyData.decimal_degits;
             }
         });
-        var placeholderImage='';
-        var placeholder=database.collection('settings').doc('placeHolderImage');
-        placeholder.get().then(async function(snapshotsimage) {
-            var placeholderImageData=snapshotsimage.data();
-            placeholderImage=placeholderImageData.image;
-        })
+        var placeholderImage='{{ asset('assets/images/placeholder-image.png') }}';
         database.collection('vendor_categories').get().then(async function(snapshots) {
             snapshots.docs.forEach((listval) => {
                 var data=listval.data();

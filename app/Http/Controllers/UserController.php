@@ -828,4 +828,135 @@ class UserController extends Controller
             abort(500, 'Failed to generate template');
         }
     }
+
+    /**
+     * Get user data by ID for view page (SQL API)
+     */
+    public function getUserData($id)
+    {
+        try {
+            $user = AppUser::where('firebase_id', $id)
+                ->orWhere('id', $id)
+                ->orWhere('_id', $id)
+                ->first();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found'
+                ], 404);
+            }
+
+            // Get total orders count
+            $totalOrders = \DB::table('restaurant_orders')
+                ->where('authorID', $id)
+                ->count();
+
+            // Parse shipping address if it's JSON
+            $shippingAddress = null;
+            if ($user->shippingAddress) {
+                $shippingAddress = json_decode($user->shippingAddress, true);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'id' => $user->firebase_id ?? $user->_id ?? $user->id,
+                    'firstName' => $user->firstName,
+                    'lastName' => $user->lastName,
+                    'email' => $user->email,
+                    'phoneNumber' => $user->phoneNumber,
+                    'countryCode' => $user->countryCode,
+                    'wallet_amount' => $user->wallet_amount ?? 0,
+                    'profilePictureURL' => $user->profilePictureURL,
+                    'shippingAddress' => $shippingAddress,
+                    'isActive' => $user->isActive,
+                    'createdAt' => $user->createdAt,
+                    'totalOrders' => $totalOrders,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching user data: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching user data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Add wallet amount to user (SQL API)
+     */
+    public function addWalletAmount(Request $request, $id)
+    {
+        try {
+            $request->validate([
+                'amount' => 'required|numeric|min:0',
+                'note' => 'nullable|string'
+            ]);
+
+            $user = AppUser::where('firebase_id', $id)
+                ->orWhere('id', $id)
+                ->orWhere('_id', $id)
+                ->first();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found'
+                ], 404);
+            }
+
+            $amount = (float) $request->amount;
+            $note = $request->note;
+
+            // Get current wallet amount
+            $currentWalletAmount = (float) ($user->wallet_amount ?? 0);
+            $newWalletAmount = $currentWalletAmount + $amount;
+
+            // Update user wallet
+            $user->wallet_amount = $newWalletAmount;
+            $user->save();
+
+            // Create wallet transaction record (using existing 'wallet' table)
+            $transactionId = \Illuminate\Support\Str::uuid()->toString();
+            \DB::table('wallet')->insert([
+                'id' => $transactionId,
+                'user_id' => $user->firebase_id ?? $user->_id ?? $user->id,
+                'amount' => $amount,
+                'isTopUp' => 1,
+                'payment_method' => 'Wallet',
+                'payment_status' => 'success',
+                'note' => $note ?? '',
+                'transactionUser' => 'user',
+                'order_id' => '',
+                'subscription_id' => null,
+                'date' => '"' . now()->toIso8601String() . '"',
+            ]);
+
+            // Log activity
+            app(\App\Services\ActivityLogger::class)->log(
+                auth()->user(),
+                'users',
+                'wallet_topup',
+                'Added wallet amount to user: ' . $user->firstName . ' ' . $user->lastName . ' - Amount: ' . $amount,
+                $request
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Wallet amount added successfully',
+                'data' => [
+                    'newWalletAmount' => $newWalletAmount,
+                    'transactionId' => $transactionId
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error adding wallet amount: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error adding wallet amount: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

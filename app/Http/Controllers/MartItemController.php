@@ -53,7 +53,7 @@ class MartItemController extends Controller
     {
         \Log::info('=== getMartItemsData called ===');
         \Log::info('Request params:', $request->all());
-        
+
         try {
             $draw = (int) $request->input('draw', 1);
             $start = (int) $request->input('start', 0);
@@ -61,7 +61,7 @@ class MartItemController extends Controller
             $searchValue = strtolower((string) $request->input('search.value', ''));
             $orderColumnIdx = (int) $request->input('order.0.column', 0);
             $orderDir = strtolower((string) $request->input('order.0.dir', 'desc')) === 'asc' ? 'asc' : 'desc';
-            
+
             \Log::info("Parsed params - draw: $draw, start: $start, length: $length, search: $searchValue");
 
             // Get filter parameters
@@ -70,7 +70,7 @@ class MartItemController extends Controller
             $brandId = $request->input('brand_id', '');
             $foodType = $request->input('food_type', '');
             $feature = $request->input('feature', '');
-            
+
             \Log::info("Filters - vendor: $vendorId, category: $categoryId, brand: $brandId, type: $foodType, feature: $feature");
 
             // Base query
@@ -81,7 +81,7 @@ class MartItemController extends Controller
                 // Check if vendor exists
                 $vendorExists = DB::table('vendors')->where('id', $vendorId)->exists();
                 \Log::info("Vendor filter - ID: $vendorId, Exists: " . ($vendorExists ? 'YES' : 'NO'));
-                
+
                 if ($vendorExists) {
                     $query->where('mart_items.vendorID', $vendorId);
                 } else {
@@ -150,16 +150,16 @@ class MartItemController extends Controller
 
             // Get total count before pagination
             $totalRecords = $query->count();
-            
+
             \Log::info("MartItems Query - Total Records: " . $totalRecords);
             \Log::info("MartItems Query - Start: " . $start . ", Length: " . $length);
 
             // Apply ordering
             $orderableColumns = ['id', 'name', 'price', 'disPrice', 'vendorTitle', 'categoryTitle', 'brandTitle'];
             $orderByField = $orderableColumns[$orderColumnIdx] ?? 'name';
-            
+
             \Log::info("MartItems Query - Order by: " . $orderByField . " " . $orderDir);
-            
+
             // Simple ordering (the created_at field is already sortable as string)
             if ($orderByField === 'id') {
                 $query->orderBy("mart_items.id", $orderDir);
@@ -171,7 +171,7 @@ class MartItemController extends Controller
 
             // Apply pagination
             $items = $query->skip($start)->take($length)->get();
-            
+
             \Log::info("MartItems Query - Items retrieved: " . $items->count());
 
             // Format data for DataTables
@@ -223,14 +223,14 @@ class MartItemController extends Controller
 
             \Log::info("MartItems Query - Data array count: " . count($data));
             \Log::info("MartItems Query - Returning response with draw: " . $draw);
-            
+
             $response = [
                 'draw' => $draw,
                 'recordsTotal' => $totalRecords,
                 'recordsFiltered' => $totalRecords,
                 'data' => $data
             ];
-            
+
             return response()->json($response);
 
         } catch (\Exception $e) {
@@ -253,7 +253,7 @@ class MartItemController extends Controller
     {
         try {
             $item = MartItem::find($id);
-            
+
             if (!$item) {
                 return response()->json(['error' => 'Item not found'], 404);
             }
@@ -331,9 +331,9 @@ class MartItemController extends Controller
     {
         try {
             \Log::info('=== togglePublish called for ID: ' . $id);
-            
+
             $item = MartItem::find($id);
-            
+
             if (!$item) {
                 \Log::error('Item not found: ' . $id);
                 return response()->json(['success' => false, 'message' => 'Item not found'], 404);
@@ -342,7 +342,7 @@ class MartItemController extends Controller
             // Get current status and toggle it
             $currentStatus = $item->publish;
             $newStatus = $currentStatus ? 0 : 1;
-            
+
             \Log::info('Current publish status: ' . $currentStatus . ', New status: ' . $newStatus);
 
             // Use direct DB update to ensure it saves
@@ -383,9 +383,9 @@ class MartItemController extends Controller
     {
         try {
             \Log::info('=== toggleAvailability called for ID: ' . $id);
-            
+
             $item = MartItem::find($id);
-            
+
             if (!$item) {
                 \Log::error('Item not found: ' . $id);
                 return response()->json(['success' => false, 'message' => 'Item not found'], 404);
@@ -394,7 +394,7 @@ class MartItemController extends Controller
             // Get current status and toggle it
             $currentStatus = $item->isAvailable;
             $newStatus = $currentStatus ? 0 : 1;
-            
+
             \Log::info('Current availability status: ' . $currentStatus . ', New status: ' . $newStatus);
 
             // Use direct DB update to ensure it saves
@@ -435,7 +435,7 @@ class MartItemController extends Controller
     {
         try {
             $item = MartItem::find($id);
-            
+
             if (!$item) {
                 return response()->json(['success' => false, 'message' => 'Item not found'], 404);
             }
@@ -460,7 +460,7 @@ class MartItemController extends Controller
     {
         try {
             $ids = $request->input('ids', []);
-            
+
             if (empty($ids) || !is_array($ids)) {
                 return response()->json(['success' => false, 'message' => 'No items selected'], 400);
             }
@@ -485,7 +485,7 @@ class MartItemController extends Controller
     {
         try {
             $item = MartItem::find($id);
-            
+
             if (!$item) {
                 return response()->json(['success' => false, 'message' => 'Item not found'], 404);
             }
@@ -593,24 +593,24 @@ class MartItemController extends Controller
     {
         try {
             $categoryId = $request->input('category_id', '');
-            
+
             $query = DB::table('mart_subcategories')
                 ->select('id', 'title', 'parent_category_id as categoryID', 'parent_category_title', 'photo', 'publish');
-            
+
             // Filter by category if provided
             if (!empty($categoryId)) {
                 $query->where('parent_category_id', $categoryId);
             }
-            
+
             // Only show published subcategories
             $query->where('publish', 1);
-            
+
             $subcategories = $query->orderBy('title', 'asc')
                 ->get()
                 ->toArray();
 
             \Log::info('Fetched ' . count($subcategories) . ' subcategories' . ($categoryId ? ' for category ' . $categoryId : ''));
-            
+
             return response()->json(array_values($subcategories));
 
         } catch (\Exception $e) {
@@ -662,11 +662,11 @@ class MartItemController extends Controller
             }
 
             // Return default placeholder if not found
-            return response()->json(['image' => asset('images/placeholder-image.png')]);
+            return response()->json(['image' => asset('assets/images/placeholder-image.png')]);
 
         } catch (\Exception $e) {
             \Log::error('Error in getPlaceholderImage: ' . $e->getMessage());
-            return response()->json(['image' => asset('images/placeholder-image.png')]);
+            return response()->json(['image' => asset('assets/images/placeholder-image.png')]);
         }
     }
 
@@ -712,11 +712,11 @@ class MartItemController extends Controller
         try {
             \Log::info('=== Store Mart Item Called ===');
             \Log::info('Request data:', $request->all());
-            
+
             // Generate unique ID
             $itemId = $request->input('id', uniqid());
             \Log::info('Generated item ID: ' . $itemId);
-            
+
             // Prepare data
             $data = [
                 'id' => $itemId,
@@ -777,10 +777,10 @@ class MartItemController extends Controller
 
             // Use direct DB insert to ensure it saves
             $inserted = DB::table('mart_items')->insert($data);
-            
+
             if ($inserted) {
                 \Log::info('✅ Mart item created successfully with ID: ' . $itemId);
-                
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Mart item created successfully',
@@ -788,7 +788,7 @@ class MartItemController extends Controller
                 ]);
                         } else {
                 \Log::error('❌ Failed to insert mart item - no rows affected');
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Failed to create mart item - database insert failed'
@@ -813,10 +813,10 @@ class MartItemController extends Controller
         try {
             \Log::info('=== Update Mart Item Called for ID: ' . $id);
             \Log::info('Request data:', $request->all());
-            
+
             // Check if item exists
             $itemExists = DB::table('mart_items')->where('id', $id)->exists();
-            
+
             if (!$itemExists) {
                 \Log::error('Item not found: ' . $id);
                 return response()->json([
@@ -874,26 +874,26 @@ class MartItemController extends Controller
                 'item_attribute' => $request->input('item_attribute', null),
                 'updated_at' => '"' . gmdate('Y-m-d\TH:i:s.u\Z') . '"',
             ];
-            
+
             \Log::info('Data to update:', $data);
 
             // Use direct DB update to ensure it saves
             $updated = DB::table('mart_items')
                 ->where('id', $id)
                 ->update($data);
-            
+
             \Log::info('DB update result: ' . $updated . ' row(s) affected');
 
             if ($updated !== false) { // update() returns false on error, 0 or 1 on success
                 \Log::info('✅ Mart item updated successfully with ID: ' . $id);
-                
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Mart item updated successfully'
                 ]);
             } else {
                 \Log::error('❌ Failed to update mart item - database error');
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Failed to update mart item - database error'

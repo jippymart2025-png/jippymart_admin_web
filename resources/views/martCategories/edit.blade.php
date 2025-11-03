@@ -101,7 +101,7 @@
                                             <input type="checkbox" id="show_in_homepage">
                                             <label class="col-3 control-label" for="show_in_homepage">{{trans('lang.show_in_home')}}</label>
                                             <div class="form-text text-muted w-50">{{trans('lang.show_in_home_desc')}}<span id="forsection"></span></div>
-                                        </div>            
+                                        </div>
                                     </fieldset>
                                 </div>
                                 <div role="tabpanel" class="tab-pane" id="review_attributes">
@@ -126,14 +126,14 @@ var id = "<?php echo $id;?>";
 var photo = "";
 var fileName="";
 var catImageFile="";
-var placeholderImage = '{{ asset("images/default_category.png") }}';
+var placeholderImage = '{{ asset("assets/images/placeholder-image.png") }}';
 var category = '';
 var storageRef = firebase.storage().ref('images');
 var storage = firebase.storage();
 
 $(document).ready(function () {
     jQuery("#data-table_processing").show();
-    
+
     // Load category data from SQL database
     $.ajax({
         url: '/api/mart-categories/' + id,
@@ -141,12 +141,12 @@ $(document).ready(function () {
         success: function(category) {
             console.log('📊 Loading category data for ID:', id);
             console.log('📝 Category data loaded:', category);
-            
+
             $(".cat-name").val(category.title);
             $(".category_description").val(category.description);
             $("#category_section").val(category.section || 'General');
             $("#category_order").val(category.category_order || 1);
-            
+
             console.log('📋 Form fields populated:', {
                 title: category.title,
                 description: category.description,
@@ -163,20 +163,20 @@ $(document).ready(function () {
                 $(".cat_image").append('<img class="rounded" style="width:50px" src="' + placeholderImage + '" alt="image">');
                 console.log('🖼️ Using placeholder image');
             }
-            
+
             if (category.publish) {
                 $("#item_publish").prop('checked', true);
                 console.log('✅ Publish checkbox checked');
             }
-            
+
             if (category.show_in_homepage) {
                 $("#show_in_homepage").prop('checked', true);
                 console.log('✅ Show in homepage checkbox checked');
             }
-            
+
             // Load review attributes
             loadReviewAttributes(category.review_attributes || []);
-            
+
             jQuery("#data-table_processing").hide();
             console.log('✅ Category data loading completed');
         },
@@ -210,7 +210,7 @@ $(document).ready(function () {
 
     $(".edit-setting-btn").click(async function () {
         console.log('🔍 Save button clicked - starting update process...');
-        
+
         var title = $(".cat-name").val();
         var description = $(".category_description").val();
         var item_publish = $("#item_publish").is(":checked");
@@ -218,7 +218,7 @@ $(document).ready(function () {
         var section = $('#category_section').val().trim();
         var category_order = parseInt($('#category_order').val()) || 1;
         var review_attributes = [];
-        
+
         console.log('📝 Form values:', {
             title: title,
             description: description,
@@ -227,13 +227,13 @@ $(document).ready(function () {
             section: section,
             category_order: category_order
         });
-        
+
         $('#review_attributes input').each(function () {
             if ($(this).is(':checked')) {
                 review_attributes.push($(this).val());
             }
         });
-        
+
         if (title == '') {
             $(".error_top").show();
             $(".error_top").html("");
@@ -241,10 +241,10 @@ $(document).ready(function () {
             window.scrollTo(0, 0);
             return false;
         }
-        
+
         try {
             jQuery("#data-table_processing").show();
-            
+
             // Upload image to Firebase Storage if new image is selected
             let IMG = photo;
             if (photo != catImageFile && photo && fileName) {
@@ -276,14 +276,14 @@ $(document).ready(function () {
                     jQuery("#data-table_processing").hide();
                     $(".error_top").show();
                     $(".error_top").html("");
-                    var errorMessage = xhr.responseJSON && xhr.responseJSON.error 
-                        ? xhr.responseJSON.error 
+                    var errorMessage = xhr.responseJSON && xhr.responseJSON.error
+                        ? xhr.responseJSON.error
                         : 'Error updating category';
                     $(".error_top").append("<p>" + errorMessage + "</p>");
                     window.scrollTo(0, 0);
                 }
             });
-            
+
         } catch (error) {
             console.error('❌ Error during update:', error);
             jQuery("#data-table_processing").hide();
@@ -329,7 +329,7 @@ async function storeImageData() {
     console.log('📸 Current photo:', photo);
     console.log('📁 Original file:', catImageFile);
     console.log('📄 File name:', fileName);
-    
+
     var newPhoto = '';
     try {
         // Delete old image if it's different from current
@@ -337,7 +337,7 @@ async function storeImageData() {
             console.log('🗑️ Deleting old image...');
             try {
                 var catOldImageUrlRef = await storage.refFromURL(catImageFile);
-                var imageBucket = catOldImageUrlRef.bucket; 
+                var imageBucket = catOldImageUrlRef.bucket;
                 var envBucket = "<?php echo env('FIREBASE_STORAGE_BUCKET'); ?>";
                 if (imageBucket == envBucket) {
                     await catOldImageUrlRef.delete();
@@ -348,8 +348,8 @@ async function storeImageData() {
             } catch (deleteError) {
                 console.log("⚠️ Error deleting old file:", deleteError);
             }
-        } 
-        
+        }
+
         // Upload new image
         if (photo != catImageFile && photo && fileName) {
             console.log('📤 Uploading new image...');
@@ -367,10 +367,10 @@ async function storeImageData() {
         console.error("❌ Error in storeImageData:", error);
         newPhoto = photo || catImageFile;
     }
-    
+
     console.log('🖼️ Final photo URL:', newPhoto);
     return newPhoto;
-}  
+}
 
 //upload image with compression
 $("#category_image").resizeImg({
@@ -383,17 +383,17 @@ $("#category_image").resizeImg({
             var filename = $('#category_image').val().replace(/C:\\fakepath\\/i, '')
             var timestamp = Number(new Date());
             var filename = filename.split('.')[0] + "_" + timestamp + '.' + ext;
-            
+
             console.log('📄 Generated filename:', filename);
             console.log('📸 Base64 string length:', base64str.length);
-            
+
             photo = base64str;
             fileName = filename;
-            
+
             $(".cat_image").empty();
             $(".cat_image").append('<img class="rounded" style="width:50px" src="' + photo + '" alt="image">');
             $("#category_image").val('');
-            
+
             console.log('✅ Image processed and displayed successfully');
         } catch (error) {
             console.error('❌ Error in image compression callback:', error);

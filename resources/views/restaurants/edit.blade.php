@@ -797,7 +797,7 @@ foreach ($countries as $keycountry => $valuecountry) {
     var photocount = 0;
     var ownerPhoto = '';
     var ownerId = '';
-    var placeholderImage = '';
+    var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
     var workingHours = [];
     var timeslotworkSunday = [];
     var timeslotworkMonday = [];
@@ -823,11 +823,6 @@ foreach ($countries as $keycountry => $valuecountry) {
     var storyCount = 0;
     var storyRef = firebase.storage().ref('Story');
     var storyImagesRef = firebase.storage().ref('Story/images');
-    var placeholder = database.collection('settings').doc('placeHolderImage');
-    placeholder.get().then(async function(snapshotsimage) {
-        var placeholderImageData = snapshotsimage.data();
-        placeholderImage = placeholderImageData.image;
-    });
     var FinalData = refData.get().then(async function(snapshots) {
         var userData = snapshots.docs[0].data();
         provider = userData.provider;
@@ -1310,12 +1305,12 @@ foreach ($countries as $keycountry => $valuecountry) {
                 }
             });
                     var vendorCuisine = $("#restaurant_vendor_cuisines option:selected").val();
-        
+
         // Debug logging
         console.log('Selected vendor cuisine value:', vendorCuisine);
         console.log('Selected vendor cuisine text:', $("#restaurant_vendor_cuisines option:selected").text());
         console.log('All vendor cuisine options:', $('#restaurant_vendor_cuisines option').map(function() { return {value: $(this).val(), text: $(this).text()}; }).get());
-        
+
         var address = $(".restaurant_address").val();
             var latitude = parseFloat($(".restaurant_latitude").val());
             var longitude = parseFloat($(".restaurant_longitude").val());
@@ -1616,7 +1611,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                                         } catch (error) {
                                             console.error('❌ Error calling logActivity:', error);
                                         }
-                                        
+
                                         if (resStoryVid.length > 0 || story_thumbnail != '') {
                                             if (resStoryVid.length > 0 && story_thumbnail == '') {
                                                 jQuery("#data-table_processing").hide();

@@ -661,18 +661,10 @@
     var commisionModel=false;
     var AdminCommission='';
     var subscriptionModel=false;
-    
+
     // Load placeholder image from SQL
-    $.ajax({
-        url: '{{route("vendors.placeholder-image")}}',
-        type: 'GET',
-        success: function(response) {
-            if(response.success && response.image) {
-                placeholderImage = response.image;
-            }
-        }
-    });
-    
+    placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
+
     // Load currency settings from SQL
     $.ajax({
         url: '{{url("/payments/currency")}}',
@@ -685,7 +677,7 @@
             }
         }
     });
-    
+
     // Load admin commission settings from SQL
     $.ajax({
         url: '{{url("/api/settings/AdminCommission")}}',
@@ -708,7 +700,7 @@
             }
         }
     });
-    
+
     // Load business model settings from SQL
     $.ajax({
         url: '{{url("/api/settings/restaurant")}}',
@@ -723,7 +715,7 @@
         }
     });
     var emailTemplatesData=null;
-    
+
     // Load email template from SQL
     $.ajax({
         url: '{{url("/api/email-templates/wallet_topup")}}',
@@ -734,7 +726,7 @@
             }
         }
     });
-    
+
     $(".save-form-btn").click(function() {
         var amount=$('#amount').val();
         if(amount=='') {
@@ -742,7 +734,7 @@
             return false;
         }
         var note=$('#note').val();
-        
+
         // Add wallet amount via AJAX
         $.ajax({
             url: '{{url("/api/users/wallet/add")}}',
@@ -763,7 +755,7 @@
                         amountFormatted = currentCurrency + parseInt(amount).toFixed(decimal_degits);
                         newWalletFormatted = currentCurrency + parseFloat(response.newWalletAmount).toFixed(decimal_degits);
                     }
-                    
+
                     var formattedDate = new Date();
                     var month = formattedDate.getMonth() + 1;
                     var day = formattedDate.getDate();
@@ -771,7 +763,7 @@
                     month = month < 10 ? '0' + month : month;
                     day = day < 10 ? '0' + day : day;
                     formattedDate = day + '-' + month + '-' + year;
-                    
+
                     if(emailTemplatesData) {
                         var message = emailTemplatesData.message;
                         message = message.replace(/{username}/g, response.user.firstName + ' ' + response.user.lastName);
@@ -780,7 +772,7 @@
                         message = message.replace(/{paymentmethod}/g, 'Wallet');
                         message = message.replace(/{transactionid}/g, response.transaction_id);
                         message = message.replace(/{newwalletbalance}/g, newWalletFormatted);
-                        
+
                         var url = "{{url('send-email')}}";
                         sendEmail(url, emailTemplatesData.subject, message, [response.user.email]).then(function(sendEmailStatus) {
                             if(sendEmailStatus) {
@@ -818,7 +810,7 @@
     }
     $(document).ready(async function() {
         jQuery("#data-table_processing").show();
-        
+
         // Load stats from SQL
         $.ajax({
             url: '/restaurants/' + id + '/stats',
@@ -826,7 +818,7 @@
             success: function(response) {
                 if(response.success) {
                     $("#total_orders").text(response.totalOrders);
-                    
+
                     var totalEarnings_formatted;
                     if(currencyAtRight) {
                         totalEarnings_formatted = parseFloat(response.totalEarnings).toFixed(decimal_degits) + currentCurrency;
@@ -834,7 +826,7 @@
                         totalEarnings_formatted = currentCurrency + parseFloat(response.totalEarnings).toFixed(decimal_degits);
                     }
                     $("#total_earnings").text(totalEarnings_formatted);
-                    
+
                     var totalPayments_formatted;
                     if(currencyAtRight) {
                         totalPayments_formatted = parseFloat(response.totalPayments).toFixed(decimal_degits) + currentCurrency;
@@ -842,7 +834,7 @@
                         totalPayments_formatted = currentCurrency + parseFloat(response.totalPayments).toFixed(decimal_degits);
                     }
                     $("#total_payment").text(totalPayments_formatted);
-                    
+
                     var remaining_formatted;
                     if(currencyAtRight) {
                         remaining_formatted = parseFloat(response.remainingBalance).toFixed(decimal_degits) + currentCurrency;
@@ -853,7 +845,7 @@
                 }
             }
         });
-        
+
         // Load restaurant data from SQL
         $.ajax({
             url: '/restaurants/' + id + '/data',
@@ -1113,7 +1105,7 @@
                 restaurantOwnerOnline=restaurant.isActive;
                 photo=restaurant.photo;
                 restaurantOwnerId=restaurant.author;
-                
+
                 // Load user data from SQL
                 $.ajax({
                     url: '/api/users/' + restaurant.author,
@@ -1135,7 +1127,7 @@
                         }
                     }
                 });
-                
+
                 // Load categories from SQL
                 $.ajax({
                     url: '{{route("restaurants.categories")}}',
@@ -1205,7 +1197,7 @@
             alert('Error loading restaurant data. Please check console for details.');
         }
     });
-        
+
         $(".save_restaurant_btn").click(function() {
             var restaurantname=$(".restaurant_name").val();
             // Handle multiple category selection
@@ -1221,7 +1213,7 @@
             var longitude=parseFloat($(".restaurant_longitude").val());
             var description=$(".restaurant_description").val();
             var phonenumber=$(".restaurant_phone").val();
-            
+
             // Update restaurant via AJAX
             $.ajax({
                 url: '/restaurants/' + id,
@@ -1295,13 +1287,13 @@
             }
         });
     }
-    
+
     // These functions are now handled by the main stats AJAX call in document.ready
     async function getTotalOrders() {
         // Stats already loaded via /restaurants/{id}/stats endpoint
     }
     async function getTotalEarnings() {
-        // Stats already loaded via /restaurants/{id}/stats endpoint  
+        // Stats already loaded via /restaurants/{id}/stats endpoint
     }
     async function getTotalpayment() {
         // Stats already loaded via /restaurants/{id}/stats endpoint

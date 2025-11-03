@@ -289,17 +289,12 @@
         var new_added_photos_filename = [];
         var photosToDelete = [];
         var product_specification = {};
-        var placeholderImage = '';
+        var placeholderImage = '{{ asset('assets/images/placeholder-image.png') }}';
         var productImagesCount = 0;
         var variant_photos=[];
         var variant_filename=[];
         var variantImageToDelete=[];
         var variant_vIds=[];
-        var placeholder = database.collection('settings').doc('placeHolderImage');
-        placeholder.get().then(async function (snapshotsimage) {
-            var placeholderImageData = snapshotsimage.data();
-            placeholderImage = placeholderImageData.image;
-        })
         var refCurrency = database.collection('currencies').where('isActive', '==', true);
         refCurrency.get().then(async function (snapshots) {
             var currencyData = snapshots.docs[0].data();
@@ -336,7 +331,7 @@
             <?php } else{?>
                 $(".food_restaurant_div").show();
             <?php } ?>
-            $("#attributes_div").show(); 
+            $("#attributes_div").show();
             jQuery(document).on("click", ".mdi-cloud-upload", function () {
                 var variant = jQuery(this).data('variant');
                 var fileurl = $('[id="variant_' + variant + '_url"]').val();
@@ -472,7 +467,7 @@
                             photos.push(photo);
                         }
                     }
-                    if (photos != '' && photos != null) {  
+                    if (photos != '' && photos != null) {
                         photos.forEach((element, index) => {
                             $(".product_image").append('<span class="image-item" id="photo_' + index + '"><span class="remove-btn" data-id="' + index + '" data-img="' + photos[index] + '" data-status="old"><i class="fa fa-remove"></i></span><img onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" class="rounded" width="50px" id="" height="auto" src="' + photos[index] + '"></span>');
                         })
@@ -540,7 +535,7 @@
                 // Get vendor title and category title for consistency
                 var vendorTitle = '';
                 var categoryTitle = '';
-                
+
                 if (restaurant) {
                     restaurant_list.forEach((vendor) => {
                         if (vendor.id == restaurant) {
@@ -548,7 +543,7 @@
                         }
                     });
                 }
-                
+
                 if (category) {
                     categories_list.forEach((cat) => {
                         if (cat.id == category) {
@@ -636,7 +631,7 @@
                         console.log($("#item_attribute").val());
                         console.log($('#attributes').val());
                     }
-                  
+
                     if ($('#variants').val().length > 0) {
                         var variantsSet = $.parseJSON($('#variants').val());
                         await storeVariantImageData().then(async (vIMG) => {
@@ -688,12 +683,12 @@
                         }
                         var item_attribute = {'attributes': attributes, 'variants': variants};
                     }
-                   
+
                     if ($.isEmptyObject(product_specification)) {
                         product_specification = null;
                     }
                     jQuery("#data-table_processing").show();
-                await storeImageData().then(async (IMG) => { 
+                await storeImageData().then(async (IMG) => {
                     if (IMG.length > 0) {
                         photo = IMG[0];
                     }
@@ -857,7 +852,7 @@
         async function storeImageData() {
             var newPhoto = [];
             if (photos.length > 0) {
-                newPhoto = photos; 
+                newPhoto = photos;
             }
             if (new_added_photos.length > 0) {
                 await Promise.all(new_added_photos.map(async (foodPhoto, index) => {
@@ -1033,8 +1028,8 @@
             $('#attributes').val(JSON.stringify(attributes));
             var variants = getCombinations(attributeSet);
             $('#variants').val(JSON.stringify(variants));
-              
-            if (attributeSet.length > 0) {  
+
+            if (attributeSet.length > 0) {
                 html += '<table class="table table-bordered">';
                 html += '<thead class="thead-light">';
                 html += '<tr>';
@@ -1173,7 +1168,7 @@
             updateSelectedFoodCategoryTags();
         });
     });
-    
+
         // 4. Update tags display
         function updateSelectedFoodCategoryTags() {
         var selected = $('#food_category').val() || [];
