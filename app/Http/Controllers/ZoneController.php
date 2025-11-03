@@ -15,18 +15,18 @@ class ZoneController extends Controller
 
     public function index()
     {
-        return view('zone.index');
+        return view('zone.index') ;
     }
 
     public function edit($id)
     {
         try {
             $zone = Zone::find($id);
-            
+
             if (!$zone) {
                 return redirect()->route('zone')->with('error', 'Zone not found');
             }
-            
+
             return view('zone.edit')
                 ->with('id', $id)
                 ->with('zone', $zone);
@@ -100,7 +100,7 @@ class ZoneController extends Controller
         try {
             \Log::info('=== Create Zone Called ===');
             \Log::info('Request data:', $request->all());
-            
+
             $request->validate([
                 'name' => 'required|string|max:255',
                 'coordinates' => 'required'
@@ -117,14 +117,14 @@ class ZoneController extends Controller
                 'area' => $request->area,
                 'publish' => $request->publish ? 1 : 0
             ];
-            
+
             \Log::info('Data to insert:', $data);
-            
+
             $inserted = \DB::table('zone')->insert($data);
 
             if ($inserted) {
                 \Log::info('✅ Zone created successfully with ID: ' . $id);
-                
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Zone created successfully',
@@ -132,7 +132,7 @@ class ZoneController extends Controller
                 ]);
             } else {
                 \Log::error('❌ Failed to insert zone');
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Failed to create zone - database insert failed'
@@ -156,7 +156,7 @@ class ZoneController extends Controller
         try {
             \Log::info('=== Update Zone Called for ID: ' . $id);
             \Log::info('Request data:', $request->all());
-            
+
             // Check if zone exists
             $zoneExists = \DB::table('zone')->where('id', $id)->exists();
 
@@ -176,25 +176,25 @@ class ZoneController extends Controller
                 'area' => $request->area,
                 'publish' => $request->publish ? 1 : 0
             ];
-            
+
             \Log::info('Data to update:', $data);
 
             $updated = \DB::table('zone')
                 ->where('id', $id)
                 ->update($data);
-            
+
             \Log::info('DB update result: ' . $updated . ' row(s) affected');
 
             if ($updated !== false) {
                 \Log::info('✅ Zone updated successfully with ID: ' . $id);
-                
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Zone updated successfully'
                 ]);
             } else {
                 \Log::error('❌ Failed to update zone');
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Failed to update zone - database error'
@@ -218,7 +218,7 @@ class ZoneController extends Controller
         try {
             \Log::info('=== Toggle Zone Status for ID: ' . $id);
             \Log::info('Request publish value: ' . ($request->publish ?? 'not set'));
-            
+
             $zone = Zone::find($id);
 
             if (!$zone) {
@@ -232,14 +232,14 @@ class ZoneController extends Controller
             // ALWAYS toggle - flip the current status
             $currentStatus = $zone->publish;
             $newStatus = $currentStatus ? 0 : 1;
-            
+
             \Log::info('Current status: ' . $currentStatus . ', New status (toggled): ' . $newStatus);
 
             // Use direct DB update to ensure it saves
             $updated = \DB::table('zone')
                 ->where('id', $id)
                 ->update(['publish' => $newStatus]);
-            
+
             \Log::info('DB update result: ' . $updated . ' row(s) affected');
 
             if ($updated !== false) {
