@@ -184,52 +184,55 @@ Route::middleware(['permission:mart-items,mart-items'])->group(function () {
     Route::get('/mart-items/download-template', [App\Http\Controllers\MartItemController::class, 'downloadTemplate'])->name('mart-items.download-template');
 });
 
-// IMPORTANT: Specific /mart-items/* routes must come BEFORE /mart-items/{id}
-// Mart Items API Routes (SQL Database)
-Route::middleware(['permission:mart-items,mart-items'])->group(function () {
+// IMPORTANT: Specific /mart-items/* routes MUST come BEFORE /mart-items/{id}
+// Mart Items API Routes (SQL Database) - Accessible with auth
+Route::middleware(['auth'])->group(function () {
     Route::get('/mart-items/data', [App\Http\Controllers\MartItemController::class, 'getMartItemsData'])->name('mart-items.data');
     Route::get('/mart-items/categories', [App\Http\Controllers\MartItemController::class, 'getCategories'])->name('mart-items.categories');
+    Route::get('/mart-items/subcategories', [App\Http\Controllers\MartItemController::class, 'getSubcategories'])->name('mart-items.subcategories');
     Route::get('/mart-items/brands', [App\Http\Controllers\MartItemController::class, 'getBrands'])->name('mart-items.brands');
     Route::get('/mart-items/vendors', [App\Http\Controllers\MartItemController::class, 'getVendors'])->name('mart-items.vendors');
     Route::get('/mart-items/placeholder-image', [App\Http\Controllers\MartItemController::class, 'getPlaceholderImage'])->name('mart-items.placeholder-image');
     Route::get('/mart-items/currency-settings', [App\Http\Controllers\MartItemController::class, 'getCurrencySettings'])->name('mart-items.currency-settings');
 });
 
-// Get single item data - accessible with edit permission
-Route::middleware(['permission:mart-items.edit'])->group(function () {
+// Mart Items EDIT Routes - MUST come before wildcard /mart-items/{id}
+Route::middleware(['auth'])->group(function () {
+    Route::get('/mart-items/edit/{id}', [App\Http\Controllers\MartItemController::class, 'edit'])->name('mart-items.edit');
+    Route::post('/mart-items/update/{id}', [App\Http\Controllers\MartItemController::class, 'update'])->name('mart-items.update');
+    Route::patch('/mart-items/inline-update/{id}', [App\Http\Controllers\MartItemController::class, 'inlineUpdate'])->name('mart-items.inlineUpdate');
     Route::get('/mart-items/{id}/data', [App\Http\Controllers\MartItemController::class, 'getMartItemById'])->name('mart-items.get-by-id');
 });
 
-Route::middleware(['permission:mart-items,mart-items.edit'])->group(function () {
-    Route::post('/mart-items/{id}/toggle-publish', [App\Http\Controllers\MartItemController::class, 'togglePublish'])->name('mart-items.toggle-publish');
-    Route::post('/mart-items/{id}/toggle-availability', [App\Http\Controllers\MartItemController::class, 'toggleAvailability'])->name('mart-items.toggle-availability');
-});
-
-Route::middleware(['permission:mart-items,mart-items.delete'])->group(function () {
-    Route::delete('/mart-items/{id}', [App\Http\Controllers\MartItemController::class, 'deleteMartItem'])->name('mart-items.delete');
-    Route::post('/mart-items/bulk-delete', [App\Http\Controllers\MartItemController::class, 'bulkDelete'])->name('mart-items.bulk-delete');
-});
-
-// Wildcard route MUST come last
-Route::middleware(['permission:mart-items,mart-items'])->group(function () {
-    Route::get('/mart-items/{id}', [App\Http\Controllers\MartItemController::class, 'index'])->name('marts.mart-items');
-});
-
-Route::middleware(['permission:mart-items,mart-items.edit'])->group(function () {
-    Route::get('/mart-items/edit/{id}', [App\Http\Controllers\MartItemController::class, 'edit'])->name('mart-items.edit');
-    Route::patch('/mart-items/inline-update/{id}', [App\Http\Controllers\MartItemController::class, 'inlineUpdate'])->name('mart-items.inlineUpdate');
-});
-
-Route::middleware(['permission:mart-items,mart-items.create'])->group(function () {
+// Mart Items CREATE Routes
+Route::middleware(['auth'])->group(function () {
     Route::get('/mart-item/create', [App\Http\Controllers\MartItemController::class, 'create'])->name('mart-items.create');
     Route::get('/mart-item/create/{id}', [App\Http\Controllers\MartItemController::class, 'create']);
     Route::post('/mart-items/store', [App\Http\Controllers\MartItemController::class, 'store'])->name('mart-items.store');
 });
 
-Route::middleware(['permission:mart-items,mart-items.edit'])->group(function () {
-    Route::post('/mart-items/update/{id}', [App\Http\Controllers\MartItemController::class, 'update'])->name('mart-items.update');
+// Mart Items ACTION Routes (toggle, delete, etc.)
+Route::middleware(['auth'])->group(function () {
+    Route::post('/mart-items/{id}/toggle-publish', [App\Http\Controllers\MartItemController::class, 'togglePublish'])->name('mart-items.toggle-publish');
+    Route::post('/mart-items/{id}/toggle-availability', [App\Http\Controllers\MartItemController::class, 'toggleAvailability'])->name('mart-items.toggle-availability');
+    Route::delete('/mart-items/{id}', [App\Http\Controllers\MartItemController::class, 'deleteMartItem'])->name('mart-items.delete');
+    Route::post('/mart-items/bulk-delete', [App\Http\Controllers\MartItemController::class, 'bulkDelete'])->name('mart-items.bulk-delete');
 });
 
+// Wildcard route MUST come LAST - This matches /mart-items/{vendorID} for listing
+Route::middleware(['auth'])->group(function () {
+    Route::get('/mart-items/{id}', [App\Http\Controllers\MartItemController::class, 'index'])->name('marts.mart-items');
+});
+
+// Settings API Routes (SQL Database) - Replace Firebase calls
+Route::middleware(['auth'])->group(function () {
+    Route::get('/api/settings/all', [App\Http\Controllers\Api\SettingsApiController::class, 'getAllSettings'])->name('api.settings.all');
+    Route::get('/api/settings/global', [App\Http\Controllers\Api\SettingsApiController::class, 'getGlobalSettings'])->name('api.settings.global');
+    Route::get('/api/settings/currency', [App\Http\Controllers\Api\SettingsApiController::class, 'getCurrencySettings'])->name('api.settings.currency');
+    Route::get('/api/settings/restaurant', [App\Http\Controllers\Api\SettingsApiController::class, 'getRestaurantSettings'])->name('api.settings.restaurant');
+    Route::get('/api/settings/AdminCommission', [App\Http\Controllers\Api\SettingsApiController::class, 'getAdminCommission'])->name('api.settings.admin-commission');
+    Route::get('/api/settings/driver', [App\Http\Controllers\Api\SettingsApiController::class, 'getDriverSettings'])->name('api.settings.driver');
+});
 
 Route::middleware(['permission:orders,orders'])->group(function () {
     Route::get('/orders', [App\Http\Controllers\OrderController::class, 'index'])->name('orders');

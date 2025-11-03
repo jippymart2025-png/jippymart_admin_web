@@ -372,35 +372,46 @@
         let deleteButton , dragMap;
         let selectedPolygon = null;
         var mapType = 'ONLINE';
-        database.collection('settings').doc('DriverNearBy').get().then(async function (snapshots) {
-            var data = snapshots.data();
-            if (data && data.selectedMapType && data.selectedMapType == "osm") {
-                mapType = "OFFLINE"
+        
+        // Load map type from SQL settings instead of Firebase
+        $.ajax({
+            url: '/api/settings/driver',
+            method: 'GET',
+            async: false,
+            success: function(data) {
+                if (data && data.selectedMapType && data.selectedMapType == "osm") {
+                    mapType = "OFFLINE";
+                }
+                console.log('✅ Zone Create - Loaded map type from SQL:', mapType);
+            },
+            error: function() {
+                console.warn('⚠️ Could not load map settings, using default (ONLINE)');
             }
-            var onclick='',polygon='',deletearea='';
-            if(mapType == "OFFLINE"){
-                onclick = function() {
-                    console.log("Offline mode, no drawing available.");
-                };
-                polygon = function() {
-                    enablePolygonDrawing(map) ;
-                };
-            }else
-            {
-                onclick = function() {
-                    drawingManager.setDrawingMode(null);
-                };
-                polygon = function() {
-                    drawingManager.setDrawingMode(google.maps.drawing.OverlayType.POLYGON);
-                };
-                deletearea=function() {
-                    clearMap();
-                };
-            }
-            document.getElementById("select-button").onclick = onclick;
-            document.getElementById("add-button").onclick = polygon;
-            document.getElementById("delete-all-button").onclick = deletearea;
         });
+        
+        var onclick='',polygon='',deletearea='';
+        if(mapType == "OFFLINE"){
+            onclick = function() {
+                console.log("Offline mode, no drawing available.");
+            };
+            polygon = function() {
+                enablePolygonDrawing(map) ;
+            };
+        }else
+        {
+            onclick = function() {
+                drawingManager.setDrawingMode(null);
+            };
+            polygon = function() {
+                drawingManager.setDrawingMode(google.maps.drawing.OverlayType.POLYGON);
+            };
+            deletearea=function() {
+                clearMap();
+            };
+        }
+        document.getElementById("select-button").onclick = onclick;
+        document.getElementById("add-button").onclick = polygon;
+        document.getElementById("delete-all-button").onclick = deletearea;
         function setMapOnAll(map) {
             for (var i = 0; i < gmarkers.length; i++) {
                 gmarkers[i].setMap(map);
