@@ -16,7 +16,7 @@
         </div>
     </div>
     <div class="container-fluid">
-       <div class="admin-top-section"> 
+       <div class="admin-top-section">
         <div class="row">
             <div class="col-12">
                 <div class="d-flex top-title-section pb-4 justify-content-between">
@@ -27,7 +27,7 @@
                     </div>
                 </div>
             </div>
-        </div> 
+        </div>
         <div class="row">
             <div class="col-12">
                 <div class="card border">
@@ -50,7 +50,7 @@
             </div>
         </div>
        </div>
-    
+
     @if(session('success'))
         <div class="alert alert-success">{!! session('success') !!}</div>
     @endif
@@ -76,10 +76,10 @@
                         <p class="mb-0 text-dark-2">Manage meal time periods for restaurants</p>
                     </div>
                     <div class="card-header-right d-flex align-items-center">
-                        <div class="card-header-btn mr-3"> 
+                        <div class="card-header-btn mr-3">
                         <a href="{!! route('menu-periods.create') !!}" class="btn-primary btn rounded-full"><i class="mdi mdi-plus mr-2"></i>Create Menu Period</a>
                         </div>
-                    </div>                
+                    </div>
                     </div>
                     <div class="card-body">
                             <div class="table-responsive m-t-10">
@@ -92,7 +92,6 @@
                                             <th class="text-center">Menu Period Info</th>
                                             <th class="text-center">From Time</th>
                                             <th class="text-center">To Time</th>
-                                            <th class="text-center">Date</th>
                                             <th class="text-center">Actions</th>
                                         </tr>
                                     </thead>
@@ -154,209 +153,30 @@
 }
 </style>
 <script type="text/javascript">
-    var database = firebase.firestore();
-    var refData = database.collection('mealTimes');
     var selectedMenuPeriods = new Set();
-    
-    var append_list = '';
     var user_permissions = '<?php echo @session("user_permissions") ?>';
     user_permissions = Object.values(JSON.parse(user_permissions));
-    var checkDeletePermission = false;
-    if ($.inArray('menu-periods.delete', user_permissions) >= 0) {
-        checkDeletePermission = true;
-    }
-    
+    var checkDeletePermission = ($.inArray('menu-periods.delete', user_permissions) >= 0);
+
     $(document).ready(function () {
-        jQuery("#data-table_processing").show();
-        $(document).on('click', '.dt-button-collection .dt-button', function () {
-            $('.dt-button-collection').hide();
-            $('.dt-button-background').hide();
-        });
-        $(document).on('click', function (event) {
-            if (!$(event.target).closest('.dt-button-collection, .dt-buttons').length) {
-                $('.dt-button-collection').hide();
-                $('.dt-button-background').hide();
-            }
-        });
-        var fieldConfig = {
-            columns: [
-                { key: 'id', header: "ID" },
-                { key: 'label', header: "Label" },
-                { key: 'from', header: "From Time" },
-                { key: 'to', header: "To Time" },
-                { key: 'createdAt', header: "{{trans('lang.created_at')}}" },
-            ],
-            fileName: "Menu Periods",
-        };
-        var table = $('#menuPeriodsTable').DataTable({
+        const table = $('#menuPeriodsTable').DataTable({
             pageLength: 10,
-            processing: false,
+            processing: true,
             serverSide: true,
             responsive: true,
-            ajax: async function(data, callback, settings) {
-                const start = data.start;
-                const length = data.length;
-                const searchValue = data.search.value.toLowerCase();
-                const orderColumnIndex = data.order[0].column;
-                const orderDirection = data.order[0].dir;
-                const orderableColumns = ['', 'label', 'from', 'to', 'createdAt', ''];
-                const orderByField = orderableColumns[orderColumnIndex];
-                
-                if (searchValue.length >= 3 || searchValue.length === 0) {
-                    $('#data-table_processing').show();
-                }
-                
-                database.collection('mealTimes').orderBy('label').get().then(async function(querySnapshot) {
-                    if (querySnapshot.empty) {
-                        $('.menu_period_count').text(0);
-                        $('#data-table_processing').hide();
-                        callback({
-                            draw: data.draw,
-                            recordsTotal: 0,
-                            recordsFiltered: 0,
-                            data: []
-                        });
-                        return;
-                    }
-                    
-                    let records = [];
-                    let filteredRecords = [];
-                    
-                    querySnapshot.forEach(function(doc) {
-                        var d = doc.data();
-                        d.id = doc.id;
-                        
-                        if (searchValue) {
-                            var date = '';
-                            var time = '';
-                            if (d.hasOwnProperty("createdAt")) {
-                                try {
-                                    date = d.createdAt.toDate().toDateString();
-                                    time = d.createdAt.toDate().toLocaleTimeString('en-US');
-                                } catch (err) {}
-                            }
-                            var createdAt = date + ' ' + time;
-                            if (
-                                (d.label && d.label.toString().toLowerCase().includes(searchValue)) ||
-                                (d.from && d.from.toString().toLowerCase().includes(searchValue)) ||
-                                (d.to && d.to.toString().toLowerCase().includes(searchValue)) ||
-                                (createdAt && createdAt.toString().toLowerCase().indexOf(searchValue) > -1)
-                            ) {
-                                filteredRecords.push(d);
-                            }
-                        } else {
-                            filteredRecords.push(d);
-                        }
-                    });
-                    
-                    filteredRecords.sort((a, b) => {
-                        let aValue = a[orderByField] ? a[orderByField].toString().toLowerCase() : '';
-                        let bValue = b[orderByField] ? b[orderByField].toString().toLowerCase() : '';
-                        
-                        if (orderByField === 'createdAt') {
-                            try {
-                                aValue = a[orderByField] ? new Date(a[orderByField].toDate()).getTime() : 0;
-                                bValue = b[orderByField] ? new Date(b[orderByField].toDate()).getTime() : 0;
-                            } catch (err) {}
-                        }
-                        
-                        if (orderDirection === 'asc') {
-                            return (aValue > bValue) ? 1 : -1;
-                        } else {
-                            return (aValue < bValue) ? 1 : -1;
-                        }
-                    });
-                    
-                    const totalRecords = filteredRecords.length;
-                    $('.menu_period_count').text(totalRecords);
-                    
-                    const paginatedRecords = filteredRecords.slice(start, start + length);
-                    
-                    await Promise.all(paginatedRecords.map(async (menuPeriodData) => {
-                        var getData = await buildHTML(menuPeriodData);
-                        records.push(getData);
-                    }));
-                    
-                    $('#data-table_processing').hide();
-                    callback({
-                        draw: data.draw,
-                        recordsTotal: totalRecords,
-                        recordsFiltered: totalRecords,
-                        data: records
-                    });
+            ajax: function(data, callback){
+                const params = { start: data.start, length: data.length, draw: data.draw, search: data.search.value };
+                $.get('{{ route('menu-periods.data') }}', params, function(json){
+                    $('.menu_period_count').text(json.recordsTotal || 0);
+                    callback(json);
                 });
             },
             order: [1, 'asc'],
-            columnDefs: [
-                {orderable: false, targets: [0, 5]}
-            ],
-            "language": {
-                "zeroRecords": "No record found",
-                "emptyTable": "No record found",
-                "processing": ""
-            }
+            columnDefs: [ {orderable: false, targets: [0, 4]} ],
+            language: { zeroRecords: 'No record found', emptyTable: 'No record found', processing: '' }
         });
     });
-    
-    function formatExpandRow(data) {
-        return `
-            <div class="p-2">
-                <strong>Label:</strong> <span class="text-monospace">${data.label || ''}</span><br>
-                <strong>From Time:</strong> <span class="text-monospace">${data.from || ''}</span><br>
-                <strong>To Time:</strong> <span class="text-monospace">${data.to || ''}</span><br>
-                <strong>Publish:</strong> <span class="text-monospace">${data.publish ? 'Yes' : 'No'}</span>
-            </div>
-        `;
-    }
 
-    async function buildHTML(val) {
-        var html = [];
-        var id = val.id;
-        var route1 = '{{route("menu-periods.edit",":id")}}';
-        route1 = route1.replace(':id', id);
-        
-        // Checkbox column with expand button - same structure as media
-        html.push('<td class="delete-all"><input type="checkbox" id="is_open_' + id + '" class="is_open" dataId="' + id + '"><label class="col-3 control-label" for="is_open_' + id + '" ></label><button class="expand-row" data-id="' + id + '" tabindex="-1" style="width: 18px; height: 18px; border-radius: 50%; background-color: #28a745; border: 2px solid #ffffff; display: inline-flex; align-items: center; justify-content: center; padding: 0; margin-left: 5px; position: relative; z-index: 1;"><i class="fa fa-plus" style="color: white; font-size: 8px;"></i></button></td>');
-        
-        // Label column - same structure as media
-        var labelInfo = '';
-        if(val.label != " " && val.label != "null" && val.label != null && val.label != ""){
-            labelInfo += '<a href="' + route1 + '">' + val.label + '</a>';
-        }else{
-            labelInfo += 'UNKNOWN';
-        }
-        html.push(labelInfo);
-        
-        // From Time column
-        html.push('<span class="badge badge-info">' + (val.from || 'N/A') + '</span>');
-        
-        // To Time column
-        html.push('<span class="badge badge-success">' + (val.to || 'N/A') + '</span>');
-        
-        // Date column
-        var date = '';
-        var time = '';
-        if (val.hasOwnProperty("createdAt")) {
-            try {
-                date = val.createdAt.toDate().toDateString();
-                time = val.createdAt.toDate().toLocaleTimeString('en-US');
-            } catch (err) {
-            }
-            html.push('<span class="dt-time">' + date + ' ' + time + '</span>');
-        } else {
-            html.push('');
-        }
-        
-        // Actions column - same structure as media
-        var actionHtml = '<span class="action-btn">';
-        actionHtml += '<a href="' + route1 + '"><i class="mdi mdi-lead-pencil" title="Edit"></i></a>';
-        actionHtml += '<a id="' + id + '" name="menu-period-delete" href="javascript:void(0)" class="delete-btn"><i class="mdi mdi-delete" title="Delete"></i></a>';
-        actionHtml += '</span>';
-        html.push(actionHtml);
-        
-        return html;
-    }
-    
     // Select all logic
     $("#is_active").click(function () {
         $("#menuPeriodsTable .is_open").prop('checked', $(this).prop('checked'));
@@ -373,54 +193,16 @@
         $('#is_active').prop('checked', $('.is_open:checked').length === $('.is_open').length);
     });
 
-    // Expand/collapse row
-    $('#menuPeriodsTable tbody').on('click', '.expand-row', function (e) {
-        e.preventDefault();
-        var tr = $(this).closest('tr');
-        var row = table.row(tr);
-        var id = $(this).data('id');
-        var icon = $(this).find('i');
-        
-        // Get the menu period data for this row
-        database.collection('mealTimes').doc(id).get().then(function(doc) {
-            if (doc.exists) {
-                var menuPeriodData = doc.data();
-                if (row.child.isShown()) {
-                    row.child.hide();
-                    icon.removeClass('fa-minus text-danger').addClass('fa-plus text-success');
-                    $(this).css('background-color', '#28a745');
-                } else {
-                    row.child(formatExpandRow(menuPeriodData)).show();
-                    icon.removeClass('fa-plus text-success').addClass('fa-minus text-danger');
-                    $(this).css('background-color', '#dc3545');
-                }
-            }
-        });
-    });
+    // no expand rows in SQL version
 
     // Single delete
-    $('#menuPeriodsTable tbody').on('click', '.delete-btn', async function () {
-        var id = $(this).attr('id');
+    $('#menuPeriodsTable tbody').on('click', '.delete-btn, .delete-menu-period', async function () {
+        var id = $(this).data('id') || $(this).attr('id');
+        if(!id){ alert('This item cannot be deleted because it has no ID.'); return; }
         if (confirm('Are you sure you want to delete this menu period?')) {
-            jQuery('#data-table_processing').show();
-            
-            // Get menu period name for logging
-            var menuPeriodName = '';
-            try {
-                var doc = await database.collection('mealTimes').doc(id).get();
-                if (doc.exists) {
-                    menuPeriodName = doc.data().label;
-                }
-            } catch (error) {
-                console.error('Error getting menu period name:', error);
-            }
-            
-            database.collection('mealTimes').doc(id).delete().then(async function () {
-                await logActivity('menu-periods', 'deleted', 'Deleted menu period: ' + menuPeriodName);
-                selectedMenuPeriods.delete(id);
-                table.ajax.reload();
-                jQuery('#data-table_processing').hide();
-            });
+            $.post({ url: '{{ url('/menu-periods') }}' + '/' + id + '/delete', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
+                .done(function(){ selectedMenuPeriods.delete(id); $('#menuPeriodsTable').DataTable().ajax.reload(null,false); })
+                .fail(function(xhr){ alert('Failed to delete ('+xhr.status+'): '+xhr.statusText); });
         }
     });
 
@@ -428,35 +210,12 @@
     $("#deleteAll").click(async function () {
         if ($('#menuPeriodsTable .is_open:checked').length) {
             if (confirm("Delete selected menu periods?")) {
-                jQuery('#data-table_processing').show();
-                
-                // Get all selected menu period names for logging
-                var selectedNames = [];
-                for (var i = 0; i < $('#menuPeriodsTable .is_open:checked').length; i++) {
-                    var id = $('#menuPeriodsTable .is_open:checked').eq(i).attr('dataId');
-                    try {
-                        var doc = await database.collection('mealTimes').doc(id).get();
-                        if (doc.exists) {
-                            selectedNames.push(doc.data().label);
-                        }
-                    } catch (error) {
-                        console.error('Error getting menu period name:', error);
-                    }
-                }
-                
                 $('#menuPeriodsTable .is_open:checked').each(function () {
                     var id = $(this).attr('dataId');
-                    database.collection('mealTimes').doc(id).delete();
+                    $.post({ url: '{{ url('/menu-periods') }}' + '/' + id + '/delete', async:false, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } });
                     selectedMenuPeriods.delete(id);
                 });
-                
-                // Log bulk delete activity
-                await logActivity('menu-periods', 'deleted', 'Bulk deleted menu periods: ' + selectedNames.join(', '));
-                
-                setTimeout(function () {
-                    table.ajax.reload();
-                    jQuery('#data-table_processing').hide();
-                }, 500);
+                setTimeout(function(){ $('#menuPeriodsTable').DataTable().ajax.reload(null,false); }, 300);
             }
         } else {
             alert("Select at least one menu period to delete.");

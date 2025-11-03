@@ -75,24 +75,13 @@
 @endsection
 @section('scripts')
 <script>
-    var database = firebase.firestore();
-    var ref = database.collection('mealTimes');
-    var id_menu_period = "<?php echo uniqid();?>";
-    var menu_period_length = 1;
-    
     $(document).ready(function () {
-        jQuery("#data-table_processing").show();
-        ref.get().then(async function (snapshots) {
-            menu_period_length = snapshots.size + 1;
-            jQuery("#data-table_processing").hide();
-        })
-        
         $(".save-setting-btn").click(async function () {
             var label = $(".menu-period-label").val();
             var from = $(".menu-period-from").val();
             var to = $(".menu-period-to").val();
             var publish = $("#menu_period_publish").is(":checked");
-            
+
             if (label == '') {
                 $(".error_top").show();
                 $(".error_top").html("");
@@ -100,7 +89,7 @@
                 window.scrollTo(0, 0);
                 return false;
             }
-            
+
             if (from == '') {
                 $(".error_top").show();
                 $(".error_top").html("");
@@ -108,7 +97,7 @@
                 window.scrollTo(0, 0);
                 return false;
             }
-            
+
             if (to == '') {
                 $(".error_top").show();
                 $(".error_top").html("");
@@ -116,7 +105,7 @@
                 window.scrollTo(0, 0);
                 return false;
             }
-            
+
             if (from >= to) {
                 $(".error_top").show();
                 $(".error_top").html("");
@@ -124,40 +113,10 @@
                 window.scrollTo(0, 0);
                 return false;
             }
-            
-            jQuery("#data-table_processing").show();
-            database.collection('mealTimes').doc(id_menu_period).set({
-                'id': id_menu_period,
-                'label': label,
-                'from': from,
-                'to': to,
-                'publish': publish,
-                'createdAt': firebase.firestore.FieldValue.serverTimestamp(),
-                'updatedAt': firebase.firestore.FieldValue.serverTimestamp(),
-            }).then(async function (result) {
-                console.log('✅ Menu period saved successfully, now logging activity...');
-                
-                // Log the activity with error handling and await the Promise
-                try {
-                    if (typeof logActivity === 'function') {
-                        console.log('🔍 Calling logActivity for menu period creation...');
-                        await logActivity('menu-periods', 'created', 'Created new menu period: ' + label);
-                        console.log('✅ Activity logging completed successfully');
-                    } else {
-                        console.error('❌ logActivity function is not available');
-                    }
-                } catch (error) {
-                    console.error('❌ Error calling logActivity:', error);
-                }
-                
-                jQuery("#data-table_processing").hide();
-                window.location.href = '{{ route("menu-periods")}}';
-            }).catch(function (error) {
-                jQuery("#data-table_processing").hide();
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>Error saving menu period: " + error.message + "</p>");
-            });
+
+            $.post({ url: '{{ route('menu-periods.store') }}', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }, data: { label: label, from: from, to: to } })
+                .done(function(){ window.location.href = '{{ route("menu-periods")}}'; })
+                .fail(function(xhr){ alert('Failed to save ('+xhr.status+'): '+xhr.statusText); });
         });
     });
 </script>

@@ -75,42 +75,23 @@
 @endsection
 @section('scripts')
 <script>
-    var database = firebase.firestore();
-    var ref = database.collection('mealTimes');
     var id_menu_period = "{{ $id ?? '' }}";
-    var menu_period_length = 1;
-    
     $(document).ready(function () {
-        jQuery("#data-table_processing").show();
-        ref.get().then(async function (snapshots) {
-            menu_period_length = snapshots.size + 1;
-            jQuery("#data-table_processing").hide();
-        })
-        
-        // Load existing data
         if (id_menu_period) {
-            ref.doc(id_menu_period).get().then(function(doc) {
-                if (doc.exists) {
-                    var data = doc.data();
-                    $(".menu-period-label").val(data.label || '');
-                    $(".menu-period-from").val(data.from || '');
-                    $(".menu-period-to").val(data.to || '');
-                    $("#menu_period_publish").prop('checked', data.publish || false);
-                }
-            }).catch(function(error) {
-                console.error("Error loading menu period:", error);
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>Error loading menu period data</p>");
+            $.get('{{ url('/menu-periods/json') }}/' + id_menu_period, function(resp){
+                $(".menu-period-label").val(resp.label || '');
+                $(".menu-period-from").val(resp.from || '');
+                $(".menu-period-to").val(resp.to || '');
+            }).fail(function(){
+                $(".error_top").show().html('<p>Error loading menu period data</p>');
             });
         }
-        
+
         $(".save-setting-btn").click(async function () {
             var label = $(".menu-period-label").val();
             var from = $(".menu-period-from").val();
             var to = $(".menu-period-to").val();
-            var publish = $("#menu_period_publish").is(":checked");
-            
+
             if (label == '') {
                 $(".error_top").show();
                 $(".error_top").html("");
@@ -118,7 +99,7 @@
                 window.scrollTo(0, 0);
                 return false;
             }
-            
+
             if (from == '') {
                 $(".error_top").show();
                 $(".error_top").html("");
@@ -126,7 +107,7 @@
                 window.scrollTo(0, 0);
                 return false;
             }
-            
+
             if (to == '') {
                 $(".error_top").show();
                 $(".error_top").html("");
@@ -134,7 +115,7 @@
                 window.scrollTo(0, 0);
                 return false;
             }
-            
+
             if (from >= to) {
                 $(".error_top").show();
                 $(".error_top").html("");
@@ -142,38 +123,10 @@
                 window.scrollTo(0, 0);
                 return false;
             }
-            
-            jQuery("#data-table_processing").show();
-            database.collection('mealTimes').doc(id_menu_period).update({
-                'label': label,
-                'from': from,
-                'to': to,
-                'publish': publish,
-                'updatedAt': firebase.firestore.FieldValue.serverTimestamp(),
-            }).then(async function (result) {
-                console.log('✅ Menu period updated successfully, now logging activity...');
-                
-                // Log the activity with error handling and await the Promise
-                try {
-                    if (typeof logActivity === 'function') {
-                        console.log('🔍 Calling logActivity for menu period update...');
-                        await logActivity('menu-periods', 'updated', 'Updated menu period: ' + label);
-                        console.log('✅ Activity logging completed successfully');
-                    } else {
-                        console.error('❌ logActivity function is not available');
-                    }
-                } catch (error) {
-                    console.error('❌ Error calling logActivity:', error);
-                }
-                
-                jQuery("#data-table_processing").hide();
-                window.location.href = '{{ route("menu-periods")}}';
-            }).catch(function (error) {
-                jQuery("#data-table_processing").hide();
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>Error updating menu period: " + error.message + "</p>");
-            });
+
+            $.post({ url: '{{ url('/menu-periods') }}' + '/' + id_menu_period, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }, data: { label: label, from: from, to: to } })
+                .done(function(){ window.location.href = '{{ route("menu-periods")}}'; })
+                .fail(function(xhr){ alert('Failed to save ('+xhr.status+'): '+xhr.statusText); });
         });
     });
 </script>

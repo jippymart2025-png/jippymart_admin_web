@@ -132,17 +132,43 @@ Route::get('/marts/orders/{id}', [App\Http\Controllers\MartController::class, 'o
 Route::middleware(['permission:coupons,coupons'])->group(function () {
     Route::get('/coupons', [App\Http\Controllers\CouponController::class, 'index'])->name('coupons');
     Route::get('/coupon/{id}', [App\Http\Controllers\CouponController::class, 'index'])->name('restaurants.coupons');
+    Route::get('/coupons/data', [App\Http\Controllers\CouponController::class, 'data'])->name('coupons.data');
+    Route::get('/coupons/json/{id}', [App\Http\Controllers\CouponController::class, 'json'])->name('coupons.json');
+    Route::post('/coupons/{id}/delete', [App\Http\Controllers\CouponController::class, 'destroy'])->name('coupons.delete.post');
+    Route::post('/coupons/bulk-delete', [App\Http\Controllers\CouponController::class, 'bulkDelete'])->name('coupons.bulkDelete');
+    // Toggle under base permission to allow broader access
+    Route::post('/coupons/{id}/toggle', [App\Http\Controllers\CouponController::class, 'toggle'])->name('coupons.toggle');
 
 });
 Route::middleware(['permission:coupons,coupons.edit'])->group(function () {
     Route::get('/coupons/edit/{id}', [App\Http\Controllers\CouponController::class, 'edit'])->name('coupons.edit');
+    Route::post('/coupons/{id}', [App\Http\Controllers\CouponController::class, 'update'])->name('coupons.update');
 
 });
 Route::middleware(['permission:coupons,coupons.create'])->group(function () {
     Route::get('/coupons/create', [App\Http\Controllers\CouponController::class, 'create'])->name('coupons.create');
     Route::get('/coupon/create/{id}', [App\Http\Controllers\CouponController::class, 'create']);
     Route::get('/coupons/create/{id}', [App\Http\Controllers\CouponController::class, 'create']);
+    Route::post('/coupons', [App\Http\Controllers\CouponController::class, 'store'])->name('coupons.store');
 
+});
+
+// Documents (SQL)
+Route::middleware(['permission:documents,documents'])->group(function () {
+    Route::get('/documents', [App\Http\Controllers\DocumentController::class, 'index'])->name('documents');
+    Route::get('/documents/data', [App\Http\Controllers\DocumentController::class, 'data'])->name('documents.data');
+    Route::get('/documents/json/{id}', [App\Http\Controllers\DocumentController::class, 'json'])->name('documents.json');
+    Route::post('/documents/{id}/toggle', [App\Http\Controllers\DocumentController::class, 'toggle'])->name('documents.toggle');
+    Route::post('/documents/{id}/delete', [App\Http\Controllers\DocumentController::class, 'destroy'])->name('documents.delete.post');
+    Route::post('/documents/bulk-delete', [App\Http\Controllers\DocumentController::class, 'bulkDelete'])->name('documents.bulkDelete');
+});
+Route::middleware(['permission:documents,documents.create'])->group(function () {
+    Route::get('/documents/create', [App\Http\Controllers\DocumentController::class, 'create'])->name('documents.create');
+    Route::post('/documents', [App\Http\Controllers\DocumentController::class, 'store'])->name('documents.store');
+});
+Route::middleware(['permission:documents,documents.edit'])->group(function () {
+    Route::get('/documents/edit/{id}', [App\Http\Controllers\DocumentController::class, 'edit'])->name('documents.edit');
+    Route::post('/documents/{id}', [App\Http\Controllers\DocumentController::class, 'update'])->name('documents.update');
 });
 
 Route::middleware(['permission:foods,foods'])->group(function () {
@@ -314,15 +340,21 @@ Route::middleware(['permission:promotions,promotions.delete'])->group(function (
 
 Route::middleware(['permission:menu-periods,menu-periods'])->group(function () {
     Route::get('/menu-periods', [App\Http\Controllers\MenuPeriodController::class, 'index'])->name('menu-periods');
+    Route::get('/menu-periods/data', [App\Http\Controllers\MenuPeriodController::class, 'data'])->name('menu-periods.data');
+    Route::get('/menu-periods/json/{id}', [App\Http\Controllers\MenuPeriodController::class, 'showJson'])->name('menu-periods.json');
+    // Friendly POST delete under base permission
+    Route::post('/menu-periods/{id}/delete', [App\Http\Controllers\MenuPeriodController::class, 'destroy'])->name('menu-periods.delete.post');
 });
 Route::middleware(['permission:menu-periods,menu-periods.create'])->group(function () {
     Route::get('/menu-periods/create', [App\Http\Controllers\MenuPeriodController::class, 'create'])->name('menu-periods.create');
+    Route::post('/menu-periods', [App\Http\Controllers\MenuPeriodController::class, 'store'])->name('menu-periods.store');
 });
 Route::middleware(['permission:menu-periods,menu-periods.edit'])->group(function () {
     Route::get('/menu-periods/edit/{id}', [App\Http\Controllers\MenuPeriodController::class, 'edit'])->name('menu-periods.edit');
+    Route::post('/menu-periods/{id}', [App\Http\Controllers\MenuPeriodController::class, 'update'])->name('menu-periods.update');
 });
 Route::middleware(['permission:menu-periods,menu-periods.delete'])->group(function () {
-    Route::get('/menu-periods/delete/{id}', [App\Http\Controllers\MenuPeriodController::class, 'delete'])->name('menu-periods.delete');
+    Route::delete('/menu-periods/{id}', [App\Http\Controllers\MenuPeriodController::class, 'destroy'])->name('menu-periods.delete');
 });
 
 
@@ -709,13 +741,19 @@ Route::post('send-email', [App\Http\Controllers\SendEmailController::class, 'sen
 
 Route::middleware(['permission:gift-cards,gift-card.index'])->group(function () {
     Route::get('gift-card', [App\Http\Controllers\GiftCardController::class, 'index'])->name('gift-card.index');
+    Route::get('gift-card/data', [App\Http\Controllers\GiftCardController::class, 'data'])->name('gift-card.data');
+    Route::get('gift-card/json/{id}', [App\Http\Controllers\GiftCardController::class, 'json'])->name('gift-card.json');
+    Route::post('gift-card/{id}/delete', [App\Http\Controllers\GiftCardController::class, 'destroy'])->name('gift-card.delete.post');
+    Route::post('gift-card/bulk-delete', [App\Http\Controllers\GiftCardController::class, 'bulkDelete'])->name('gift-card.bulkDelete');
 });
 Route::middleware(['permission:gift-cards,gift-card.save'])->group(function () {
     Route::get('gift-card/save/{id?}', [App\Http\Controllers\GiftCardController::class, 'save'])->name('gift-card.save');
-
+    Route::post('gift-card', [App\Http\Controllers\GiftCardController::class, 'store'])->name('gift-card.store');
 });
 Route::middleware(['permission:gift-cards,gift-card.edit'])->group(function () {
     Route::get('gift-card/edit/{id}', [App\Http\Controllers\GiftCardController::class, 'save'])->name('gift-card.edit');
+    Route::post('gift-card/{id}', [App\Http\Controllers\GiftCardController::class, 'update'])->name('gift-card.update');
+    Route::post('gift-card/{id}/toggle', [App\Http\Controllers\GiftCardController::class, 'toggle'])->name('gift-card.toggle');
 });
 
 Route::middleware(['permission:roles,role.index'])->group(function () {

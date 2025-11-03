@@ -79,191 +79,39 @@
     @section('scripts')
     <script>
         var requestId = "<?php echo $id; ?>";
-        var database = firebase.firestore();
-        var createdAt = firebase.firestore.FieldValue.serverTimestamp();
-        var id = (requestId == '') ? database.collection("tmp").doc().id : requestId;
-        var photo='';
-        var fileName='';
-        var oldImagePath='';
-        var pagesize = 20;
-        var start = '';
-        var storageRef = firebase.storage().ref('images');
-        var storage = firebase.storage();
-        var placeholderImage='';
-        var placeholder = database.collection('settings').doc('placeHolderImage');
-        placeholder.get().then(async function (snapshotsimage) {
-                var placeholderImageData = snapshotsimage.data();
-                placeholderImage = placeholderImageData.image;
-            })
-        $(document).ready(function () {
-            if (requestId != '') {
-                var ref = database.collection('gift_cards').where('id', '==', id);
-                jQuery("#data-table_processing").show();
-                ref.get().then(async function (snapshots) {
-                    if (snapshots.docs.length) {
-                        var data = snapshots.docs[0].data();
-                        $("#title").val(data.title);
-                        $('#message').val(data.message);
-                        if (data.isEnable) {
-                            $("#status").prop('checked', true);
-                        }
-                        $('#expiry').val(data.expiryDay);
-                        if (data.image && data.image!='' && data.image!= null) {
-                            photo = data.image;
-                            oldImagePath = data.image;
-                            $(".gift_card_image").html('<span class="image-item"><img onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" class="rounded" style="width:50px" src="' + data.image + '" alt="image" id="img"></span>');
-                        } else {
-                            $(".gift_card_image").html('<span class="image-item" ><img class="rounded" style="width:50px" src="' + placeholderImage + '" alt="image"></span>');
-                        }
-                    }
-                    jQuery("#data-table_processing").hide();
+        $(document).ready(function(){
+            if (requestId) {
+                $.get('{{ url('gift-card/json') }}/' + requestId, function(resp){
+                    $("#title").val(resp.title || '');
+                    $('#message').val(resp.message || '');
+                    $('#expiry').val(resp.expiryDay || '');
+                    if (resp.isEnable) { $("#status").prop('checked', true); }
+                    if (resp.image) { $(".gift_card_image").html('<span class="image-item"><img class="rounded" style="width:50px" src="'+resp.image+'" alt="image"></span>'); }
                 });
             }
-        });
-        $(".edit-form-btn").click(async function () {
-            $(".success_top").hide();
-            $(".error_top").hide();
-            var title = $("#title").val();
-            var message = $('#message').val();
-            var expiryDay = $('#expiry').val();
-            var status = $("#status").is(":checked");
-            var giftCardimg = $('#img').attr('src');
-            if (title == "") {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.please_enter_title')}}</p>");
-                window.scrollTo(0, 0);
-                return false;
-            } else if (message == "") {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.please_enter_message')}}</p>");
-                window.scrollTo(0, 0);
-                return false;
-            } else if(!giftCardimg){
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.please_enter_image')}}</p>");
-                window.scrollTo(0, 0);
-                return false;
-            } else if (expiryDay === "") {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.please_enter_expiry')}}</p>"); // Display error message for required field
-                window.scrollTo(0, 0);
-                return false;
-            } else if (expiryDay == 0) {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.expiry_day_zero')}}</p>");
-                window.scrollTo(0, 0);
-                return false;
-            }
-             else if (expiryDay < 0) {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.expiry_day_in_positive_no')}}</p>");
-                window.scrollTo(0, 0);
-                return false;
-            }
-            else {
-                jQuery("#data-table_processing").show();
-                storeImageData().then(IMG => {
-                requestId == '' ? (database.collection('gift_cards').doc(id).set({
-                    'id': id,
-                    'title': title,
-                    'message': message,
-                    'expiryDay': expiryDay,
-                    'isEnable': status,
-                    'image':IMG,
-                    'createdAt':createdAt
-                }).then(async function (result) {
-                    // Log activity for gift card creation
-                    await logActivity('gift_cards', 'created', 'Created new gift card: ' + title);
-                    
-                    jQuery("#data-table_processing").hide();
-                    $(".success_top").show();
-                    $(".success_top").html("");
-                    window.scrollTo(0, 0);
-                    window.location.href = '{{ route("gift-card.index")}}';
-                }).catch(function (error) {
-                    $(".error_top").show();
-                    $(".error_top").html("");
-                    $(".error_top").append("<p>" + error + "</p>");
-                })) :
-                    (database.collection('gift_cards').doc(id).update({
-                    'title': title,
-                    'message': message,
-                    'expiryDay': expiryDay,
-                    'isEnable': status,
-                    'image':IMG
-                    }).then(async function (result) {
-                        // Log activity for gift card update
-                        await logActivity('gift_cards', 'updated', 'Updated gift card: ' + title);
-                        
-                        jQuery("#data-table_processing").hide();
-                        $(".success_top").show();
-                        $(".success_top").html("");
-                        window.scrollTo(0, 0);
-                        window.location.href = '{{ route("gift-card.index")}}';
-                    }).catch(function (error) {
-                        $(".error_top").show();
-                        $(".error_top").html("");
-                        $(".error_top").append("<p>" + error + "</p>");
-                    }));
-                }).catch(err => {
-                jQuery("#overlay").hide();
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>" + err + "</p>");
-                window.scrollTo(0, 0);
+
+            $(".edit-form-btn").click(function(){
+                $(".success_top").hide(); $(".error_top").hide();
+                var title = $("#title").val();
+                var message = $('#message').val();
+                var expiryDay = $('#expiry').val();
+                var isEnable = $("#status").is(":checked");
+                if (!title || !message || !expiryDay || parseInt(expiryDay) <= 0) {
+                    $(".error_top").show().html('<p>Please fill all required fields correctly</p>');
+                    window.scrollTo(0,0); return;
+                }
+                var fd = new FormData();
+                fd.append('title', title);
+                fd.append('message', message);
+                fd.append('expiryDay', expiryDay);
+                fd.append('isEnable', isEnable ? 1 : 0);
+                var file = document.getElementById('gift_card_image').files[0];
+                if (file) fd.append('image', file);
+                var url = requestId ? ('{{ url('gift-card') }}' + '/' + requestId) : '{{ route('gift-card.store') }}';
+                $.ajax({ url: url, method: 'POST', data: fd, processData: false, contentType: false, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
+                    .done(function(){ window.location.href='{{ route('gift-card.index') }}'; })
+                    .fail(function(xhr){ $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.statusText+'</p>'); });
             });
-            }
         });
-    $("#gift_card_image").resizeImg({
-            callback: function (base64str) {
-                var val = $('#gift_card_image').val().toLowerCase();
-                var ext = val.split('.')[1];
-                var docName = val.split('fakepath')[1];
-                var filename = $('#gift_card_image').val().replace(/C:\\fakepath\\/i, '')
-                var timestamp = Number(new Date());
-                var filename = filename.split('.')[0] + "_" + timestamp + '.' + ext;
-                photo=base64str;
-                fileName=filename;
-                $(".gift_card_image").html('<span class="image-item"><img class="rounded" style="width:50px" src="' + base64str + '" alt="image" id="img"></span>');
-                $("#gift_card_image").val('');
-            }
-        });
-        async function storeImageData() {
-            var newPhoto = '';
-            try {
-                if (oldImagePath != "" && photo != oldImagePath) {
-                    var oldImageRef = await storage.refFromURL(oldImagePath);
-                    imageBucket = oldImageRef.bucket;
-                    var envBucket = "<?php echo env('FIREBASE_STORAGE_BUCKET'); ?>";
-                    if (imageBucket == envBucket) {
-                        await oldImageRef.delete().then(() => {
-                            console.log("Old file deleted!")
-                        }).catch((error) => {
-                            console.log("ERR File delete ===", error);
-                        });
-                    } else {
-                        console.log('Bucket not matched');  
-                    }
-                }
-                if (photo != oldImagePath) {
-                    photo = photo.replace(/^data:image\/[a-z]+;base64,/, "")
-                    var uploadTask = await storageRef.child(fileName).putString(photo, 'base64', { contentType: 'image/jpg' });
-                    var downloadURL = await uploadTask.ref.getDownloadURL();
-                    newPhoto = downloadURL;
-                    photo = downloadURL;
-                } else {
-                    newPhoto = photo;
-                }
-            } catch (error) {
-                console.log("ERR ===", error);
-            }
-            return newPhoto;
-        }
     </script>
     @endsection

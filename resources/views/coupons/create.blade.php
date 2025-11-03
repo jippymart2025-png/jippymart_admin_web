@@ -149,274 +149,53 @@
 <script src="{{ asset('js/bootstrap-datepicker.min.js') }}"></script>
 <link href="{{ asset('css/bootstrap-datepicker.min.css') }}" rel="stylesheet">
 <script>
-var database = firebase.firestore();
-var photo_coupon = "";
-var fileName="";
-var restaurantOwnerId = "";
-var restaurantOwnerOnline = false;
-    $(document).ready(function () {
-        console.log('🚀 Coupon create form - document ready');
-        jQuery("#data-table_processing").show();
-    // Function to load vendors based on coupon type
-    function loadVendorsByType(couponType) {
-        console.log('🚀 loadVendorsByType called with:', couponType);
-        $('#vendor_restaurant_select').empty();
+    $(document).ready(function(){
+        jQuery("#data-table_processing").hide();
+        $('#datetimepicker1 .date_picker').datepicker({ dateFormat: 'mm/dd/yyyy', startDate: new Date() });
 
-        // If no coupon type is selected, show only the placeholder
-        if (!couponType || couponType === '') {
-            console.log('📋 No coupon type selected - showing placeholder only');
-            $('#vendor_restaurant_select').append($('<option></option>')
-                .attr('value', '')
-                .text('{{trans("lang.select_restaurant")}}'));
-            return;
-        }
-
-        // Add "All [Type]" option when coupon type is selected
-        $('#vendor_restaurant_select').append($('<option></option>')
-            .attr('value', 'ALL')
-            .text('All ' + couponType + 's'));
-
-        var vendorQuery = database.collection('vendors');
-
-        // Filter by vendor type since coupon type is specified
-        console.log('🔍 Filtering vendors by vType:', couponType);
-        vendorQuery = vendorQuery.where('vType', '==', couponType);
-
-        vendorQuery.get().then(async function (snapshots) {
-            console.log('📊 Found', snapshots.docs.length, 'vendors');
-
-            // Sort vendors by title on client side
-            var vendors = [];
-            snapshots.docs.forEach((listval) => {
-                var data = listval.data();
-                vendors.push({id: listval.id, data: data});
+        var vendors = @json($vendors ?? []);
+        function renderVendors(type){
+            $('#vendor_restaurant_select').empty();
+            $('#vendor_restaurant_select').append($('<option></option>').attr('value','').text('{{trans('lang.select_restaurant')}}'));
+            if(type){ $('#vendor_restaurant_select').append($('<option></option>').attr('value','ALL').text('All ' + type + 's')); }
+            vendors.filter(v=>!type || (v.vType===type)).forEach(v=>{
+                $('#vendor_restaurant_select').append($('<option></option>').attr('value', v.id).text(v.title));
             });
-
-            // Sort by title
-            vendors.sort((a, b) => a.data.title.localeCompare(b.data.title));
-
-            // Add sorted vendors to dropdown
-            vendors.forEach((vendor) => {
-                console.log('🏪 Vendor:', vendor.data.title, 'vType:', vendor.data.vType);
-                $('#vendor_restaurant_select').append($('<option></option>')
-                    .attr('value', vendor.id)
-                    .text(vendor.data.title));
-            });
-        }).catch(function(error) {
-            console.error('❌ Error loading vendors:', error);
-        });
-    }
-
-    // Load all vendors initially
-    loadVendorsByType('');
-
-    // Debug: Check what vendors exist in the database
-    console.log('🔍 Checking all vendors in database...');
-    database.collection('vendors').get().then(function(snapshots) {
-        console.log('📊 Total vendors in database:', snapshots.docs.length);
-        snapshots.docs.forEach(function(doc) {
-            var data = doc.data();
-            console.log('🏪 Vendor:', data.title, 'vType:', data.vType, 'ID:', doc.id);
-        });
-    });
-
-    $(function () {
-        $('#datetimepicker1 .date_picker').datepicker({
-            dateFormat: 'mm/dd/yyyy',
-            startDate: new Date(),
-        });
-
-        // Add event handler for coupon type change after DOM is ready
-        $('#coupon_type').on('change', function() {
-            var selectedCouponType = $(this).val();
-            console.log('🎯 Coupon type changed to:', selectedCouponType);
-            console.log('🔄 Reloading vendors with type:', selectedCouponType);
-            loadVendorsByType(selectedCouponType);
-        });
-
-        // Debug: Check if element exists
-        console.log('🔍 Coupon type element found:', $('#coupon_type').length);
-    });
-    var id = "<?php echo uniqid();?>";
-    var resturant = "<?php echo $id; ?>";
-    var resturant_id = '';
-    if (resturant == '') {
-        $("#vendor_restaurant_select").change(function () {
-            resturant_id = $(this).val();
-        });
-    } else {
-        resturant_id = "<?php echo $id; ?>";
-    }
-    $(".save-form-btn").click(function () {
-    var code = $(".coupon_code").val();
-    var discount = $(".coupon_discount").val();
-    var description = $(".coupon_description").val();
-    var item_value = parseInt($(".item_value").val(), 10);
-    var usage_limit = parseInt($(".usage_limit").val(), 10);
-    var couponType = $("#coupon_type").val();
-
-    // Item value validation
-    if (isNaN(item_value) || item_value < 0) {
-        $(".error_top").show();
-        $(".error_top").html("");
-        $(".error_top").append("<p>Item Value must be a valid number (0 or greater).</p>");
-        $(".item_value").focus();
-        window.scrollTo(0, 0);
-        return;
-    }
-
-    // Usage limit validation (hidden field - default to 0 for unlimited)
-    if (isNaN(usage_limit) || usage_limit < 0) {
-        usage_limit = 0; // Default to unlimited if invalid
-    }
-    var newdate = new Date($(".date_picker").val());
-    var expiresAt = new Date(newdate.setHours(23, 59, 59, 999));
-    var isEnabled = $(".coupon_enabled").is(":checked");
-    var isPublic = $(".coupon_public").is(":checked");
-    var discountType = $("#coupon_discount_type").val() || 'Fix Price'; // Default fallback
-    if (discountType === 'Percentage' && (discount < 0 || discount > 100)) {
-        $(".error_top").show();
-        $(".error_top").html("");
-        $(".error_top").append("<p>{{trans('Percentage discount is between 0% and 100%.')}}</p>");
-        window.scrollTo(0, 0);
-        return;
-    }
-
-    // Validate coupon type is selected
-    if (!couponType || couponType === '') {
-        $(".error_top").show();
-        $(".error_top").html("");
-        $(".error_top").append("<p>Please select a coupon type (Restaurant or Mart).</p>");
-        window.scrollTo(0, 0);
-        return;
-    }
-
-    // Validate restaurant/vendor selection - get current selected value
-    var currentRestaurantId = $("#vendor_restaurant_select option:selected").val();
-    if (!currentRestaurantId || currentRestaurantId === '') {
-        $(".error_top").show();
-        $(".error_top").html("");
-        $(".error_top").append("<p>Please select a restaurant/vendor or choose 'All " + couponType + "s'.</p>");
-        window.scrollTo(0, 0);
-        return;
-    }
-    database.collection('coupons').where('code', '==', code).get().then(function (snapshot) {
-        if (snapshot.size > 0) {
-            $(".error_top").show();
-            $(".error_top").html("");
-            $(".error_top").append("<p>{{trans('Code is already exist try another one!')}}</p>");
-            window.scrollTo(0, 0);
         }
-        else {
-            if (code == '') {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.enter_coupon_code_error')}}</p>");
-                window.scrollTo(0, 0);
-            } else if (discount == '') {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.enter_coupon_discount_error')}}</p>");
-                window.scrollTo(0, 0);
-            } else if (discountType == '') {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.select_coupon_discountType_error')}}</p>");
-                window.scrollTo(0, 0);
-            } else if (newdate == 'Invalid Date') {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.select_coupon_expdate_error')}}</p>");
-                window.scrollTo(0, 0);
-            } else {
-                jQuery("#data-table_processing").show();
-                storeImageData().then(IMG => {
-                    database.collection('coupons').doc(id).set({
-                        'code': code,
-                        'description': description,
-                        'discount': discount,
-                        'expiresAt': expiresAt,
-                        'isEnabled': isEnabled,
-                        'id': id,
-                        'discountType': discountType,
-                        'image': IMG,
-                        'resturant_id': currentRestaurantId,
-                        'cType': couponType,
-                        'isPublic': isPublic,
-                        'item_value': item_value,
-                        'usageLimit': usage_limit || 0,
-                        'usedCount': 0,
-                        'usedBy': []
-                    }).then(async function (result) {
-                        console.log('✅ Coupon saved successfully, now logging activity...');
+        renderVendors('');
+        $('#coupon_type').on('change', function(){ renderVendors($(this).val()); });
 
-                        // Log the activity with error handling and await the Promise
-                        try {
-                            if (typeof logActivity === 'function') {
-                                console.log('🔍 Calling logActivity for coupon creation...');
-                                await logActivity('coupons', 'created', 'Created new coupon: ' + code);
-                                console.log('✅ Activity logging completed successfully');
-                            } else {
-                                console.error('❌ logActivity function is not available');
-                            }
-                        } catch (error) {
-                            console.error('❌ Error calling logActivity:', error);
-                        }
-
-                        if (resturant) {
-                            jQuery("#data-table_processing").hide();
-                            window.location.href = "{{route('restaurants.coupons',$id)}}";
-                        } else {
-                            jQuery("#data-table_processing").hide();
-                            window.location.href = '{{ route("coupons")}}';
-                        }
-                    }).catch(function (error) {
-                        jQuery("#data-table_processing").hide();
-                        $(".error_top").show();
-                        $(".error_top").html("");
-                        $(".error_top").append("<p>" + error + "</p>");
-                    });
-                });
+        $(".save-form-btn").click(function(){
+            $(".error_top").hide().html('');
+            var code = $(".coupon_code").val();
+            var discount = $(".coupon_discount").val();
+            var description = $(".coupon_description").val();
+            var item_value = parseInt($(".item_value").val()||'0',10);
+            var usage_limit = parseInt($(".usage_limit").val()||'0',10);
+            var couponType = $("#coupon_type").val();
+            var selectedVendor = $('#vendor_restaurant_select').val();
+            var newdate = new Date($(".date_picker").val());
+            if(!code || !discount || !couponType || !selectedVendor || newdate.toString()==='Invalid Date'){
+                $(".error_top").show().html('<p>Please fill required fields correctly</p>'); window.scrollTo(0,0); return;
             }
-        }
+            var expiresAt = (newdate.getMonth()+1).toString().padStart(2,'0') + '/' + newdate.getDate().toString().padStart(2,'0') + '/' + newdate.getFullYear() + ' 11:59:59 PM';
+            var fd = new FormData();
+            fd.append('code', code);
+            fd.append('discount', discount);
+            fd.append('discountType', $("#coupon_discount_type").val()||'Fix Price');
+            fd.append('description', description);
+            fd.append('item_value', item_value);
+            fd.append('usageLimit', usage_limit);
+            fd.append('expiresAt', expiresAt);
+            fd.append('cType', couponType);
+            fd.append('resturant_id', selectedVendor);
+            fd.append('isPublic', $(".coupon_public").is(":checked") ? 1 : 0);
+            fd.append('isEnabled', $(".coupon_enabled").is(":checked") ? 1 : 0);
+            var f = document.querySelector('input[type=file]')?.files?.[0]; if(f){ fd.append('image', f); }
+            $.ajax({ url: '{{ route('coupons.store') }}', method: 'POST', data: fd, processData: false, contentType: false, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
+                .done(function(){ window.location.href = '{{ $id ? route('restaurants.coupons',$id) : route('coupons') }}'; })
+                .fail(function(xhr){ $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>'); window.scrollTo(0,0); });
+        });
     });
-});
-    jQuery("#data-table_processing").hide();
-});
-var storageRef = firebase.storage().ref('images');
-async function storeImageData() {
-        var newPhoto = '';
-        try {
-            photo_coupon = photo_coupon.replace(/^data:image\/[a-z]+;base64,/, "")
-            var uploadTask = await storageRef.child(fileName).putString(photo_coupon, 'base64', {contentType: 'image/jpg'});
-            var downloadURL = await uploadTask.ref.getDownloadURL();
-            newPhoto = downloadURL;
-            photo_coupon = downloadURL;
-        } catch (error) {
-            console.log("ERR ===", error);
-        }
-        return newPhoto;
-    }
-function handleFileSelect(evt) {
-    var f = evt.target.files[0];
-    var reader = new FileReader();
-    reader.onload = (function (theFile) {
-        return function (e) {
-            var filePayload = e.target.result;
-            var hash = CryptoJS.SHA256(Math.random() + CryptoJS.SHA256(filePayload));
-            var val = f.name;
-            var ext = val.split('.')[1];
-            var docName = val.split('fakepath')[1];
-            var filename = (f.name).replace(/C:\\fakepath\\/i, '')
-            var timestamp = Number(new Date());
-            var filename = filename.split('.')[0] + "_" + timestamp + '.' + ext;
-            photo_coupon = filePayload;
-            fileName=filename;
-            $(".coupon_image").empty();
-            $(".coupon_image").append('<img class="rounded" style="width:50px" src="' + photo_coupon + '" alt="image">');
-        };
-    })(f);
-    reader.readAsDataURL(f);
-}
 </script>
 @endsection

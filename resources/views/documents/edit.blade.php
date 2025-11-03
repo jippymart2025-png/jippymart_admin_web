@@ -75,238 +75,36 @@
 <script src="{{ asset('js/bootstrap-datepicker.min.js') }}"></script>
 <link href="{{ asset('css/bootstrap-datepicker.min.css') }}" rel="stylesheet">
 <script>
-    var database = firebase.firestore();
     var id = "{{$id}}";
-    var ref = database.collection('documents').where('id', '==', id);
-    var alldriver = database.collection('users').where('role', '==', 'driver');
-    var allvendor = database.collection('users').where('role', '==', 'vendor');
-    var enableFront = false;
-    var enableBack = false;
-    var enableOneDoc = true;
-    $(document).ready(function () {
+    $(document).ready(function(){
         jQuery("#data-table_processing").show();
-        ref.get().then(async function (snapshot) {
-            var data = snapshot.docs[0].data();
-            $(".title").val(data.title);
-            $("#document_for").val(data.type);
-            if (data.enable) {
-                $(".enable").prop("checked", true);
-            }
-            if (data.frontSide) {
-                enableFront = true;
-                $(".frontside").prop("checked", true);
-            }
-            if (data.backSide) {
-                enableBack = true;
-                $(".backside").prop("checked", true);
-            }
+        $.get('{{ url('documents/json') }}/' + id, function(data){
+            $(".title").val(data.title || '');
+            $("#document_for").val(data.type || 'restaurant');
+            if (data.enable) $(".enable").prop('checked', true);
+            if (data.frontSide) $(".frontside").prop('checked', true);
+            if (data.backSide) $(".backside").prop('checked', true);
             jQuery("#data-table_processing").hide();
-        })
-        $(".edit-setting-btn").click(async function () {
+        });
+        $(".edit-setting-btn").click(function(){
+            $(".error_top").hide().html('');
             var title = $(".title").val();
             var document_for = $("#document_for").val();
             var isEnabled = $(".enable").is(":checked");
-            await database.collection('documents').where('type', '==', document_for).where('enable', '==', true).get().then(async function (snapshot) {
-                if (snapshot.docs.length == 1 && isEnabled == false) {
-                    enableOneDoc = false;
-                }
-            });
             var forntend = $(".frontside").is(":checked");
-            if (forntend == true && enableFront == false) {
-                await updateDocumentStatus('frontImage');
-            }
             var backend = $(".backside").is(":checked");
-            if (backend == true && enableBack == false) {
-                await updateDocumentStatus('backImage');
-            }
-            if (title == '') {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.document_title_help')}}</p>");
-                window.scrollTo(0, 0);
-                return;
-            } else if (enableOneDoc == false) {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans("lang.atleast_one_document_should_enable")}}</p>");
-                window.scrollTo(0, 0);
-                return;
-            } else if (forntend == false && backend == false) {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.check_atleast_one_side_of_document_from_front_or_back')}}</p>");
-                window.scrollTo(0, 0);
-                return;
-            }
-            else {
-                jQuery("#data-table_processing").show();
-                database.collection('documents').doc(id).update({
-                    'title': title,
-                    'type': document_for,
-                    'frontSide': forntend,
-                    'backSide': backend,
-                    'enable': isEnabled,
-                    'id': id,
-                }).then(async function (result) {
-                    await logActivity('documents', 'updated', 'Updated document: ' + title + ' for ' + document_for);
-                    if (document_for == 'driver') {
-                        var enableDocIds = await getDocId('driver');
-                        await alldriver.get().then(async function (snapshotsdriver) {
-                            if (snapshotsdriver.docs.length > 0) {
-                                var verification = await userDocVerification(enableDocIds, snapshotsdriver);
-                                if (verification) {
-                                    jQuery("#data-table_processing").hide();
-                                    window.location.href = '{{ route("documents")}}';
-                                }
-                            }
-                        })
-                    } else {
-                        var enableDocIds = await getDocId('restaurant');
-                        await allvendor.get().then(async function (snapshotsvendor) {
-                            if (snapshotsvendor.docs.length > 0) {
-                                var verification = await userDocVerification(enableDocIds, snapshotsvendor);
-                                if (verification) {
-                                    jQuery("#data-table_processing").hide();
-                                    window.location.href = '{{ route("documents")}}';
-                                }
-                            }
-                        })
-                    }
-                });
-            }
+            if(!title){ $(".error_top").show().html('<p>{{trans('lang.document_title_help')}}</p>'); window.scrollTo(0,0); return; }
+            if(!forntend && !backend){ $(".error_top").show().html('<p>{{trans('lang.check_atleast_one_side_of_document_from_front_or_back')}}</p>'); window.scrollTo(0,0); return; }
+            var fd = new FormData();
+            fd.append('title', title);
+            fd.append('type', document_for);
+            fd.append('enable', isEnabled ? 1 : 0);
+            fd.append('frontSide', forntend ? 1 : 0);
+            fd.append('backSide', backend ? 1 : 0);
+            $.ajax({ url: '{{ url('documents') }}' + '/' + id, method: 'POST', data: fd, processData: false, contentType: false, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
+                .done(function(){ window.location.href = '{{ route('documents') }}'; })
+                .fail(function(xhr){ $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>'); window.scrollTo(0,0); });
         });
     });
-    async function updateDocumentStatus(documentSide) {
-        var document_for = $("#document_for").val();
-        await database.collection('documents_verify').where('type','==',document_for).get().then(async function (snapshot) {
-            const updatePromises = snapshot.docs.map(async listval => {
-                var data = listval.data();
-                var docArray = data.documents;
-                if (Array.isArray(docArray)) {
-                    var updatedArray = data.documents.map(doc => {
-                        if (doc.hasOwnProperty(documentSide) && ((documentSide === 'frontImage') ? doc.frontImage !== '' : doc.backImage !== '')) {
-                            return doc; // Return the doc unchanged if the condition is met
-                        } else {
-                            return (doc.documentId === id) ? { ...doc, status: 'pending' } : doc; // Update status if documentId matches
-                        }
-                    });
-                    await database.collection('documents_verify').doc(data.id).update({ 'documents': updatedArray });
-                } else {
-                    console.log('data.documents is not an array for document ID: ' + listval.id);
-                }
-            });
-            await Promise.all(updatePromises);
-        })
-    }
-    async function getDocId(type) {
-        var enableDocIds = [];
-        await database.collection('documents').where('type', '==', type).where('enable', "==", true).get().then(async function (snapshots) {
-            await snapshots.forEach((doc) => {
-                enableDocIds.push(doc.data().id);
-            });
-        });
-        return enableDocIds;
-    }
-    async function userDocVerification(enableDocIds, snapshots) {
-        var isCompleted = false;
-        var document_for = $("#document_for").val()
-        await Promise.all(snapshots.docs.map(async (driver) => {
-            await database.collection('documents_verify').doc(driver.id).get().then(async function (docrefSnapshot) {
-                if (docrefSnapshot.data() && docrefSnapshot.data().documents.length > 0) {
-                    var driverDocId = await docrefSnapshot.data().documents.filter((doc) => doc.status == 'approved').map((docData) => docData.documentId);
-                    if (driverDocId.length >= enableDocIds.length) {
-                        if (document_for == 'driver') {
-                            // Check if this is a new driver verification (first time getting verified)
-                            await database.collection('users').doc(driver.id).get().then(async function(userSnapshot) {
-                                var userData = userSnapshot.data();
-                                var isNewDriverVerification = !userData.hasOwnProperty('hasReceivedInitialCredit') || userData.hasReceivedInitialCredit !== true;
-                                
-                                // Update driver verification status
-                                await database.collection('users').doc(driver.id).update({ 
-                                    'isDocumentVerify': true, 
-                                    'isActive': true 
-                                });
-                                
-                                // Add 1000 wallet credit for new drivers
-                                if (isNewDriverVerification) {
-                                    await addInitialWalletCredit(driver.id, userData);
-                                }
-                            });
-                        } else {
-                            await database.collection('users').doc(driver.id).update({ 'isDocumentVerify': true });
-                        }
-                    } else {
-                        await enableDocIds.forEach(async (docId) => {
-                            if (!driverDocId.includes(docId)) {
-                                if (document_for == 'driver') {
-                                    await database.collection('users').doc(driver.id).update({ 'isDocumentVerify': false, isActive: false });
-                                } else {
-                                    await database.collection('users').doc(driver.id).update({ 'isDocumentVerify': false });
-                                }
-                            }
-                        });
-                    }
-                } else {
-                    if (document_for == 'driver') {
-                        await database.collection('users').doc(driver.id).update({ 'isDocumentVerify': false, isActive: false });
-                    } else {
-                        await database.collection('users').doc(driver.id).update({ 'isDocumentVerify': false });
-                    }
-                }
-            });
-            isCompleted = true;
-        }));
-        return isCompleted;
-    }
-
-    // Function to add initial wallet credit for new drivers
-    async function addInitialWalletCredit(driverId, userData) {
-        try {
-            var date = firebase.firestore.FieldValue.serverTimestamp();
-            var initialCreditAmount = 1000;
-            
-            // Get current wallet amount
-            var currentWalletAmount = 0;
-            if (userData.hasOwnProperty('wallet_amount') && !isNaN(userData.wallet_amount) && userData.wallet_amount != null) {
-                currentWalletAmount = userData.wallet_amount;
-            }
-            
-            var newWalletAmount = parseFloat(currentWalletAmount) + parseFloat(initialCreditAmount);
-            
-            // Update user wallet amount and mark as having received initial credit
-            await database.collection('users').doc(driverId).update({
-                'wallet_amount': newWalletAmount,
-                'hasReceivedInitialCredit': true,
-                'initialCreditDate': date
-            });
-            
-            // Create wallet transaction record
-            var walletTransactionId = database.collection('temp').doc().id;
-            await database.collection('wallet').doc(walletTransactionId).set({
-                'amount': parseFloat(initialCreditAmount),
-                'date': date,
-                'id': walletTransactionId,
-                'isTopUp': true,
-                'order_id': null,
-                'payment_method': 'Admin Credit',
-                'payment_status': 'success',
-                'transactionUser': 'driver',
-                'note': 'Initial driver registration bonus - Document verification completed',
-                'user_id': driverId,
-                'admin_credit_type': 'initial_driver_bonus'
-            });
-            
-            console.log('✅ Initial wallet credit of 1000 added for new driver:', driverId);
-            
-            // Log activity if function exists
-            if (typeof logActivity === 'function') {
-                var driverName = (userData.firstName || '') + ' ' + (userData.lastName || 'Unknown');
-                await logActivity('drivers', 'initial_wallet_credit', 'Added initial 1000 wallet credit for new driver: ' + driverName);
-            }
-            
-        } catch (error) {
-            console.error('❌ Error adding initial wallet credit for driver:', driverId, error);
-        }
-    }
 </script>
 @endsection
