@@ -769,7 +769,6 @@ Route::middleware(['permission:banners,setting.banners.delete'])->group(function
     Route::delete('/banners/{id}', [App\Http\Controllers\MenuItemController::class, 'destroy'])->name('menu-items.destroy');
     Route::delete('/banners/', [App\Http\Controllers\MenuItemController::class, 'bulkDelete'])->name('menu-items.bulkDelete');
 });
-
 // Mart Banner Items Routes
 Route::middleware(['permission:mart_banners,mart_banners'])->group(function () {
     Route::get('/mart-banners', [App\Http\Controllers\MartBannerController::class, 'index'])->name('mart.banners');
