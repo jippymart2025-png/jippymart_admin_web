@@ -600,35 +600,70 @@ Route::prefix('settings')->group(function () {
     Route::middleware(['permission:currency,currencies.create'])->group(function () {
         Route::get('/currencies/create', [App\Http\Controllers\CurrencyController::class, 'create'])->name('currencies.create');
     });
+    // Currencies Data (DataTables)
+    Route::middleware(['permission:currency,currencies'])->group(function () {
+        Route::get('/currencies/data', [App\Http\Controllers\CurrencyController::class, 'data'])->name('currencies.data');
+    });
+    // Currencies store/update
+    Route::middleware(['permission:currency,currencies.create'])->group(function () {
+        Route::post('/currencies', [App\Http\Controllers\CurrencyController::class, 'store'])->name('currencies.store');
+    });
+    Route::middleware(['permission:currency,currencies.edit'])->group(function () {
+        Route::post('/currencies/{id}', [App\Http\Controllers\CurrencyController::class, 'update'])->name('currencies.update');
+        Route::post('/currencies/{id}/toggle', [App\Http\Controllers\CurrencyController::class, 'toggle'])->name('currencies.toggle');
+    });
+    Route::middleware(['permission:currency,currency.delete'])->group(function () {
+        Route::get('/currencies/delete/{id}', [App\Http\Controllers\CurrencyController::class, 'delete'])->name('currencies.delete');
+    });
     Route::middleware(['permission:global-setting,settings.app.globals'])->group(function () {
         Route::get('app/globals', [App\Http\Controllers\SettingsController::class, 'globals'])->name('settings.app.globals');
     });
     Route::middleware(['permission:admin-commission,settings.app.adminCommission'])->group(function () {
         Route::get('app/adminCommission', [App\Http\Controllers\SettingsController::class, 'adminCommission'])->name('settings.app.adminCommission');
+        // SQL endpoints for Admin Commission
+        Route::get('api/admin-commission/settings', [App\Http\Controllers\SettingsController::class, 'getAdminCommissionSettings'])->name('api.admin-commission.settings');
+        Route::post('api/admin-commission/update', [App\Http\Controllers\SettingsController::class, 'updateAdminCommission'])->name('api.admin-commission.update');
+        Route::post('api/admin-commission/subscription-toggle', [App\Http\Controllers\SettingsController::class, 'updateSubscriptionModel'])->name('api.admin-commission.subscription');
+        Route::get('api/admin-commission/vendors', [App\Http\Controllers\SettingsController::class, 'getVendorsForCommission'])->name('api.admin-commission.vendors');
+        Route::post('api/admin-commission/bulk-update', [App\Http\Controllers\SettingsController::class, 'bulkUpdateVendorCommission'])->name('api.admin-commission.bulk-update');
     });
     Route::middleware(['permission:radius,settings.app.radiusConfiguration'])->group(function () {
         Route::get('app/radiusConfiguration', [App\Http\Controllers\SettingsController::class, 'radiosConfiguration'])->name('settings.app.radiusConfiguration');
+        Route::get('api/radius/settings', [App\Http\Controllers\SettingsController::class, 'getRadiusSettings'])->name('api.radius.settings');
+        Route::post('api/radius/settings', [App\Http\Controllers\SettingsController::class, 'updateRadiusSettings'])->name('api.radius.update');
     });
     Route::middleware(['permission:dinein,settings.app.bookTable'])->group(function () {
         Route::get('app/bookTable', [App\Http\Controllers\SettingsController::class, 'bookTable'])->name('settings.app.bookTable');
+        Route::get('api/dine-in/settings', [App\Http\Controllers\SettingsController::class, 'getDineInSettings'])->name('api.dinein.settings');
+        Route::post('api/dine-in/settings', [App\Http\Controllers\SettingsController::class, 'updateDineInSettings'])->name('api.dinein.update');
     });
     Route::middleware(['permission:delivery-charge,settings.app.deliveryCharge'])->group(function () {
         Route::get('app/deliveryCharge', [App\Http\Controllers\SettingsController::class, 'deliveryCharge'])->name('settings.app.deliveryCharge');
+        Route::get('api/delivery-charge/settings', [App\Http\Controllers\SettingsController::class, 'getDeliveryChargeSettings'])->name('api.deliveryCharge.settings');
+        Route::post('api/delivery-charge/settings', [App\Http\Controllers\SettingsController::class, 'updateDeliveryChargeSettings'])->name('api.deliveryCharge.update');
     });
     Route::middleware(['permission:mart-settings,settings.app.martSettings'])->group(function () {
         Route::get('app/martSettings', [App\Http\Controllers\SettingsController::class, 'martSettings'])->name('settings.app.martSettings');
+        Route::get('api/mart-settings/settings', [App\Http\Controllers\SettingsController::class, 'getMartSettingsData'])->name('api.mart.settings');
+        Route::post('api/mart-settings/settings', [App\Http\Controllers\SettingsController::class, 'updateMartSettingsData'])->name('api.mart.update');
     });
     Route::middleware(['permission:surge-rules,settings.app.surgeRules'])->group(function () {
         Route::get('app/surgeRules', [App\Http\Controllers\SettingsController::class, 'surgeRules'])->name('settings.app.surgeRules');
+        Route::get('api/surge-rules/settings', [App\Http\Controllers\SettingsController::class, 'getSurgeRulesData'])->name('api.surge.settings');
+        Route::post('api/surge-rules/settings', [App\Http\Controllers\SettingsController::class, 'updateSurgeRulesData'])->name('api.surge.update');
     });
     Route::middleware(['permission:app-settings,settings.app.appSettings'])->group(function () {
         Route::get('app/appSettings', [App\Http\Controllers\SettingsController::class, 'appSettings'])->name('settings.app.appSettings');
+        Route::get('api/app-settings/settings', [App\Http\Controllers\SettingsController::class, 'getAppSettingsData'])->name('api.app.settings');
+        Route::post('api/app-settings/settings', [App\Http\Controllers\SettingsController::class, 'updateAppSettingsData'])->name('api.app.update');
     });
     // Route::middleware(['permission:price-setting,settings.app.priceSetting'])->group(function () {
     Route::get('app/priceSetting', [App\Http\Controllers\SettingsController::class, 'priceSetting'])->name('settings.app.priceSettings');
     // });
     Route::middleware(['permission:document-verification,settings.app.documentVerification'])->group(function () {
         Route::get('app/documentVerification', [App\Http\Controllers\SettingsController::class, 'documentVerification'])->name('settings.app.documentVerification');
+        Route::get('api/document-verification/settings', [App\Http\Controllers\SettingsController::class, 'getDocumentVerificationSettings'])->name('api.documentVerification.settings');
+        Route::post('api/document-verification/settings', [App\Http\Controllers\SettingsController::class, 'updateDocumentVerificationSettings'])->name('api.documentVerification.update');
     });
 
     // Zone Bonus Settings Routes

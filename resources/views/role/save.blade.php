@@ -1203,6 +1203,42 @@
                                                 </tr>
                                                 <tr>
                                                     <td>
+                                                        <strong>{{ trans('lang.app_settings') }}</strong>
+                                                    </td>
+                                                    <td>
+                                                        <input type="checkbox" id="app-settings"
+                                                            value="settings.app.appSettings" name="app-settings[]"
+                                                            class="permission">
+                                                        <label class=" control-label2"
+                                                            for="app-settings">{{ trans('lang.update') }}</label>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td>
+                                                        <strong>{{ trans('lang.mart_settings') }}</strong>
+                                                    </td>
+                                                    <td>
+                                                        <input type="checkbox" id="mart-settings"
+                                                            value="settings.app.martSettings" name="mart-settings[]"
+                                                            class="permission">
+                                                        <label class=" control-label2"
+                                                            for="mart-settings">{{ trans('lang.update') }}</label>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td>
+                                                        <strong>{{ trans('lang.surge_rules') }}</strong>
+                                                    </td>
+                                                    <td>
+                                                        <input type="checkbox" id="surge-rules"
+                                                            value="settings.app.surgeRules" name="surge-rules[]"
+                                                            class="permission">
+                                                        <label class=" control-label2"
+                                                            for="surge-rules">{{ trans('lang.update') }}</label>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td>
                                                         <strong>{{ trans('lang.documentVerification') }}</strong>
                                                     </td>
                                                     <td>

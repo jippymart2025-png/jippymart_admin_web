@@ -126,84 +126,31 @@
         @endsection
         @section('scripts')
             <script>
-                var database = firebase.firestore();
-                var ref_app_settings = database.collection('app_settings').doc("version_info");
+                const appGetUrl = "{{ route('api.app.settings') }}";
+                const appPostUrl = "{{ route('api.app.update') }}";
 
                 $(document).ready(function() {
                     jQuery("#data-table_processing").show();
 
-                    ref_app_settings.get().then(async function(snapshots_charge) {
-                        var appSettings = snapshots_charge.data();
-
-                        // Create default doc if not exists
-                        if (!appSettings) {
-                            await database.collection('app_settings').doc('version_info').set({
-                                force_update: true,
-                                latest_version: "2.3.4",
-                                min_required_version: "1.0.0",
-                                update_message: "Please Update",
-                                update_url: "https://play.google.com/store/apps/details?id=com.jippymart.customer",
-                                android_version: "2.3.4",
-                                android_build: "Android build number",
-                                android_update_url: "update_url",
-                                ios_version: "latest_version",
-                                ios_build: "iOS build number",
-                                ios_update_url: "update_url",
-                                last_updated: firebase.firestore.FieldValue.serverTimestamp(),
-                                created_at: firebase.firestore.FieldValue.serverTimestamp()
-                            });
-                            appSettings = {};
-                        }
-
+                    $.get(appGetUrl, function(appSettings){
                         jQuery("#data-table_processing").hide();
-
                         try {
-                            // Force update checkbox
-                            if (appSettings.force_update) {
-                                $("#force_update").prop('checked', true);
-                            }
-
-                            // Populate form fields
-                            if (appSettings.latest_version !== undefined && appSettings.latest_version !== null) {
-                                $("#latest_version").val(appSettings.latest_version);
-                            }
-                            if (appSettings.min_required_version !== undefined && appSettings.min_required_version !== null) {
-                                $("#min_required_version").val(appSettings.min_required_version);
-                            }
-                            if (appSettings.update_message !== undefined && appSettings.update_message !== null) {
-                                $("#update_message").val(appSettings.update_message);
-                            }
-                            if (appSettings.update_url !== undefined && appSettings.update_url !== null) {
-                                $("#update_url").val(appSettings.update_url);
-                            }
-                            if (appSettings.android_version !== undefined && appSettings.android_version !== null) {
-                                $("#android_version").val(appSettings.android_version);
-                            }
-                            if (appSettings.android_build !== undefined && appSettings.android_build !== null) {
-                                $("#android_build").val(appSettings.android_build);
-                            }
-                            if (appSettings.android_update_url !== undefined && appSettings.android_update_url !== null) {
-                                $("#android_update_url").val(appSettings.android_update_url);
-                            }
-                            if (appSettings.ios_version !== undefined && appSettings.ios_version !== null) {
-                                $("#ios_version").val(appSettings.ios_version);
-                            }
-                            if (appSettings.ios_build !== undefined && appSettings.ios_build !== null) {
-                                $("#ios_build").val(appSettings.ios_build);
-                            }
-                            if (appSettings.ios_update_url !== undefined && appSettings.ios_update_url !== null) {
-                                $("#ios_update_url").val(appSettings.ios_update_url);
-                            }
-                            if (appSettings.last_updated !== undefined && appSettings.last_updated !== null) {
-                                // Convert timestamp to readable date
-                                var lastUpdated = appSettings.last_updated.toDate();
-                                var formattedDate = lastUpdated.toLocaleString();
-                                $("#last_updated_display").val(formattedDate);
+                            if (appSettings.force_update) { $("#force_update").prop('checked', true); }
+                            $("#latest_version").val(appSettings.latest_version || '');
+                            $("#min_required_version").val(appSettings.min_required_version || '');
+                            $("#update_message").val(appSettings.update_message || '');
+                            $("#update_url").val(appSettings.update_url || '');
+                            $("#android_version").val(appSettings.android_version || '');
+                            $("#android_build").val(appSettings.android_build || '');
+                            $("#android_update_url").val(appSettings.android_update_url || '');
+                            $("#ios_version").val(appSettings.ios_version || '');
+                            $("#ios_build").val(appSettings.ios_build || '');
+                            $("#ios_update_url").val(appSettings.ios_update_url || '');
+                            if (appSettings.last_updated) {
+                                $("#last_updated_display").val(appSettings.last_updated);
                                 $("#last_updated").val(appSettings.last_updated);
                             }
-                        } catch(error) {
-                            console.error('Error loading app settings:', error);
-                        }
+                        } catch(error) { console.error('Error loading app settings:', error); }
                     });
 
                     $(".edit-setting-btn").click(function() {
@@ -290,34 +237,31 @@
                             return;
                         }
 
-                        var dataToUpdate = {
-                            force_update: forceUpdate,
-                            latest_version: latestVersion,
-                            min_required_version: minRequiredVersion,
-                            update_message: updateMessage,
-                            update_url: updateUrl,
-                            android_version: androidVersion,
-                            android_build: androidBuild,
-                            android_update_url: androidUpdateUrl,
-                            ios_version: iosVersion,
-                            ios_build: iosBuild,
-                            ios_update_url: iosUpdateUrl,
-                            last_updated: firebase.firestore.FieldValue.serverTimestamp()
-                        };
-
-                        // Update the document
-                        ref_app_settings.update(dataToUpdate)
-                            .then(function(result) {
-                                $(".error_top").hide();
-                                alert('App settings updated successfully!');
-                                window.location.href = '{{ url("settings/app/appSettings")}}';
-                            })
-                            .catch(function(error) {
-                                console.error('Error updating app settings:', error);
-                                $(".error_top").show();
-                                $(".error_top").html("<p>Error updating settings. Please try again.</p>");
-                                window.scrollTo(0, 0);
-                            });
+                        $.post({
+                            url: appPostUrl,
+                            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                            data: {
+                                force_update: forceUpdate ? 1 : 0,
+                                latest_version: latestVersion,
+                                min_required_version: minRequiredVersion,
+                                update_message: updateMessage,
+                                update_url: updateUrl,
+                                android_version: androidVersion,
+                                android_build: androidBuild,
+                                android_update_url: androidUpdateUrl,
+                                ios_version: iosVersion,
+                                ios_build: iosBuild,
+                                ios_update_url: iosUpdateUrl
+                            }
+                        }).done(function(){
+                            $(".error_top").hide();
+                            alert('App settings updated successfully!');
+                            window.location.href = '{{ url("settings/app/appSettings")}}';
+                        }).fail(function(){
+                            $(".error_top").show();
+                            $(".error_top").html("<p>Error updating settings. Please try again.</p>");
+                            window.scrollTo(0, 0);
+                        });
                     });
                 });
             </script>

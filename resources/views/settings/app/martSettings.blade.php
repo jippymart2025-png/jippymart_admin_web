@@ -72,61 +72,23 @@
         @endsection
         @section('scripts')
             <script>
-                var database = firebase.firestore();
-                var ref_delivery_settings = database.collection('mart_settings').doc("delivery_settings");
+                const martGetUrl = "{{ route('api.mart.settings') }}";
+                const martPostUrl = "{{ route('api.mart.update') }}";
 
                 $(document).ready(function() {
                     jQuery("#data-table_processing").show();
 
-                    ref_delivery_settings.get().then(async function(snapshots_charge) {
-                        var deliverySettings = snapshots_charge.data();
-
-                        // Create default doc if not exists
-                        if (!deliverySettings) {
-                            await database.collection('mart_settings').doc('delivery_settings').set({
-                                is_active: true,
-                                free_delivery_distance_km: 3,
-                                free_delivery_threshold: 199,
-                                per_km_charge_above_free_distance: 7,
-                                min_order_value: 99,
-                                min_order_message: "Min Item value is ₹99",
-                                delivery_promotion_text: "Daily",
-                                created_at: firebase.firestore.FieldValue.serverTimestamp(),
-                                updated_at: firebase.firestore.FieldValue.serverTimestamp()
-                            });
-                            deliverySettings = {};
-                        }
-
+                    $.get(martGetUrl, function(deliverySettings){
                         jQuery("#data-table_processing").hide();
-
                         try {
-                            // Active checkbox
-                            if (deliverySettings.is_active) {
-                                $("#is_active").prop('checked', true);
-                            }
-
-                            // Populate form fields
-                            if (deliverySettings.free_delivery_distance_km !== undefined && deliverySettings.free_delivery_distance_km !== null) {
-                                $("#free_delivery_distance_km").val(deliverySettings.free_delivery_distance_km);
-                            }
-                            if (deliverySettings.free_delivery_threshold !== undefined && deliverySettings.free_delivery_threshold !== null) {
-                                $("#free_delivery_threshold").val(deliverySettings.free_delivery_threshold);
-                            }
-                            if (deliverySettings.per_km_charge_above_free_distance !== undefined && deliverySettings.per_km_charge_above_free_distance !== null) {
-                                $("#per_km_charge_above_free_distance").val(deliverySettings.per_km_charge_above_free_distance);
-                            }
-                            if (deliverySettings.min_order_value !== undefined && deliverySettings.min_order_value !== null) {
-                                $("#min_order_value").val(deliverySettings.min_order_value);
-                            }
-                            if (deliverySettings.min_order_message !== undefined && deliverySettings.min_order_message !== null) {
-                                $("#min_order_message").val(deliverySettings.min_order_message);
-                            }
-                            if (deliverySettings.delivery_promotion_text !== undefined && deliverySettings.delivery_promotion_text !== null) {
-                                $("#delivery_promotion_text").val(deliverySettings.delivery_promotion_text);
-                            }
-                        } catch(error) {
-                            console.error('Error loading delivery settings:', error);
-                        }
+                            if (deliverySettings.is_active) { $("#is_active").prop('checked', true); }
+                            $("#free_delivery_distance_km").val(deliverySettings.free_delivery_distance_km || '');
+                            $("#free_delivery_threshold").val(deliverySettings.free_delivery_threshold || '');
+                            $("#per_km_charge_above_free_distance").val(deliverySettings.per_km_charge_above_free_distance || '');
+                            $("#min_order_value").val(deliverySettings.min_order_value || '');
+                            $("#min_order_message").val(deliverySettings.min_order_message || '');
+                            $("#delivery_promotion_text").val(deliverySettings.delivery_promotion_text || '');
+                        } catch(error) { console.error('Error loading delivery settings:', error); }
                     });
 
                     $(".edit-setting-btn").click(function() {
@@ -181,30 +143,27 @@
                             return;
                         }
 
-                        var dataToUpdate = {
-                            is_active: isActive,
-                            free_delivery_distance_km: parseInt(freeDeliveryDistanceKm),
-                            free_delivery_threshold: parseInt(freeDeliveryThreshold),
-                            per_km_charge_above_free_distance: parseInt(perKmChargeAboveFreeDistance),
-                            min_order_value: parseInt(minOrderValue),
-                            min_order_message: minOrderMessage,
-                            delivery_promotion_text: deliveryPromotionText,
-                            updated_at: firebase.firestore.FieldValue.serverTimestamp()
-                        };
-
-                        // Update the document
-                        ref_delivery_settings.update(dataToUpdate)
-                            .then(function(result) {
-                                $(".error_top").hide();
-                                alert('Delivery settings updated successfully!');
-                                window.location.href = '{{ url("settings/app/martSettings")}}';
-                            })
-                            .catch(function(error) {
-                                console.error('Error updating delivery settings:', error);
-                                $(".error_top").show();
-                                $(".error_top").html("<p>Error updating settings. Please try again.</p>");
-                                window.scrollTo(0, 0);
-                            });
+                        $.post({
+                            url: martPostUrl,
+                            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                            data: {
+                                is_active: isActive ? 1 : 0,
+                                free_delivery_distance_km: parseInt(freeDeliveryDistanceKm),
+                                free_delivery_threshold: parseInt(freeDeliveryThreshold),
+                                per_km_charge_above_free_distance: parseInt(perKmChargeAboveFreeDistance),
+                                min_order_value: parseInt(minOrderValue),
+                                min_order_message: minOrderMessage,
+                                delivery_promotion_text: deliveryPromotionText
+                            }
+                        }).done(function(){
+                            $(".error_top").hide();
+                            alert('Delivery settings updated successfully!');
+                            window.location.href = '{{ url("settings/app/martSettings")}}';
+                        }).fail(function(){
+                            $(".error_top").show();
+                            $(".error_top").html("<p>Error updating settings. Please try again.</p>");
+                            window.scrollTo(0, 0);
+                        });
                     });
                 });
             </script>

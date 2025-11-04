@@ -76,39 +76,20 @@
                 }
             </style>
             <script>
-                var database = firebase.firestore();
-                var ref_surge_rules = database.collection('surge_rules').doc('surge_settings');
+                const surgeGetUrl = "{{ route('api.surge.settings') }}";
+                const surgePostUrl = "{{ route('api.surge.update') }}";
 
                 $(document).ready(function() {
                     jQuery("#data-table_processing").show();
 
-                    ref_surge_rules.get().then(async function(snapshot) {
-                        var surgeRules = snapshot.data();
-
-                        // Create default doc if not exists
-                        if (!surgeRules) {
-                            await ref_surge_rules.set({
-                                bad_weather: 15,
-                                rain: 20,
-                                summer: 10,
-                                admin_surge_fee: 0,
-                                created_at: firebase.firestore.FieldValue.serverTimestamp(),
-                                updated_at: firebase.firestore.FieldValue.serverTimestamp()
-                            });
-                            surgeRules = { bad_weather: 15, rain: 20, summer: 10, admin_surge_fee: 0 };
-                        }
-
+                    $.get(surgeGetUrl, function(surgeRules){
                         jQuery("#data-table_processing").hide();
-
                         try {
-                            // Populate form fields
                             $("#bad_weather").val(surgeRules.bad_weather ?? '');
                             $("#rain").val(surgeRules.rain ?? '');
                             $("#summer").val(surgeRules.summer ?? '');
                             $("#admin_surge_fee").val(surgeRules.admin_surge_fee ?? '');
-                        } catch (error) {
-                            console.error('Error loading surge rules:', error);
-                        }
+                        } catch (error) { console.error('Error loading surge rules:', error); }
                     });
 
                     $(".edit-setting-btn").click(function() {
@@ -145,16 +126,16 @@
                             return;
                         }
 
-                        var dataToUpdate = {
-                            bad_weather: badWeatherNum,
-                            rain: rainNum,
-                            summer: summerNum,
-                            admin_surge_fee: adminSurgeFeeNum,
-                            updated_at: firebase.firestore.FieldValue.serverTimestamp()
-                        };
-
-                        ref_surge_rules.update(dataToUpdate, { merge: true })
-                            .then(function() {
+                        $.post({
+                            url: surgePostUrl,
+                            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                            data: {
+                                bad_weather: badWeatherNum,
+                                rain: rainNum,
+                                summer: summerNum,
+                                admin_surge_fee: adminSurgeFeeNum
+                            }
+                        }).done(function(){
                                 $(".error_top").hide();
                                 // Show success message instead of redirecting
                                 $(".error_top").removeClass('alert-danger').addClass('alert-success').show().html("<p><i class='fa fa-check'></i> Surge rules updated successfully!</p>");
@@ -164,9 +145,7 @@
                                 setTimeout(function() {
                                     $(".error_top").hide();
                                 }, 3000);
-                            })
-                            .catch(function(error) {
-                                console.error('Error updating surge rules:', error);
+                            }).fail(function() {
                                 $(".error_top").removeClass('alert-success').addClass('alert-danger').show().html("<p><i class='fa fa-exclamation-triangle'></i> Error updating rules. Please try again.</p>");
                                 window.scrollTo(0, 0);
                             });

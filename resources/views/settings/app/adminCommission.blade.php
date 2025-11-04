@@ -117,10 +117,11 @@
   @endsection
   @section('scripts')
   <script>
-    var database=firebase.firestore();
-    var ref=database.collection('settings').doc("AdminCommission");
-    var ref_deliverycharge=database.collection('settings').doc("DeliveryCharge");
-    var restaurant=database.collection('settings').doc("restaurant");
+    const settingsFetchUrl = "{{ route('api.admin-commission.settings') }}";
+    const settingsUpdateUrl = "{{ route('api.admin-commission.update') }}";
+    const subscriptionToggleUrl = "{{ route('api.admin-commission.subscription') }}";
+    const vendorsAjaxUrl = "{{ route('api.admin-commission.vendors') }}";
+    const bulkUpdateUrl = "{{ route('api.admin-commission.bulk-update') }}";
     var photo="";
     $(document).ready(function() {
       $('#food_restaurant_type').on('change',function() {
@@ -130,56 +131,39 @@
             placeholder: "{{trans('lang.select_restaurant')}}",
             allowClear: true,
             width: '100%',
-            dropdownAutoWidth: true
+            dropdownAutoWidth: true,
+            ajax: {
+              url: vendorsAjaxUrl,
+              dataType: 'json',
+              delay: 250,
+              data: function (params) { return { q: params.term || '' }; },
+              processResults: function (data) { return data; },
+              cache: true
+            },
+            minimumInputLength: 0
           });
         } else {
           $('#food_restaurant').hide();
           $('#food_restaurant').select2('destroy');
         }
       });
-      database.collection('vendors').orderBy('title','asc').get().then(async function(snapshots) {
-        snapshots.docs.forEach((listval) => {
-          var data=listval.data();
-          $('#food_restaurant').append($("<option></option>")
-            .attr("value",data.id)
-            .text(data.title));
-        })
-      });
       jQuery("#data-table_processing").show();
-      ref.get().then(async function(snapshots) {
-        var adminCommissionSettings=snapshots.data();
-        if(adminCommissionSettings==undefined) {
-          database.collection('settings').doc('AdminCommission').set({});
-        }
+      $.get(settingsFetchUrl, function(resp){
         try {
-          if(adminCommissionSettings.isEnabled) {
-            $("#enable_commission").prop('checked',true);
-            $(".admin_commision_detail").show();
+          if(resp && resp.adminCommission){
+            if(resp.adminCommission.isEnabled){
+              $("#enable_commission").prop('checked',true);
+              $(".admin_commision_detail").show();
+            }
+            $(".commission_fix").val(resp.adminCommission.fix_commission || '');
+            $("#commission_type").val(resp.adminCommission.commissionType || 'Percent');
           }
-          $(".commission_fix").val(adminCommissionSettings.fix_commission);
-          $("#commission_type").val(adminCommissionSettings.commissionType);
-        } catch(error) {
-        }
-        jQuery("#data-table_processing").hide();
-      })
-      ref_deliverycharge.get().then(async function(snapshots_charge) {
-        var deliveryChargeSettings=snapshots_charge.data();
-        jQuery("#data-table_processing").hide();
-        $(".deliveryCharge").val(deliveryChargeSettings.amount);
-      })
-      restaurant.get().then(async function(snapshots) {
-        var restaurantdata=snapshots.data();
-        if(restaurantdata==undefined) {
-          database.collection('settings').doc('restaurant').set({});
-        }
-        try {
-          if(restaurantdata.subscription_model) {
-            $("#subscription_model").prop('checked',true);
+          if(resp && resp.restaurant && resp.restaurant.subscription_model){
+            $("#subscription_model").prop('checked', true);
           }
-        } catch(error) {
-        }
+        }catch(e){}
         jQuery("#data-table_processing").hide();
-      })
+      });
 
       $(document).on("click","input[name='subscription_model']",function(e) {
 
@@ -189,73 +173,51 @@
           $(this).prop("checked",!subscription_model);
           return;
         }
-        database.collection('settings').doc("restaurant").update({
-          'subscription_model': subscription_model,
-        }).then(async function(result) {
-          // Log the activity
-          await logActivity('business_model', 'updated', 'Updated subscription model: ' + (subscription_model ? 'Enabled' : 'Disabled'));
-          if(subscription_model) {
-            Swal.fire('Update Complete!',`Subscription model enabled.`,'success');
-          } else {
-            Swal.fire('Update Complete!',`Subscription model disabled.`,'success');
-          }
+        $.post({
+          url: subscriptionToggleUrl,
+          headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+          data: { subscription_model: subscription_model ? 1 : 0 }
+        }).done(function(){
+          Swal.fire('Update Complete!', subscription_model ? `Subscription model enabled.` : `Subscription model disabled.`, 'success');
+        }).fail(function(){
+          Swal.fire('Error','Failed to update subscription model.','error');
         });
       });
       $(".edit-setting-btn").click(function() {
         var checkboxValue=$("#enable_commission").is(":checked");
         var commission_type=$("#commission_type").val();
-        var howmuch=parseInt($(".commission_fix").val());
-        database.collection('settings').doc("AdminCommission").update({'isEnabled': checkboxValue,'fix_commission': howmuch,'commissionType': commission_type}).then(async function(result) {
-          // Log the activity
-          await logActivity('business_model', 'updated', 'Updated commission settings: ' + (checkboxValue ? 'Enabled' : 'Disabled') + ', Type: ' + commission_type + ', Amount: ' + howmuch);
+        var howmuch=($(".commission_fix").val() || '').toString();
+        $.post({
+          url: settingsUpdateUrl,
+          headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+          data: { isEnabled: checkboxValue ? 1 : 0, commissionType: commission_type, fix_commission: howmuch }
+        }).done(function(){
           Swal.fire('Update Complete!',`Successfully updated.`,'success');
+        }).fail(function(){
+          Swal.fire('Error','Failed to update settings.','error');
         });
       })
       $('#bulk_update_btn').on('click',async function() {
         const commissionType=$("#bulk_commission_type").val();
         const fixCommission=$(".bulk_commission_fix").val().toString();
-        const isEnabled=true;
-        const adminCommission={"commissionType": commissionType,"fix_commission": fixCommission,"isEnabled": isEnabled};
 
         const foodRestaurantType=$('#food_restaurant_type').val();
         const selectedIds=$('#food_restaurant').val()||[];
 
         try {
-          let total=0,processed=0;
-
-          const getVendors=async () => {
-            if(foodRestaurantType==='all') {
-              return await database.collection('vendors').get();
-            } else {
-              const chunks=[];
-              for(let i=0;i<selectedIds.length;i+=10) {
-                chunks.push(selectedIds.slice(i,i+10));
-              }
-              const snapshots=await Promise.all(chunks.map(chunk =>
-                database.collection('vendors').where('id','in',chunk).get()
-              ));
-              return snapshots.flatMap(snapshot => snapshot.docs);
-            }
-          };
-
-          const vendorsSnapshot=await getVendors();
-          total=vendorsSnapshot.length;
-
-          if(total>0) {
-            Swal.fire({title: 'Processing...',text: '0% Complete',allowOutsideClick: false,onBeforeOpen: () => Swal.showLoading()});
-
-            for(const doc of vendorsSnapshot) {
-              await doc.ref.update({"adminCommission": adminCommission});
-              processed++;
-              Swal.update({text: `${Math.round((processed/total)*100)}% Complete`});
-            }
-
-            // Log the bulk update activity
-            await logActivity('business_model', 'bulk_updated', 'Bulk updated commission for ' + total + ' vendors: Type=' + commissionType + ', Amount=' + fixCommission);
-            Swal.fire('Update Complete!',`${total} vendors updated.`,'success');
-          } else {
-            Swal.fire('No vendors selected or found!','','warning');
-          }
+          Swal.fire({title: 'Processing...',text: 'Starting',allowOutsideClick: false, didOpen: () => Swal.showLoading()});
+          const scope = (foodRestaurantType === 'custom') ? 'custom' : 'all';
+          $.post({
+            url: bulkUpdateUrl,
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+            data: { scope: scope, vendor_ids: selectedIds, commissionType: commissionType, fix_commission: fixCommission }
+          }).done(function(resp){
+            Swal.close();
+            Swal.fire('Update Complete!', (resp && resp.updated ? resp.updated : 0) + ' vendors updated.', 'success');
+          }).fail(function(xhr){
+            Swal.close();
+            Swal.fire('Error', xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Failed to update vendors.', 'error');
+          });
         } catch(error) {
           Swal.fire('Error','An error occurred during the update process.','error');
           console.error('Error:',error);

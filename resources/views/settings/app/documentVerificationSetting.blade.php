@@ -37,15 +37,11 @@
  @endsection
 @section('scripts')
 <script>
-    var database = firebase.firestore();
-    var ref = database.collection('settings').doc("document_verification_settings");
+    const docVerifyGetUrl = "{{ route('api.documentVerification.settings') }}";
+    const docVerifyPostUrl = "{{ route('api.documentVerification.update') }}";
     $(document).ready(function(){
         jQuery("#data-table_processing").show();
-        ref.get().then( async function(snapshots){
-          var documentVerification = snapshots.data();
-          if(documentVerification == undefined){
-              database.collection('settings').doc('document_verification_settings').set({});
-          }
+        $.get(docVerifyGetUrl, function(documentVerification){
           try{
               if(documentVerification.isDriverVerification){
                   $("#enable_driver").prop('checked',true);
@@ -53,18 +49,21 @@
               if (documentVerification.isRestaurantVerification) {
                   $("#enable_restaurant").prop('checked', true);
               }
-          }catch (error){
-          }
+          }catch (error){}
           jQuery("#data-table_processing").hide();
-        })
+        });
         $(".edit-setting-btn").click(function(){
           var enableDriver = $("#enable_driver").is(":checked");
           var enableRestaurant = $("#enable_restaurant").is(":checked");
-        database.collection('settings').doc("document_verification_settings").update({'isDriverVerification':enableDriver,'isRestaurantVerification':enableRestaurant}).then(async function(result) {
-            // Log the activity
-            await logActivity('settings', 'updated', 'Updated document verification settings: Driver=' + (enableDriver ? 'Enabled' : 'Disabled') + ', Restaurant=' + (enableRestaurant ? 'Enabled' : 'Disabled'));
+          $.post({
+            url: docVerifyPostUrl,
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+            data: { isDriverVerification: enableDriver ? 1 : 0, isRestaurantVerification: enableRestaurant ? 1 : 0 }
+          }).done(function(){
             window.location.href = '{{ url("settings/app/documentVerification")}}';
-                });
+          }).fail(function(){
+            alert('Failed to update settings');
+          });
         })
     })
 </script>
