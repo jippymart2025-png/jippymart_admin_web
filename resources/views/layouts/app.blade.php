@@ -555,7 +555,7 @@
 <script src="{{ asset('assets/plugins/select2/dist/js/select2.min.js') }}"></script>
 <!-- Firebase 9.0.0 will be loaded in individual pages to avoid conflicts -->
 <script src="https://unpkg.com/geofirestore/dist/geofirestore.js"></script>
-<script src="https://cdn.firebase.com/libs/geofire/5.0.1/geofire.min.js"></script>
+{{--<script src="https://cdn.firebase.com/libs/geofire/5.0.1/geofire.min.js"></script>--}}
 <script src="{{ asset('js/chosen.jquery.js') }}"></script>
 <script src="{{ asset('js/bootstrap-tagsinput.js') }}"></script>
 <script src="{{ asset('js/crypto-js.js') }}"></script>

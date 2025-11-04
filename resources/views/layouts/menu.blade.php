@@ -274,14 +274,14 @@
                 </a>
             </li>
         @endif
-        @if(in_array('catering', $role_has_permission))
-            <li class="nav-subtitle"><span class="nav-subtitle-span">Catering</span></li>
-            <li><a class="waves-effect waves-dark" href="{!! url('catering') !!}" aria-expanded="false">
-                    <i class="mdi mdi-silverware-fork-knife"></i>
-                    <span class="hide-menu">Catering Requests</span>
-                </a>
-            </li>
-        @endif
+{{--        @if(in_array('catering', $role_has_permission))--}}
+{{--            <li class="nav-subtitle"><span class="nav-subtitle-span">Catering</span></li>--}}
+{{--            <li><a class="waves-effect waves-dark" href="{!! url('catering') !!}" aria-expanded="false">--}}
+{{--                    <i class="mdi mdi-silverware-fork-knife"></i>--}}
+{{--                    <span class="hide-menu">Catering Requests</span>--}}
+{{--                </a>--}}
+{{--            </li>--}}
+{{--        @endif--}}
         @if(in_array('gift-cards', $role_has_permission))
             <li><a class="waves-effect waves-dark" href="{!! url('gift-card') !!}" aria-expanded="false">
                     <i class="mdi mdi-wallet-giftcard"></i>
