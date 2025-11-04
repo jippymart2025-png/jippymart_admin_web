@@ -431,8 +431,14 @@
         $(document).ready(function() {
             jQuery("#data-table_processing").show();
 
+            console.log('Loading global settings from SQL...');
+            
             // Load global settings from SQL
             $.get("{{ route('api.global.settings') }}", function(globalSettings) {
+                console.log('Global settings received:', globalSettings);
+                console.log('Application Name:', globalSettings.applicationName);
+                console.log('Meta Title:', globalSettings.meta_title);
+                
                 try {
                     $(".application_name").val(globalSettings.applicationName || '');
                     $(".meta_title").val(globalSettings.meta_title || '');
@@ -442,6 +448,8 @@
                     $("#customer_app_color").val(globalSettings.app_customer_color || '#f47825');
                     $("#driver_app_color").val(globalSettings.app_driver_color || '#c33737');
                     $("#restaurant_app_color").val(globalSettings.app_restaurant_color || '#e7463c');
+                    
+                    console.log('Fields populated successfully');
 
                     if (globalSettings.appLogo != "" && globalSettings.appLogo != null) {
                         photo = globalSettings.appLogo;
@@ -474,11 +482,16 @@
                     }
                 } catch (error) {
                     console.error('Error loading global settings:', error);
+                    console.error('Error stack:', error.stack);
                 }
                 jQuery("#data-table_processing").hide();
-            }).fail(function() {
+            }).fail(function(xhr, status, error) {
                 jQuery("#data-table_processing").hide();
                 console.error('Failed to load global settings from SQL');
+                console.error('Status:', status);
+                console.error('Error:', error);
+                console.error('Response:', xhr.responseText);
+                console.error('HTTP Status:', xhr.status);
             });
 
             // Load all other settings from SQL
@@ -541,22 +554,6 @@
                 if (data.referralAmount) {
                     $(".referral_amount").val(data.referralAmount);
                 }
-                // Email settings
-                if (data.fromName) {
-                    $('.from_name').val(data.fromName);
-                }
-                if (data.host) {
-                    $('.host').val(data.host);
-                }
-                if (data.port) {
-                    $('.port').val(data.port);
-                }
-                if (data.userName) {
-                    $('.user_name').val(data.userName);
-                }
-                if (data.password) {
-                    $('.password').val(data.password);
-                }
                 // Version data
                 if (data.app_version) {
                     $('.app_version').val(data.app_version);
@@ -576,16 +573,44 @@
                 if (data.storeUrl) {
                     $('#store_url').val(data.storeUrl);
                 }
-                // Contact us
-                if (data.Address) {
-                    $('.contact_us_address').val(data.Address);
+            });
+
+            // Load Contact Us settings from ContactUs document
+            $.get("{{ route('api.contactus.settings') }}", function(contactData) {
+                console.log('Contact Us settings loaded:', contactData);
+                if (contactData.Address) {
+                    $('.contact_us_address').val(contactData.Address);
                 }
-                if (data.Email) {
-                    $('.contact_us_email').val(data.Email);
+                if (contactData.Email) {
+                    $('.contact_us_email').val(contactData.Email);
                 }
-                if (data.Phone) {
-                    $('.contact_us_phone').val(data.Phone);
+                if (contactData.Phone) {
+                    $('.contact_us_phone').val(contactData.Phone);
                 }
+            }).fail(function() {
+                console.error('Failed to load contact us settings');
+            });
+
+            // Load email settings from emailSetting document
+            $.get("{{ route('api.email.settings') }}", function(emailData) {
+                console.log('Email settings loaded:', emailData);
+                if (emailData.fromName) {
+                    $('.from_name').val(emailData.fromName);
+                }
+                if (emailData.host) {
+                    $('.host').val(emailData.host);
+                }
+                if (emailData.port) {
+                    $('.port').val(emailData.port);
+                }
+                if (emailData.userName) {
+                    $('.user_name').val(emailData.userName);
+                }
+                if (emailData.password) {
+                    $('.password').val(emailData.password);
+                }
+            }).fail(function() {
+                console.error('Failed to load email settings');
             });
 
             // Load story settings
@@ -607,7 +632,8 @@
                     $("#app_homepage_theme_2").prop('checked', true);
                 }
             });
-        });
+        }
+        
         $(".edit-setting-btn").click(function() {
             var website_color = $("#website_color").val();
             var admin_color = $("#admin_color").val();
@@ -727,16 +753,7 @@
                                 isSelfDelivery: enable_self_delivery,
                                 order_ringtone_url: ringtone,
                                 placeHolderImage: IMG.placeholderphoto,
-                                Address: contact_us_address,
-                                Email: contact_us_email,
-                                Phone: contact_us_phone,
-                                app_version: app_version,
-                                web_version: web_version,
-                                appStoreLink: app_store_link,
-                                googlePlayLink: play_store_link,
-                                websiteUrl: website_url,
-                                storeUrl: store_url,
-                                auto_approve_restaurant: auto_approve_restaurant,
+                                minimumAmountToDeposit: "50",
                                 minimumDepositToRideAccept: minimumDepositToRideAccept,
                                 minimumAmountToWithdrawal: minimumAmountToWithdrawal,
                                 selectedMapType: selectedMapType,
@@ -775,9 +792,29 @@
                                     }
                                 });
 
-                                // Update email settings in global settings
+                                // Update Contact Us settings in ContactUs document
                                 $.ajax({
-                                    url: "{{ route('api.global.update') }}",
+                                    url: "{{ route('api.contactus.update') }}",
+                                    method: 'POST',
+                                    headers: {
+                                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                                    },
+                                    data: {
+                                        Address: contact_us_address,
+                                        Email: contact_us_email,
+                                        Phone: contact_us_phone
+                                    },
+                                    success: function() {
+                                        console.log('Contact Us settings saved successfully');
+                                    },
+                                    error: function(xhr) {
+                                        console.error('Error saving contact us settings:', xhr.responseText);
+                                    }
+                                });
+
+                                // Update email settings in emailSetting document
+                                $.ajax({
+                                    url: "{{ route('api.email.update') }}",
                                     method: 'POST',
                                     headers: {
                                         'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
@@ -792,22 +829,44 @@
                                         mailEncryptionType: "ssl"
                                     },
                                     success: function() {
-                                        jQuery("#data-table_processing").hide();
-                                        // Refresh custom ringtone in notification system if available
-                                        if (typeof window.orderNotificationSystem !== 'undefined' && window.orderNotificationSystem.refreshCustomRingtone) {
-                                            window.orderNotificationSystem.refreshCustomRingtone();
-                                            console.log('Custom ringtone refreshed after settings save');
-                                        }
-                                        window.location.href = '{{ url('settings/app/globals') }}';
+                                        console.log('Email settings saved successfully to emailSetting document');
                                     },
                                     error: function(xhr) {
-                                        jQuery("#data-table_processing").hide();
-                                        $(".error_top").show();
-                                        $(".error_top").html("");
-                                        $(".error_top").append("<p>Error saving email settings</p>");
-                                        window.scrollTo(0, 0);
+                                        console.error('Error saving email settings:', xhr.responseText);
                                     }
                                 });
+
+                                // Update Version settings in Version document
+                                $.ajax({
+                                    url: "{{ route('api.version.update') }}",
+                                    method: 'POST',
+                                    headers: {
+                                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                                    },
+                                    data: {
+                                        web_version: web_version,
+                                        app_version: app_version,
+                                        appStoreLink: app_store_link,
+                                        googlePlayLink: play_store_link,
+                                        websiteUrl: website_url,
+                                        storeUrl: store_url
+                                    },
+                                    success: function() {
+                                        console.log('Version settings saved successfully');
+                                    },
+                                    error: function(xhr) {
+                                        console.error('Error saving version settings:', xhr.responseText);
+                                    }
+                                });
+
+                                // Final success after all settings saved
+                                jQuery("#data-table_processing").hide();
+                                // Refresh custom ringtone in notification system if available
+                                if (typeof window.orderNotificationSystem !== 'undefined' && window.orderNotificationSystem.refreshCustomRingtone) {
+                                    window.orderNotificationSystem.refreshCustomRingtone();
+                                    console.log('Custom ringtone refreshed after settings save');
+                                }
+                                window.location.href = '{{ url('settings/app/globals') }}';
                             },
                             error: function(xhr) {
                                 jQuery("#data-table_processing").hide();
@@ -1127,22 +1186,33 @@
         }
     </script>
     <script>
-        // First, define a global callback function
+        // Map initialization - only if map element exists on page
         function initMap() {
             try {
+                // Check if map element exists
+                const mapElement = document.getElementById('map');
+                if (!mapElement) {
+                    console.log('Map element not found on this page - skipping map initialization');
+                    return;
+                }
+                
                 // Verify if Google Maps is loaded
                 if (!google || !google.maps) {
                     throw new Error('Google Maps API not loaded');
                 }
 
+                // Default coordinates (can be customized)
+                const defaultLat = 15.9129;  // India center
+                const defaultLng = 79.7400;  // India center
+                
                 const mapOptions = {
                     zoom: 10,
-                    center: { lat: YOUR_DEFAULT_LAT, lng: YOUR_DEFAULT_LNG },
+                    center: { lat: defaultLat, lng: defaultLng },
                     mapTypeId: google.maps.MapTypeId.ROADMAP,
                     gestureHandling: 'greedy'
                 };
 
-                const map = new google.maps.Map(document.getElementById('map'), mapOptions);
+                const map = new google.maps.Map(mapElement, mapOptions);
 
                 // Add error handling listener
                 google.maps.event.addListenerOnce(map, 'error', function(e) {
@@ -1158,8 +1228,11 @@
 
         function handleMapError() {
             // Show user-friendly error message
-            document.getElementById('map').innerHTML =
-                '<div class="alert alert-danger">Unable to load map. Please try again later.</div>';
+            const mapElement = document.getElementById('map');
+            if (mapElement) {
+                mapElement.innerHTML =
+                    '<div class="alert alert-danger">Unable to load map. Please check your Google Maps API key in settings.</div>';
+            }
         }
 
         // Handle authentication failures
@@ -1168,5 +1241,34 @@
             handleMapError();
         };
     </script>
-    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places&callback=initMap&loading=async" async defer></script>
+    <script>
+        // Load Google Maps API key dynamically from settings (only if needed)
+        $(document).ready(function() {
+            // Check if map element exists before loading Google Maps
+            const mapElement = document.getElementById('map');
+            if (!mapElement) {
+                console.log('No map element on this page - skipping Google Maps API');
+                return;
+            }
+            
+            $.get("{{ route('api.global.settings') }}", function(settings) {
+                const apiKey = settings.map_key || '';
+                if (apiKey) {
+                    const script = document.createElement('script');
+                    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initMap&loading=async`;
+                    script.async = true;
+                    script.defer = true;
+                    script.onerror = function() {
+                        console.error('Failed to load Google Maps script');
+                        handleMapError();
+                    };
+                    document.body.appendChild(script);
+                } else {
+                    console.warn('Google Maps API key not configured in settings');
+                }
+            }).fail(function() {
+                console.error('Failed to load map settings');
+            });
+        });
+    </script>
 @endsection

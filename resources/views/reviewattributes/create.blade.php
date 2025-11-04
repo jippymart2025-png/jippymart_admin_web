@@ -43,35 +43,52 @@
 @endsection
 @section('scripts')
 <script>
-var database = firebase.firestore();
-var ref = database.collection('review_attributes');
-var photo = "";
-var id_reviewattribute = "<?php echo uniqid();?>";
-var reviewattribute_length = 1;
-$(document).ready(function () {
-    jQuery("#data-table_processing").show();
-    ref.get().then(async function (snapshots) {
-        reviewattribute_length = snapshots.size + 1;
+    // SQL mode - no Firebase
+    $(document).ready(function () {
+        console.log('Create review attribute - SQL mode');
         jQuery("#data-table_processing").hide();
-    })
-    $(".save-form-btn").click(function () {
-        var title = $(".cat-name").val();
-        $(".error_top").hide();
-        $(".error_top").html("");
-        if (title == '') {
-            $(".error_top").show();
-            $(".error_top").append("<p>{{trans('lang.enter_reviewattribute_title_error')}}</p>");
-            window.scrollTo(0, 0);
-        } else {
-            jQuery("#data-table_processing").show();
-            database.collection('review_attributes').doc(id_reviewattribute).set({
-                'id': id_reviewattribute,
-                'title': title
-            }).then(function (result) {
-                window.location.href = '{{ route("reviewattributes")}}';
-            });
-        }
+        
+        $(".save-form-btn").click(function () {
+            var title = $(".cat-name").val();
+            $(".error_top").hide();
+            $(".error_top").html("");
+            
+            if (title == '') {
+                $(".error_top").show();
+                $(".error_top").append("<p>{{trans('lang.enter_reviewattribute_title_error')}}</p>");
+                window.scrollTo(0, 0);
+            } else {
+                jQuery("#data-table_processing").show();
+                
+                $.ajax({
+                    url: "{{ route('reviewattributes.store') }}",
+                    type: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                    },
+                    data: {
+                        title: title
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            console.log('Review attribute created successfully');
+                            window.location.href = '{{ route("reviewattributes")}}';
+                        } else {
+                            alert('Failed to create review attribute');
+                            jQuery("#data-table_processing").hide();
+                        }
+                    },
+                    error: function(xhr) {
+                        console.error('Create error:', xhr.responseText);
+                        jQuery("#data-table_processing").hide();
+                        $(".error_top").show();
+                        $(".error_top").html("");
+                        $(".error_top").append("<p>Error creating review attribute</p>");
+                        window.scrollTo(0, 0);
+                    }
+                });
+            }
+        });
     });
-});
 </script>
 @endsection

@@ -1012,27 +1012,218 @@ class SettingsController extends Controller
 
     /**
      * Global Settings
+     * Includes data from multiple settings documents for backward compatibility
      */
     public function getGlobalSettings()
     {
-        $rec = DB::table('settings')->where('document_name', 'globalSettings')->first();
-        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
-        return response()->json($fields ?: []);
+        try {
+            // Get main global settings
+            $globalRec = DB::table('settings')->where('document_name', 'globalSettings')->first();
+            $globalFields = $globalRec && $globalRec->fields ? json_decode($globalRec->fields, true) : [];
+
+            // Get driver nearby settings for additional fields
+            $driverRec = DB::table('settings')->where('document_name', 'DriverNearBy')->first();
+            $driverFields = $driverRec && $driverRec->fields ? json_decode($driverRec->fields, true) : [];
+
+            // Get restaurant settings
+            $restaurantRec = DB::table('settings')->where('document_name', 'restaurant')->first();
+            $restaurantFields = $restaurantRec && $restaurantRec->fields ? json_decode($restaurantRec->fields, true) : [];
+
+            // Get google map key
+            $mapRec = DB::table('settings')->where('document_name', 'googleMapKey')->first();
+            $mapFields = $mapRec && $mapRec->fields ? json_decode($mapRec->fields, true) : [];
+
+            // Get referral settings
+            $referralRec = DB::table('settings')->where('document_name', 'referral_amount')->first();
+            $referralFields = $referralRec && $referralRec->fields ? json_decode($referralRec->fields, true) : [];
+
+            // Get version settings
+            $versionRec = DB::table('settings')->where('document_name', 'Version')->first();
+            $versionFields = $versionRec && $versionRec->fields ? json_decode($versionRec->fields, true) : [];
+
+            // Get home page theme
+            $themeRec = DB::table('settings')->where('document_name', 'home_page_theme')->first();
+            $themeFields = $themeRec && $themeRec->fields ? json_decode($themeRec->fields, true) : [];
+
+            // Merge all settings for backward compatibility
+            $mergedSettings = array_merge(
+                $globalFields,
+                [
+                    // Driver settings
+                    'minimumDepositToRideAccept' => $driverFields['minimumDepositToRideAccept'] ?? '-1000',
+                    'minimumAmountToWithdrawal' => $driverFields['minimumAmountToWithdrawal'] ?? '50',
+                    'minimumAmountToDeposit' => $globalFields['minimumAmountToDeposit'] ?? '50',
+                    'mapType' => $driverFields['mapType'] ?? 'inappmap',
+                    'selectedMapType' => $driverFields['selectedMapType'] ?? 'google',
+                    'driverLocationUpdate' => $driverFields['driverLocationUpdate'] ?? '30',
+                    'singleOrderReceive' => $driverFields['singleOrderReceive'] ?? true,
+                    'auto_approve_driver' => $driverFields['auto_approve_driver'] ?? false,
+                    
+                    // Restaurant settings
+                    'auto_approve_restaurant' => $restaurantFields['auto_approve_restaurant'] ?? false,
+                    
+                    // Map key
+                    'map_key' => $mapFields['key'] ?? '',
+                    'placeHolderImage' => $mapFields['placeHolderImage'] ?? ($globalFields['placeHolderImage'] ?? ''),
+                    
+                    // Referral
+                    'referralAmount' => $referralFields['referralAmount'] ?? '25',
+                    
+                    // Version
+                    'web_version' => $versionFields['web_version'] ?? '2.5.0',
+                    'app_version' => $versionFields['app_version'] ?? '2.5.0',
+                    'appStoreLink' => $versionFields['appStoreLink'] ?? '',
+                    'googlePlayLink' => $versionFields['googlePlayLink'] ?? '',
+                    'websiteUrl' => $versionFields['websiteUrl'] ?? '',
+                    'storeUrl' => $versionFields['storeUrl'] ?? '',
+                    
+                    // Theme
+                    'theme' => $themeFields['theme'] ?? 'theme_1'
+                ]
+            );
+
+            return response()->json($mergedSettings);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching global settings: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Failed to fetch settings',
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function updateGlobalSettings(Request $request)
     {
-        $rec = DB::table('settings')->where('document_name', 'globalSettings')->first();
-        $existing = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        try {
+            $rec = DB::table('settings')->where('document_name', 'globalSettings')->first();
+            $existing = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
 
-        // Merge all input with existing
-        $fields = array_merge($existing, $request->except(['_token']));
+            // Fields that belong to globalSettings
+            $globalFields = [
+                'applicationName',
+                'meta_title',
+                'admin_panel_color',
+                'web_panel_color',
+                'store_panel_color',
+                'app_customer_color',
+                'app_driver_color',
+                'app_restaurant_color',
+                'appLogo',
+                'favicon',
+                'isEnableAdsFeature',
+                'isSelfDelivery',
+                'website_color',
+                'theme_color',
+                'theme_contrast',
+                'nav_color',
+                'shortDescription',
+                'order_ringtone_url',
+                'minimumAmountToDeposit'
+            ];
 
-        DB::table('settings')->updateOrInsert(
-            ['document_name' => 'globalSettings'],
-            ['document_name' => 'globalSettings', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
-        );
-        return response()->json(['success' => true]);
+            // Extract only global fields from request
+            $globalData = [];
+            foreach ($globalFields as $field) {
+                if ($request->has($field)) {
+                    $globalData[$field] = $request->input($field);
+                }
+            }
+
+            // Merge with existing
+            $fields = array_merge($existing, $globalData);
+
+            DB::table('settings')->updateOrInsert(
+                ['document_name' => 'globalSettings'],
+                ['document_name' => 'globalSettings', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+            );
+
+            // Update other settings if provided
+            
+            // Driver settings
+            $driverFields = [];
+            if ($request->has('minimumDepositToRideAccept')) $driverFields['minimumDepositToRideAccept'] = $request->input('minimumDepositToRideAccept');
+            if ($request->has('minimumAmountToWithdrawal')) $driverFields['minimumAmountToWithdrawal'] = $request->input('minimumAmountToWithdrawal');
+            if ($request->has('mapType')) $driverFields['mapType'] = $request->input('mapType');
+            if ($request->has('selectedMapType')) $driverFields['selectedMapType'] = $request->input('selectedMapType');
+            if ($request->has('driverLocationUpdate')) $driverFields['driverLocationUpdate'] = $request->input('driverLocationUpdate');
+            if ($request->has('singleOrderReceive')) $driverFields['singleOrderReceive'] = $request->boolean('singleOrderReceive');
+            if ($request->has('auto_approve_driver')) $driverFields['auto_approve_driver'] = $request->boolean('auto_approve_driver');
+            
+            if (!empty($driverFields)) {
+                $driverRec = DB::table('settings')->where('document_name', 'DriverNearBy')->first();
+                $existingDriver = $driverRec && $driverRec->fields ? json_decode($driverRec->fields, true) : [];
+                $mergedDriver = array_merge($existingDriver, $driverFields);
+                DB::table('settings')->updateOrInsert(
+                    ['document_name' => 'DriverNearBy'],
+                    ['fields' => json_encode($mergedDriver, JSON_UNESCAPED_UNICODE)]
+                );
+            }
+
+            // Restaurant settings
+            if ($request->has('auto_approve_restaurant')) {
+                $restaurantRec = DB::table('settings')->where('document_name', 'restaurant')->first();
+                $existingRestaurant = $restaurantRec && $restaurantRec->fields ? json_decode($restaurantRec->fields, true) : [];
+                $existingRestaurant['auto_approve_restaurant'] = $request->boolean('auto_approve_restaurant');
+                DB::table('settings')->updateOrInsert(
+                    ['document_name' => 'restaurant'],
+                    ['fields' => json_encode($existingRestaurant, JSON_UNESCAPED_UNICODE)]
+                );
+            }
+
+            // Map key
+            if ($request->has('map_key')) {
+                $mapRec = DB::table('settings')->where('document_name', 'googleMapKey')->first();
+                $existingMap = $mapRec && $mapRec->fields ? json_decode($mapRec->fields, true) : [];
+                $existingMap['key'] = $request->input('map_key');
+                DB::table('settings')->updateOrInsert(
+                    ['document_name' => 'googleMapKey'],
+                    ['fields' => json_encode($existingMap, JSON_UNESCAPED_UNICODE)]
+                );
+            }
+
+            // Referral amount
+            if ($request->has('referralAmount')) {
+                DB::table('settings')->updateOrInsert(
+                    ['document_name' => 'referral_amount'],
+                    ['fields' => json_encode(['referralAmount' => $request->input('referralAmount')], JSON_UNESCAPED_UNICODE)]
+                );
+            }
+
+            // Version settings
+            $versionFields = [];
+            if ($request->has('web_version')) $versionFields['web_version'] = $request->input('web_version');
+            if ($request->has('app_version')) $versionFields['app_version'] = $request->input('app_version');
+            if ($request->has('appStoreLink')) $versionFields['appStoreLink'] = $request->input('appStoreLink');
+            if ($request->has('googlePlayLink')) $versionFields['googlePlayLink'] = $request->input('googlePlayLink');
+            if ($request->has('websiteUrl')) $versionFields['websiteUrl'] = $request->input('websiteUrl');
+            if ($request->has('storeUrl')) $versionFields['storeUrl'] = $request->input('storeUrl');
+            
+            if (!empty($versionFields)) {
+                $versionRec = DB::table('settings')->where('document_name', 'Version')->first();
+                $existingVersion = $versionRec && $versionRec->fields ? json_decode($versionRec->fields, true) : [];
+                $mergedVersion = array_merge($existingVersion, $versionFields);
+                DB::table('settings')->updateOrInsert(
+                    ['document_name' => 'Version'],
+                    ['fields' => json_encode($mergedVersion, JSON_UNESCAPED_UNICODE)]
+                );
+            }
+
+            // Theme
+            if ($request->has('theme')) {
+                DB::table('settings')->updateOrInsert(
+                    ['document_name' => 'home_page_theme'],
+                    ['fields' => json_encode(['theme' => $request->input('theme')], JSON_UNESCAPED_UNICODE)]
+                );
+            }
+
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            \Log::error('Error updating global settings: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating settings: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -1439,6 +1630,495 @@ class SettingsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error updating setting: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Contact Us Settings
+     */
+    public function getContactUsSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'ContactUs')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: [
+            'Email' => '',
+            'Address' => '',
+            'Phone' => ''
+        ]);
+    }
+
+    public function updateContactUsSettings(Request $request)
+    {
+        $fields = [
+            'Email' => $request->input('Email', ''),
+            'Address' => $request->input('Address', ''),
+            'Phone' => $request->input('Phone', '')
+        ];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'ContactUs'],
+            ['document_name' => 'ContactUs', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Digital Product Settings
+     */
+    public function getDigitalProductSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'digitalProduct')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: ['fileSize' => '30']);
+    }
+
+    public function updateDigitalProductSettings(Request $request)
+    {
+        $fields = ['fileSize' => $request->input('fileSize', '30')];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'digitalProduct'],
+            ['document_name' => 'digitalProduct', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Driver Total Charges Settings
+     */
+    public function getDriverTotalChargesSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'driver_total_charges')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: [
+            'pickup_charges' => '3',
+            'user_delivery_charge' => '10'
+        ]);
+    }
+
+    public function updateDriverTotalChargesSettings(Request $request)
+    {
+        $fields = [
+            'pickup_charges' => $request->input('pickup_charges', '3'),
+            'user_delivery_charge' => $request->input('user_delivery_charge', '10')
+        ];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'driver_total_charges'],
+            ['document_name' => 'driver_total_charges', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Email Settings
+     */
+    public function getEmailSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'emailSetting')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: [
+            'mailMethod' => 'smtp',
+            'port' => '465',
+            'mailEncryptionType' => 'ssl',
+            'fromName' => '',
+            'host' => '',
+            'password' => '',
+            'userName' => ''
+        ]);
+    }
+
+    public function updateEmailSettings(Request $request)
+    {
+        $fields = [
+            'mailMethod' => $request->input('mailMethod', 'smtp'),
+            'port' => $request->input('port', '465'),
+            'mailEncryptionType' => $request->input('mailEncryptionType', 'ssl'),
+            'fromName' => $request->input('fromName', ''),
+            'host' => $request->input('host', ''),
+            'password' => $request->input('password', ''),
+            'userName' => $request->input('userName', '')
+        ];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'emailSetting'],
+            ['document_name' => 'emailSetting', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Footer Template Settings
+     */
+    public function getFooterTemplateSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'footerTemplate')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: ['footerTemplate' => '']);
+    }
+
+    public function updateFooterTemplateSettings(Request $request)
+    {
+        $fields = ['footerTemplate' => $request->input('footerTemplate', '')];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'footerTemplate'],
+            ['document_name' => 'footerTemplate', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Homepage Template Settings
+     */
+    public function getHomepageTemplateSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'homepageTemplate')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: ['homepageTemplate' => '']);
+    }
+
+    public function updateHomepageTemplateSettings(Request $request)
+    {
+        $fields = ['homepageTemplate' => $request->input('homepageTemplate', '')];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'homepageTemplate'],
+            ['document_name' => 'homepageTemplate', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Home Page Theme Settings
+     */
+    public function getHomePageThemeSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'home_page_theme')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: ['theme' => 'theme_1']);
+    }
+
+    public function updateHomePageThemeSettings(Request $request)
+    {
+        $fields = ['theme' => $request->input('theme', 'theme_1')];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'home_page_theme'],
+            ['document_name' => 'home_page_theme', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Google Map Key Settings
+     */
+    public function getGoogleMapKeySettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'googleMapKey')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: [
+            'key' => '',
+            'placeHolderImage' => ''
+        ]);
+    }
+
+    public function updateGoogleMapKeySettings(Request $request)
+    {
+        $fields = [
+            'key' => $request->input('key', ''),
+            'placeHolderImage' => $request->input('placeHolderImage', '')
+        ];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'googleMapKey'],
+            ['document_name' => 'googleMapKey', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Mart Delivery Charge Settings
+     */
+    public function getMartDeliveryChargeSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'martDeliveryCharge')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: [
+            'vendor_can_modify' => false,
+            'base_delivery_charge' => 0,
+            'free_delivery_distance_km' => 5,
+            'per_km_charge_above_free_distance' => 7,
+            'item_total_threshold' => 199,
+            'min_order_value' => 99,
+            'min_order_message' => 'Min Item value is ₹99',
+            'delivery_promotion_text' => 'Daily',
+            'is_active' => true
+        ]);
+    }
+
+    public function updateMartDeliveryChargeSettings(Request $request)
+    {
+        $rec = DB::table('settings')->where('document_name', 'martDeliveryCharge')->first();
+        $existing = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        
+        $fields = array_merge($existing, [
+            'vendor_can_modify' => $request->boolean('vendor_can_modify'),
+            'base_delivery_charge' => (int) $request->input('base_delivery_charge', 0),
+            'free_delivery_distance_km' => (int) $request->input('free_delivery_distance_km', 5),
+            'per_km_charge_above_free_distance' => (int) $request->input('per_km_charge_above_free_distance', 7),
+            'item_total_threshold' => (int) $request->input('item_total_threshold', 199),
+            'min_order_value' => (int) $request->input('min_order_value', 99),
+            'min_order_message' => $request->input('min_order_message', 'Min Item value is ₹99'),
+            'delivery_promotion_text' => $request->input('delivery_promotion_text', 'Daily'),
+            'is_active' => $request->boolean('is_active', true)
+        ]);
+
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'martDeliveryCharge'],
+            ['document_name' => 'martDeliveryCharge', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Payment Settings (Currency)
+     */
+    public function getPaymentSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'payment')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: [
+            'default_tex' => 10,
+            'currencyAtRight' => false
+        ]);
+    }
+
+    public function updatePaymentSettings(Request $request)
+    {
+        $fields = [
+            'default_tex' => (int) $request->input('default_tex', 10),
+            'currencyAtRight' => $request->boolean('currencyAtRight')
+        ];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'payment'],
+            ['document_name' => 'payment', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Placeholder Image Settings
+     */
+    public function getPlaceholderImageSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'placeHolderImage')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: ['image' => '']);
+    }
+
+    public function updatePlaceholderImageSettings(Request $request)
+    {
+        $fields = ['image' => $request->input('image', '')];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'placeHolderImage'],
+            ['document_name' => 'placeHolderImage', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Price Settings
+     */
+    public function getPriceSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'PriceSettings')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: [
+            'discount_calculation_type' => 'percentage',
+            'enable_global_discount' => true,
+            'vendor_can_modify' => false,
+            'global_discount_percentage' => 10
+        ]);
+    }
+
+    public function updatePriceSettings(Request $request)
+    {
+        $fields = [
+            'discount_calculation_type' => $request->input('discount_calculation_type', 'percentage'),
+            'enable_global_discount' => $request->boolean('enable_global_discount'),
+            'vendor_can_modify' => $request->boolean('vendor_can_modify'),
+            'global_discount_percentage' => (int) $request->input('global_discount_percentage', 10)
+        ];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'PriceSettings'],
+            ['document_name' => 'PriceSettings', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Privacy Policy Settings
+     */
+    public function getPrivacyPolicySettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'privacyPolicy')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: ['privacy_policy' => '']);
+    }
+
+    public function updatePrivacyPolicySettings(Request $request)
+    {
+        $fields = ['privacy_policy' => $request->input('privacy_policy', '')];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'privacyPolicy'],
+            ['document_name' => 'privacyPolicy', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Referral Amount Settings
+     */
+    public function getReferralAmountSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'referral_amount')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: ['referralAmount' => '25']);
+    }
+
+    public function updateReferralAmountSettings(Request $request)
+    {
+        $fields = ['referralAmount' => $request->input('referralAmount', '25')];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'referral_amount'],
+            ['document_name' => 'referral_amount', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Schedule Order Notification Settings
+     */
+    public function getScheduleOrderNotificationSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'scheduleOrderNotification')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: [
+            'timeUnit' => 'minute',
+            'notifyTime' => '5'
+        ]);
+    }
+
+    public function updateScheduleOrderNotificationSettings(Request $request)
+    {
+        $fields = [
+            'timeUnit' => $request->input('timeUnit', 'minute'),
+            'notifyTime' => $request->input('notifyTime', '5')
+        ];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'scheduleOrderNotification'],
+            ['document_name' => 'scheduleOrderNotification', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Terms and Conditions Settings
+     */
+    public function getTermsAndConditionsSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'termsAndConditions')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: ['termsAndConditions' => '']);
+    }
+
+    public function updateTermsAndConditionsSettings(Request $request)
+    {
+        $fields = ['termsAndConditions' => $request->input('termsAndConditions', '')];
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'termsAndConditions'],
+            ['document_name' => 'termsAndConditions', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Version Settings
+     */
+    public function getVersionSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'Version')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: [
+            'websiteUrl' => '',
+            'storeUrl' => '',
+            'googlePlayLink' => '',
+            'appStoreLink' => '',
+            'web_version' => '2.5.0',
+            'app_version' => '2.5.0'
+        ]);
+    }
+
+    public function updateVersionSettings(Request $request)
+    {
+        $rec = DB::table('settings')->where('document_name', 'Version')->first();
+        $existing = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        
+        $fields = array_merge($existing, $request->except(['_token']));
+
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'Version'],
+            ['document_name' => 'Version', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Restaurant Settings
+     */
+    public function getRestaurantSettings()
+    {
+        $rec = DB::table('settings')->where('document_name', 'restaurant')->first();
+        $fields = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        return response()->json($fields ?: [
+            'subscription_model' => false,
+            'auto_approve_restaurant' => false
+        ]);
+    }
+
+    public function updateRestaurantSettings(Request $request)
+    {
+        $rec = DB::table('settings')->where('document_name', 'restaurant')->first();
+        $existing = $rec && $rec->fields ? json_decode($rec->fields, true) : [];
+        
+        $fields = array_merge($existing, [
+            'subscription_model' => $request->boolean('subscription_model'),
+            'auto_approve_restaurant' => $request->boolean('auto_approve_restaurant')
+        ]);
+
+        DB::table('settings')->updateOrInsert(
+            ['document_name' => 'restaurant'],
+            ['document_name' => 'restaurant', 'fields' => json_encode($fields, JSON_UNESCAPED_UNICODE)]
+        );
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Get All Settings at Once (for comprehensive loading)
+     */
+    public function getAllSettings()
+    {
+        try {
+            $allSettings = DB::table('settings')->get();
+            $result = [];
+            
+            foreach ($allSettings as $setting) {
+                $result[$setting->document_name] = json_decode($setting->fields, true);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'data' => $result
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching all settings: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching settings'
             ], 500);
         }
     }

@@ -50,6 +50,107 @@ class RestaurantController extends Controller
     	    return view('subscription_plans.history')->with('id',$id);
     }
 
+    /**
+     * DataTables data for subscription history
+     * Table: subscription_history
+     * Columns: id, createdAt, payment_type, user_id, expiry_date, subscription_plan (JSON)
+     */
+    public function subscriptionHistoryData(Request $request, $id = '')
+    {
+        $start = (int) $request->input('start', 0);
+        $length = (int) $request->input('length', 10);
+        $draw = (int) $request->input('draw', 1);
+        $search = strtolower((string) data_get($request->input('search'), 'value', ''));
+
+        $q = DB::table('subscription_history');
+        
+        // Filter by user_id if provided
+        if ($id !== '' && $id !== null) {
+            $q->where('user_id', $id);
+        }
+        
+        if ($search !== '') {
+            $q->where(function($query) use ($search) {
+                $query->whereRaw("LOWER(subscription_plan) LIKE ?", ['%'.$search.'%'])
+                      ->orWhere('user_id', 'like', '%'.$search.'%')
+                      ->orWhere('payment_type', 'like', '%'.$search.'%');
+            });
+        }
+        
+        $total = (clone $q)->count();
+        $rows = $q->orderBy('createdAt', 'desc')->offset($start)->limit($length)->get();
+
+        $data = [];
+        foreach ($rows as $r) {
+            $row = [];
+            
+            // Parse subscription_plan JSON
+            $planData = json_decode($r->subscription_plan, true);
+            if (!$planData) {
+                $planData = [];
+            }
+            
+            // Checkbox
+            $row[] = '<input type="checkbox" class="is_open" dataId="'.$r->id.'">';
+            
+            // Vendor name (if not filtering by specific vendor)
+            if ($id == '' || $id == null) {
+                $vendor = DB::table('vendors')->where('id', $r->user_id)->first();
+                if ($vendor) {
+                    // Try different possible column names for vendor name
+                    $vendorName = $vendor->title ?? $vendor->name ?? $vendor->restaurant_name ?? 'Unknown Vendor';
+                } else {
+                    $vendorName = 'Unknown Vendor';
+                }
+                
+                // Format as clickable link (HTML will be rendered by DataTables)
+                $vendorLink = '<a href="'.route('restaurants.view', $r->user_id).'">' . htmlspecialchars($vendorName, ENT_QUOTES, 'UTF-8') . '</a>';
+                $row[] = $vendorLink;
+            }
+            
+            // Plan name
+            $planName = $planData['name'] ?? 'N/A';
+            $row[] = e($planName);
+            
+            // Plan type
+            $planType = $planData['type'] ?? 'paid';
+            $row[] = ucfirst($planType);
+            
+            // Expires at (using expiry_date column)
+            $expiryDate = $r->expiry_date ?? 'N/A';
+            if ($expiryDate && $expiryDate != 'N/A') {
+                try {
+                    $row[] = date('Y-m-d', strtotime($expiryDate));
+                } catch (\Exception $e) {
+                    $row[] = $expiryDate;
+                }
+            } else {
+                $row[] = 'N/A';
+            }
+            
+            // Purchase date (using createdAt column)
+            $purchaseDate = $r->createdAt ?? 'N/A';
+            if ($purchaseDate && $purchaseDate != 'N/A') {
+                try {
+                    $row[] = date('Y-m-d H:i:s', strtotime($purchaseDate));
+                } catch (\Exception $e) {
+                    $row[] = $purchaseDate;
+                }
+            } else {
+                $row[] = 'N/A';
+            }
+            
+            $data[] = $row;
+        }
+        
+        return response()->json([
+            'draw' => $draw,
+            'recordsTotal' => $total,
+            'recordsFiltered' => $total,
+            'data' => $data
+        ]);
+    }
+
     public function view($id)
     {
         return view('restaurants.view')->with('id',$id);

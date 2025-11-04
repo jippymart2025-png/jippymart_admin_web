@@ -601,6 +601,11 @@ Route::prefix('settings')->group(function () {
     });
     Route::middleware(['permission:global-setting,settings.app.globals'])->group(function () {
         Route::get('app/globals', [App\Http\Controllers\SettingsController::class, 'globals'])->name('settings.app.globals');
+        
+        // Diagnostic page for debugging settings (no permission required for testing)
+        Route::get('app/globals/diagnostic', function() {
+            return view('settings.diagnostic');
+        })->withoutMiddleware('permission:global-setting,settings.app.globals');
     });
     Route::middleware(['permission:admin-commission,settings.app.adminCommission'])->group(function () {
         Route::get('app/adminCommission', [App\Http\Controllers\SettingsController::class, 'adminCommission'])->name('settings.app.adminCommission');
@@ -802,22 +807,36 @@ Route::middleware(['permission:mart_banners,mart_banners.delete'])->group(functi
 
 Route::middleware(['permission:item-attribute,attributes'])->group(function () {
     Route::get('/attributes', [App\Http\Controllers\AttributeController::class, 'index'])->name('attributes');
+    Route::get('/attributes/data', [App\Http\Controllers\AttributeController::class, 'data'])->name('attributes.data');
 });
 Route::middleware(['permission:item-attribute,attributes.edit'])->group(function () {
     Route::get('/attributes/edit/{id}', [App\Http\Controllers\AttributeController::class, 'edit'])->name('attributes.edit');
+    Route::get('/attributes/{id}/json', [App\Http\Controllers\AttributeController::class, 'showJson'])->name('attributes.show.json');
+    Route::post('/attributes/{id}', [App\Http\Controllers\AttributeController::class, 'update'])->name('attributes.update');
 });
 Route::middleware(['permission:item-attribute,attributes.create'])->group(function () {
     Route::get('/attributes/create', [App\Http\Controllers\AttributeController::class, 'create'])->name('attributes.create');
+    Route::post('/attributes', [App\Http\Controllers\AttributeController::class, 'store'])->name('attributes.store');
+});
+Route::middleware(['permission:item-attribute,attributes.delete'])->group(function () {
+    Route::delete('/attributes/{id}', [App\Http\Controllers\AttributeController::class, 'destroy'])->name('attributes.destroy');
 });
 
 Route::middleware(['permission:review-attribute,reviewattributes'])->group(function () {
     Route::get('/reviewattributes', [App\Http\Controllers\ReviewAttributeController::class, 'index'])->name('reviewattributes');
+    Route::get('/reviewattributes/data', [App\Http\Controllers\ReviewAttributeController::class, 'data'])->name('reviewattributes.data');
 });
 Route::middleware(['permission:review-attribute,reviewattributes.edit'])->group(function () {
     Route::get('/reviewattributes/edit/{id}', [App\Http\Controllers\ReviewAttributeController::class, 'edit'])->name('reviewattributes.edit');
+    Route::get('/reviewattributes/{id}/json', [App\Http\Controllers\ReviewAttributeController::class, 'showJson'])->name('reviewattributes.show.json');
+    Route::post('/reviewattributes/{id}', [App\Http\Controllers\ReviewAttributeController::class, 'update'])->name('reviewattributes.update');
 });
 Route::middleware(['permission:review-attribute,reviewattributes.create'])->group(function () {
     Route::get('/reviewattributes/create', [App\Http\Controllers\ReviewAttributeController::class, 'create'])->name('reviewattributes.create');
+    Route::post('/reviewattributes', [App\Http\Controllers\ReviewAttributeController::class, 'store'])->name('reviewattributes.store');
+});
+Route::middleware(['permission:review-attribute,reviewattributes.delete'])->group(function () {
+    Route::delete('/reviewattributes/{id}', [App\Http\Controllers\ReviewAttributeController::class, 'destroy'])->name('reviewattributes.destroy');
 });
 
 // Review Attributes API Route
@@ -1010,17 +1029,25 @@ Route::middleware(['permission:on-board,onboard.edit'])->group(function () {
 });
 Route::middleware(['permission:subscription-plans,subscription-plans'])->group(function () {
     Route::get('/subscription-plans', [App\Http\Controllers\SubscriptionPlanController::class, 'index'])->name('subscription-plans.index');
+    Route::get('/subscription-plans/data', [App\Http\Controllers\SubscriptionPlanController::class, 'data'])->name('subscription-plans.data');
+    Route::get('/subscription-plans/overview', [App\Http\Controllers\SubscriptionPlanController::class, 'getOverview'])->name('subscription-plans.overview');
+    Route::get('/subscription-plans/{id}/earnings', [App\Http\Controllers\SubscriptionPlanController::class, 'getEarnings'])->name('subscription-plans.earnings');
     Route::get('/current-subscriber/{id}', [App\Http\Controllers\RestaurantController::class, 'currentSubscriberList'])->name('current-subscriber.list');
-
 });
 Route::middleware(['permission:subscription-plans,subscription-plans.' . ((str_contains(Request::url(), 'save')) ? (explode("save", Request::url())[1] ? "edit" : "create") : Request::url())])->group(function () {
     Route::get('/subscription-plans/save/{id?}', [App\Http\Controllers\SubscriptionPlanController::class, 'save'])->name('subscription-plans.save');
+    Route::get('/subscription-plans/{id}/json', [App\Http\Controllers\SubscriptionPlanController::class, 'showJson'])->name('subscription-plans.show.json');
+    Route::post('/subscription-plans', [App\Http\Controllers\SubscriptionPlanController::class, 'store'])->name('subscription-plans.store');
+    Route::post('/subscription-plans/{id}/toggle', [App\Http\Controllers\SubscriptionPlanController::class, 'toggleStatus'])->name('subscription-plans.toggle');
+    Route::delete('/subscription-plans/{id}', [App\Http\Controllers\SubscriptionPlanController::class, 'destroy'])->name('subscription-plans.destroy');
 });
 Route::middleware(['permission:vendors,vendors.edit'])->group(function () {
     Route::get('/vendor/edit/{id}', [App\Http\Controllers\RestaurantController::class, 'vendorEdit'])->name('vendor.edit');
 });
 Route::middleware(['permission:subscription-history,subscription.history'])->group(function () {
     Route::get('/vendor/subscription-plan/history/{id?}', [App\Http\Controllers\RestaurantController::class, 'vendorSubscriptionPlanHistory'])->name('vendor.subscriptionPlanHistory');
+    Route::get('/vendor/subscription-plan/history-data', [App\Http\Controllers\RestaurantController::class, 'subscriptionHistoryData'])->name('vendor.subscriptionPlanHistory.data.all');
+    Route::get('/vendor/subscription-plan/history/{id}/data', [App\Http\Controllers\RestaurantController::class, 'subscriptionHistoryData'])->name('vendor.subscriptionPlanHistory.data');
 });
 Route::get('/restaurantFilters', [App\Http\Controllers\RestaurantFiltersController::class, 'index'])->name('restaurantFilters');
 Route::get('/restaurantFilters/create', [App\Http\Controllers\RestaurantFiltersController::class, 'create'])->name('restaurantFilters.create');
@@ -1182,6 +1209,49 @@ Route::middleware(['permission:payment-method,payment-method'])->group(function 
     Route::post('api/story/settings', [App\Http\Controllers\SettingsController::class, 'updateStorySettings'])->name('api.story.update');
     Route::get('api/specialoffer/settings', [App\Http\Controllers\SettingsController::class, 'getSpecialOfferSettings'])->name('api.specialoffer.settings');
     Route::post('api/specialoffer/settings', [App\Http\Controllers\SettingsController::class, 'updateSpecialOfferSettings'])->name('api.specialoffer.update');
+
+    // All Settings Endpoints - SQL based
+    Route::get('api/settings/all', [App\Http\Controllers\SettingsController::class, 'getAllSettings'])->name('api.settings.all');
+    Route::get('api/contactus/settings', [App\Http\Controllers\SettingsController::class, 'getContactUsSettings'])->name('api.contactus.settings');
+    Route::post('api/contactus/settings', [App\Http\Controllers\SettingsController::class, 'updateContactUsSettings'])->name('api.contactus.update');
+    Route::get('api/digital-product/settings', [App\Http\Controllers\SettingsController::class, 'getDigitalProductSettings'])->name('api.digitalproduct.settings');
+    Route::post('api/digital-product/settings', [App\Http\Controllers\SettingsController::class, 'updateDigitalProductSettings'])->name('api.digitalproduct.update');
+    Route::get('api/driver-charges/settings', [App\Http\Controllers\SettingsController::class, 'getDriverTotalChargesSettings'])->name('api.drivercharges.settings');
+    Route::post('api/driver-charges/settings', [App\Http\Controllers\SettingsController::class, 'updateDriverTotalChargesSettings'])->name('api.drivercharges.update');
+    Route::get('api/email/settings', [App\Http\Controllers\SettingsController::class, 'getEmailSettings'])->name('api.email.settings');
+    Route::post('api/email/settings', [App\Http\Controllers\SettingsController::class, 'updateEmailSettings'])->name('api.email.update');
+    Route::get('api/footer-template/settings', [App\Http\Controllers\SettingsController::class, 'getFooterTemplateSettings'])->name('api.footertemplate.settings');
+    Route::post('api/footer-template/settings', [App\Http\Controllers\SettingsController::class, 'updateFooterTemplateSettings'])->name('api.footertemplate.update');
+    Route::get('api/homepage-template/settings', [App\Http\Controllers\SettingsController::class, 'getHomepageTemplateSettings'])->name('api.homepagetemplate.settings');
+    Route::post('api/homepage-template/settings', [App\Http\Controllers\SettingsController::class, 'updateHomepageTemplateSettings'])->name('api.homepagetemplate.update');
+    Route::get('api/homepage-theme/settings', [App\Http\Controllers\SettingsController::class, 'getHomePageThemeSettings'])->name('api.homepagetheme.settings');
+    Route::post('api/homepage-theme/settings', [App\Http\Controllers\SettingsController::class, 'updateHomePageThemeSettings'])->name('api.homepagetheme.update');
+    Route::get('api/google-map-key/settings', [App\Http\Controllers\SettingsController::class, 'getGoogleMapKeySettings'])->name('api.googlemapkey.settings');
+    Route::post('api/google-map-key/settings', [App\Http\Controllers\SettingsController::class, 'updateGoogleMapKeySettings'])->name('api.googlemapkey.update');
+    Route::get('api/mart-delivery-charge/settings', [App\Http\Controllers\SettingsController::class, 'getMartDeliveryChargeSettings'])->name('api.martdeliverycharge.settings');
+    Route::post('api/mart-delivery-charge/settings', [App\Http\Controllers\SettingsController::class, 'updateMartDeliveryChargeSettings'])->name('api.martdeliverycharge.update');
+    Route::get('api/payment/settings', [App\Http\Controllers\SettingsController::class, 'getPaymentSettings'])->name('api.payment.settings');
+    Route::post('api/payment/settings', [App\Http\Controllers\SettingsController::class, 'updatePaymentSettings'])->name('api.payment.update');
+    Route::get('api/placeholder-image/settings', [App\Http\Controllers\SettingsController::class, 'getPlaceholderImageSettings'])->name('api.placeholderimage.settings');
+    Route::post('api/placeholder-image/settings', [App\Http\Controllers\SettingsController::class, 'updatePlaceholderImageSettings'])->name('api.placeholderimage.update');
+    Route::get('api/price/settings', [App\Http\Controllers\SettingsController::class, 'getPriceSettings'])->name('api.price.settings');
+    Route::post('api/price/settings', [App\Http\Controllers\SettingsController::class, 'updatePriceSettings'])->name('api.price.update');
+    Route::get('api/privacy-policy/settings', [App\Http\Controllers\SettingsController::class, 'getPrivacyPolicySettings'])->name('api.privacypolicy.settings');
+    Route::post('api/privacy-policy/settings', [App\Http\Controllers\SettingsController::class, 'updatePrivacyPolicySettings'])->name('api.privacypolicy.update');
+    Route::get('api/referral/settings', [App\Http\Controllers\SettingsController::class, 'getReferralAmountSettings'])->name('api.referral.settings');
+    Route::post('api/referral/settings', [App\Http\Controllers\SettingsController::class, 'updateReferralAmountSettings'])->name('api.referral.update');
+    Route::get('api/schedule-notification/settings', [App\Http\Controllers\SettingsController::class, 'getScheduleOrderNotificationSettings'])->name('api.schedulenotification.settings');
+    Route::post('api/schedule-notification/settings', [App\Http\Controllers\SettingsController::class, 'updateScheduleOrderNotificationSettings'])->name('api.schedulenotification.update');
+    Route::get('api/terms/settings', [App\Http\Controllers\SettingsController::class, 'getTermsAndConditionsSettings'])->name('api.terms.settings');
+    Route::post('api/terms/settings', [App\Http\Controllers\SettingsController::class, 'updateTermsAndConditionsSettings'])->name('api.terms.update');
+    Route::get('api/version/settings', [App\Http\Controllers\SettingsController::class, 'getVersionSettings'])->name('api.version.settings');
+    Route::post('api/version/settings', [App\Http\Controllers\SettingsController::class, 'updateVersionSettings'])->name('api.version.update');
+    Route::get('api/restaurant/settings', [App\Http\Controllers\SettingsController::class, 'getRestaurantSettings'])->name('api.restaurant.settings');
+    Route::post('api/restaurant/settings', [App\Http\Controllers\SettingsController::class, 'updateRestaurantSettings'])->name('api.restaurant.update');
+
+    // Generic setting getter/setter
+    Route::get('api/setting/{documentName}', [App\Http\Controllers\SettingsController::class, 'getSetting'])->name('api.setting.get');
+    Route::post('api/setting/{documentName}', [App\Http\Controllers\SettingsController::class, 'updateSetting'])->name('api.setting.update');
 
 });
 

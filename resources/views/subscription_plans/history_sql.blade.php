@@ -27,15 +27,9 @@
                             <h3 class="mb-0">{{trans('lang.vendor_subscription_history_plural')}}</h3>
                             <span class="counter ml-3 total_count"></span>
                         </div>
-                        <div class="d-flex top-title-right align-self-center">
-                            <div class="select-box pl-3">
-                              
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
-
         </div>
 
         <div class="table-list">
@@ -62,12 +56,6 @@
                                 <h3 class="text-dark-2 mb-2 h4">{{trans('lang.subscription_history_table')}}</h3>
                                 <p class="mb-0 text-dark-2">{{trans('lang.subscription_history_table_text')}}</p>
                             </div>
-                            <div class="card-header-right d-flex align-items-center">
-                                <div class="card-header-btn mr-3">
-                                    <!-- <a class="btn-primary btn rounded-full" href="{!! route('users.create') !!}"><i class="mdi mdi-plus mr-2"></i>{{trans('lang.user_create')}}</a> -->
-                                </div>
-
-                            </div>
                         </div>
                         <div class="card-body">
                             <div class="table-responsive m-t-10">
@@ -76,11 +64,11 @@
                                     cellspacing="0" width="100%">
                                     <thead>
                                         <tr>
-                                        <th class="delete-all"><input type="checkbox" id="is_active"><label
-                                                        class="col-3 control-label" for="is_active"><a id="deleteAll"
-                                                            class="do_not_delete" href="javascript:void(0)"><i
-                                                                class="mdi mdi-delete"></i> {{trans('lang.all')}}</a></label>
-                                                </th>
+                                            <th class="delete-all"><input type="checkbox" id="is_active"><label
+                                                    class="col-3 control-label" for="is_active"><a id="deleteAll"
+                                                        class="do_not_delete" href="javascript:void(0)"><i
+                                                            class="mdi mdi-delete"></i> {{trans('lang.all')}}</a></label>
+                                            </th>
                                             <?php if ($id == '') { ?>
                                             <th>{{ trans('lang.vendor')}}</th>
                                             <?php } ?>
@@ -95,7 +83,6 @@
                                 </table>
                             </div>
                         </div>
-
                     </div>
                 </div>
             </div>
@@ -107,14 +94,17 @@
 
 @section('scripts')
 <script>
+    // SQL mode - no Firebase
+    console.log('Loading subscription history from SQL database...');
+    
     var userId = '{{$id}}';
     
     $(document).ready(function() {
         jQuery("#data-table_processing").show();
         
         var dataUrl = userId 
-            ? "{{ url('/vendor/subscription-plan/history') }}/" + userId + "/data"
-            : "{{ route('vendor.subscriptionPlanHistory.data.all') }}";
+            ? "{{ route('vendor.subscriptionPlanHistory.data', ':id') }}".replace(':id', userId)
+            : "{{ route('vendor.subscriptionPlanHistory.data', '') }}";
         
         const table = $('#subscriptionHistoryTable').DataTable({
             pageLength: 10,
@@ -125,78 +115,65 @@
                 url: dataUrl,
                 type: 'GET',
                 dataSrc: function(json) {
-                    jQuery("#data-table_processing").hide();
-                    if (json.data) {
-                        $('.total_count').text(json.recordsTotal);
-                        return json.data;
-                    } else {
-                        return [];
-                    }
+                    console.log('Subscription history loaded:', json);
+                    $('.total_count').text(json.recordsTotal);
+                    return json.data;
                 },
                 error: function(xhr, error, code) {
-                    jQuery("#data-table_processing").hide();
                     console.error('Error loading subscription history:', error);
+                    console.error('Response:', xhr.responseText);
+                    $('#data-table_processing').hide();
                 }
             },
             order: [[<?php echo $id == '' ? 1 : 0; ?>, 'desc']],
-            columns: [
-                { data: 0, orderable: false }, // Checkbox
-                <?php if ($id == '') { ?>
-                { 
-                    data: 1,
-                    render: function(data, type, row) {
-                        // Render as HTML for display, plain text for other types
-                        if (type === 'display') {
-                            return data;
-                        }
-                        return data;
-                    }
-                }, // Vendor name (with link)
-                <?php } ?>
-                { data: <?php echo $id == '' ? 2 : 1; ?> }, // Plan name
-                { data: <?php echo $id == '' ? 3 : 2; ?> }, // Plan type
-                { data: <?php echo $id == '' ? 4 : 3; ?> }, // Expires at
-                { data: <?php echo $id == '' ? 5 : 4; ?> }  // Purchase date
-            ],
+            columnDefs: [{
+                orderable: false,
+                targets: [0]
+            }],
             language: {
                 "zeroRecords": "{{ trans('lang.no_record_found') }}",
                 "emptyTable": "{{ trans('lang.no_record_found') }}",
                 "processing": ""
+            },
+            drawCallback: function() {
+                $('#data-table_processing').hide();
             }
         });
         
         function debounce(func, wait) {
             let timeout;
-            return function executedFunction(...args) {
-                const later = function() {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
+            const context = this;
+            return function(...args) {
                 clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
+                timeout = setTimeout(() => func.apply(context, args), wait);
             };
         }
         
-        $('#search-input').keyup(debounce(function() {
-            table.search($(this).val()).draw();
+        $('#search-input').on('input', debounce(function() {
+            const searchValue = $(this).val();
+            if (searchValue.length >= 3 || searchValue.length === 0) {
+                $('#data-table_processing').show();
+                table.search(searchValue).draw();
+            }
         }, 300));
         
+        // Setup menu tabs if vendor ID is provided
         <?php if ($id != '') { ?>
-        $('.menu-tab').show();
+        setupVendorMenuTabs('{{$id}}');
         <?php } ?>
     });
     
+    // Select all checkbox
     $("#is_active").click(function() {
         $("#subscriptionHistoryTable .is_open").prop('checked', $(this).prop('checked'));
     });
     
+    // Delete all selected (if needed in the future)
     $("#deleteAll").click(function() {
         if ($('#subscriptionHistoryTable .is_open:checked').length) {
             if (confirm("{{ trans('lang.selected_delete_alert') }}")) {
-                jQuery("#data-table_processing").show();
-                // Bulk delete not implemented for history
-                alert('{{ trans("lang.delete_not_allowed") }}');
-                jQuery("#data-table_processing").hide();
+                // Implement bulk delete if needed
+                alert('Bulk delete for subscription history not implemented yet');
             }
         } else {
             alert("{{ trans('lang.select_delete_alert') }}");

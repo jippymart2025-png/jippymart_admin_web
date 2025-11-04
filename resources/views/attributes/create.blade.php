@@ -43,64 +43,52 @@
 @endsection
 @section('scripts')
     <script>
-        var database = firebase.firestore();
-        var ref = database.collection('vendor_attributes');
-        var photo = "";
-        var id_attribute = "<?php echo uniqid();?>";
-        var attribute_length = 1;
+        // SQL mode - no Firebase
         $(document).ready(function () {
-            jQuery("#data-table_processing").show();
-            ref.get().then(async function (snapshots) {
-                attribute_length = snapshots.size + 1;
-                jQuery("#data-table_processing").hide();
-            })
+            console.log('Create attribute - SQL mode');
+            jQuery("#data-table_processing").hide();
+            
             $(".save-form-btn").click(function () {
                 var title = $(".cat-name").val();
                 $(".error_top").hide();
                 $(".error_top").html("");
+                
                 if (title == '') {
                     $(".error_top").show();
                     $(".error_top").append("<p>{{trans('lang.enter_itemattribute_title_error')}}</p>");
                     window.scrollTo(0, 0);
                 } else {
                     jQuery("#data-table_processing").show();
-                    database.collection('vendor_attributes').doc(id_attribute).set({
-                        'id': id_attribute,
-                        'title': title
-                    }).then(async function (result) {
-                        await logActivity('attributes', 'created', 'Created new attribute: ' + title);
-                        window.location.href = '{{ route("attributes")}}';
+                    
+                    $.ajax({
+                        url: "{{ route('attributes.store') }}",
+                        type: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                        },
+                        data: {
+                            title: title
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                console.log('Attribute created successfully');
+                                window.location.href = '{{ route("attributes")}}';
+                            } else {
+                                alert('Failed to create attribute');
+                                jQuery("#data-table_processing").hide();
+                            }
+                        },
+                        error: function(xhr) {
+                            console.error('Create error:', xhr.responseText);
+                            jQuery("#data-table_processing").hide();
+                            $(".error_top").show();
+                            $(".error_top").html("");
+                            $(".error_top").append("<p>Error creating attribute</p>");
+                            window.scrollTo(0, 0);
+                        }
                     });
                 }
             });
         });
-        var storageRef = firebase.storage().ref('images');
-        function handleFileSelect(evt) {
-            var f = evt.target.files[0];
-            var reader = new FileReader();
-            reader.onload = (function (theFile) {
-                return function (e) {
-                    var filePayload = e.target.result;
-                    var val = $('#attribute_image').val().toLowerCase();
-                    var ext = val.split('.')[1];
-                    var docName = val.split('fakepath')[1];
-                    var filename = $('#attribute_image').val().replace(/C:\\fakepath\\/i, '')
-                    var timestamp = Number(new Date());
-                    var uploadTask = storageRef.child(filename).put(theFile);
-                    uploadTask.on('state_changed', function (snapshot) {
-                        var progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                    }, function (error) {
-                    }, function () {
-                        uploadTask.snapshot.ref.getDownloadURL().then(function (downloadURL) {
-                            jQuery("#uploding_image").text("Upload is completed");
-                            photo = downloadURL;
-                            $(".cat_image").empty();
-                            $(".cat_image").append('<img class="rounded" style="width:50px" src="' + photo + '" alt="image">');
-                        });
-                    });
-                };
-            })(f);
-            reader.readAsDataURL(f);
-        }
     </script>
 @endsection

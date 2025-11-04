@@ -42,27 +42,60 @@
 @section('scripts')
 <script>
     var id = "<?php echo $id;?>";
-    var database = firebase.firestore();
-    var ref = database.collection('review_attributes').where("id", "==", id);
+    
     $(document).ready(function () {
+        console.log('Edit review attribute - SQL mode, ID:', id);
         jQuery("#data-table_processing").show();
-        ref.get().then(async function (snapshots) {
-            var reviewattribute = snapshots.docs[0].data();
+        
+        // Load review attribute data from SQL
+        $.get("{{ route('reviewattributes.show.json', ':id') }}".replace(':id', id), function(reviewattribute) {
+            console.log('Review attribute loaded:', reviewattribute);
             $(".reviewattribute-name").val(reviewattribute.title);
             jQuery("#data-table_processing").hide();
-        })
+        }).fail(function(xhr) {
+            console.error('Failed to load review attribute:', xhr.responseText);
+            jQuery("#data-table_processing").hide();
+            alert('Failed to load review attribute data');
+        });
+        
         $(".edit-form-btn").click(function () {
             var title = $(".reviewattribute-name").val();
             $(".error_top").hide();
             $(".error_top").html("");
+            
             if (title == '') {
                 $(".error_top").show();
                 $(".error_top").append("<p>{{trans('lang.enter_reviewattribute_title_error')}}</p>");
                 window.scrollTo(0, 0);
             } else {
                 jQuery("#data-table_processing").show();
-                database.collection('review_attributes').doc(id).update({'title': title}).then(function (result) {
-                    window.location.href = '{{ route("reviewattributes")}}';
+                
+                $.ajax({
+                    url: "{{ route('reviewattributes.update', ':id') }}".replace(':id', id),
+                    type: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                    },
+                    data: {
+                        title: title
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            console.log('Review attribute updated successfully');
+                            window.location.href = '{{ route("reviewattributes")}}';
+                        } else {
+                            alert('Failed to update review attribute');
+                            jQuery("#data-table_processing").hide();
+                        }
+                    },
+                    error: function(xhr) {
+                        console.error('Update error:', xhr.responseText);
+                        jQuery("#data-table_processing").hide();
+                        $(".error_top").show();
+                        $(".error_top").html("");
+                        $(".error_top").append("<p>Error updating review attribute</p>");
+                        window.scrollTo(0, 0);
+                    }
                 });
             }
         });

@@ -42,28 +42,60 @@
 @section('scripts')
     <script>
         var id = "<?php echo $id;?>";
-        var database = firebase.firestore();
-        var ref = database.collection('vendor_attributes').where("id", "==", id);
+        
         $(document).ready(function () {
+            console.log('Edit attribute - SQL mode, ID:', id);
             jQuery("#data-table_processing").show();
-            ref.get().then(async function (snapshots) {
-                var attribute = snapshots.docs[0].data();
+            
+            // Load attribute data from SQL
+            $.get("{{ route('attributes.show.json', ':id') }}".replace(':id', id), function(attribute) {
+                console.log('Attribute loaded:', attribute);
                 $(".attribute-name").val(attribute.title);
                 jQuery("#data-table_processing").hide();
-            })
+            }).fail(function(xhr) {
+                console.error('Failed to load attribute:', xhr.responseText);
+                jQuery("#data-table_processing").hide();
+                alert('Failed to load attribute data');
+            });
+            
             $(".edit-form-btn").click(function () {
                 var title = $(".attribute-name").val();
                 $(".error_top").hide();
                 $(".error_top").html("");
+                
                 if (title == '') {
                     $(".error_top").show();
                     $(".error_top").append("<p>{{trans('lang.enter_itemattribute_title_error')}}</p>");
                     window.scrollTo(0, 0);
                 } else {
                     jQuery("#data-table_processing").show();
-                    database.collection('vendor_attributes').doc(id).update({'title': title}).then(async function (result) {
-                        await logActivity('attributes', 'updated', 'Updated attribute: ' + title);
-                        window.location.href = '{{ route("attributes")}}';
+                    
+                    $.ajax({
+                        url: "{{ route('attributes.update', ':id') }}".replace(':id', id),
+                        type: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                        },
+                        data: {
+                            title: title
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                console.log('Attribute updated successfully');
+                                window.location.href = '{{ route("attributes")}}';
+                            } else {
+                                alert('Failed to update attribute');
+                                jQuery("#data-table_processing").hide();
+                            }
+                        },
+                        error: function(xhr) {
+                            console.error('Update error:', xhr.responseText);
+                            jQuery("#data-table_processing").hide();
+                            $(".error_top").show();
+                            $(".error_top").html("");
+                            $(".error_top").append("<p>Error updating attribute</p>");
+                            window.scrollTo(0, 0);
+                        }
                     });
                 }
             });
