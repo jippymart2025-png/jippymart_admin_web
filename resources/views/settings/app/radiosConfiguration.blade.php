@@ -68,9 +68,8 @@
 @endsection
 @section('scripts')
     <script>
-        var database = firebase.firestore();
-        var ref = database.collection('settings').doc("RestaurantNearBy");
-        var refDriver = database.collection('settings').doc("DriverNearBy");
+        const radiusGetUrl = "{{ route('api.radius.settings') }}";
+        const radiusPostUrl = "{{ route('api.radius.update') }}";
         $(document).ready(function () {
             jQuery("#data-table_processing").show();
             $('#distanceType').on('change', function () {
@@ -78,32 +77,18 @@
                 $('.restaurant_near_by').next('span').text(unit); 
                 $('.driver_nearby_radios').next('span').text(unit);
             }).trigger('change');
-            ref.get().then(async function (snapshots) {
-                var radios = snapshots.data();
-                if (radios == undefined) {
-                    database.collection('settings').doc('RestaurantNearBy').set({});
-                }
-                try {
-                    if (radios.distanceType) {
-                        $('.restaurant_near_by').next('span').text(radios.distanceType); 
-                        $('.driver_nearby_radios').next('span').text(radios.distanceType);
-                        $('#distanceType').val(radios.distanceType).trigger('change');
+            $.get(radiusGetUrl, function(resp){
+                try{
+                    if(resp.distanceType){
+                        $('.restaurant_near_by').next('span').text(resp.distanceType);
+                        $('.driver_nearby_radios').next('span').text(resp.distanceType);
+                        $('#distanceType').val(resp.distanceType).trigger('change');
                     }
-                    $(".restaurant_near_by").val(radios.radios);
-                } catch (error) {
-                }
+                    $(".restaurant_near_by").val(resp.restaurantNearBy || '');
+                    $(".driver_nearby_radios").val(resp.driverNearBy || '');
+                    $(".driverOrderAcceptRejectDuration").val(resp.driverOrderAcceptRejectDuration || 0);
+                }catch(e){}
                 jQuery("#data-table_processing").hide();
-            });
-            refDriver.get().then(async function (snapshots) {
-                var radios = snapshots.data();
-                if (radios == undefined) {
-                    database.collection('settings').doc('DriverNearBy').set({});
-                }
-                try {
-                    $(".driver_nearby_radios").val(radios.driverRadios);
-                    $(".driverOrderAcceptRejectDuration").val(radios.driverOrderAcceptRejectDuration);
-                } catch (error) {
-                }
             });
         });
         $(".edit-setting-btn").click(function () {
@@ -125,19 +110,21 @@
                 $(".error_top").append("<p>{{trans('lang.driverOrderAcceptRejectDuration_error')}}</p>");
             } else {
                 jQuery("#data-table_processing").show();
-                database.collection('settings').doc("RestaurantNearBy").update({
-                    'radios': restaurantNearBy,
-                    'distanceType': distanceType
-                }).then(function (result) {
-                    database.collection('settings').doc("DriverNearBy").update({
-                        'driverRadios': driverNearBy,
-                        'driverOrderAcceptRejectDuration': Number(driverOrderAcceptRejectDuration)
-                    }).then(async function (result) {
-                        // Log the activity
-                        await logActivity('radius_config', 'updated', 'Updated radius configuration: Restaurant=' + restaurantNearBy + ' ' + distanceType + ', Driver=' + driverNearBy + ' ' + distanceType + ', Duration=' + driverOrderAcceptRejectDuration + 's');
-                        window.location.href = '{{ url()->current() }}';
-                    });
-                })
+                $.post({
+                    url: radiusPostUrl,
+                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    data: {
+                        restaurantNearBy: restaurantNearBy,
+                        distanceType: distanceType,
+                        driverNearBy: driverNearBy,
+                        driverOrderAcceptRejectDuration: parseInt(driverOrderAcceptRejectDuration)
+                    }
+                }).done(function(){
+                    window.location.href = '{{ url()->current() }}';
+                }).fail(function(){
+                    jQuery("#data-table_processing").hide();
+                    alert('Failed to update settings');
+                });
             }
         })
     </script>

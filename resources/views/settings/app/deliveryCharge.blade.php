@@ -82,60 +82,38 @@
         @endsection
         @section('scripts')
             <script>
-                var database = firebase.firestore();
-                var ref_deliverycharge = database.collection('settings').doc("DeliveryCharge");
+                const deliveryGetUrl = "{{ route('api.deliveryCharge.settings') }}";
+                const deliveryPostUrl = "{{ route('api.deliveryCharge.update') }}";
 
                 $(document).ready(function() {
                     jQuery("#data-table_processing").show();
 
-                    ref_deliverycharge.get().then(async function(snapshots_charge) {
-                        var deliveryChargeSettings = snapshots_charge.data();
-
-                        // Create default doc if not exists
-                        if (!deliveryChargeSettings) {
-                            await database.collection('settings').doc('DeliveryCharge').set({
-                                vendor_can_modify: false,
-                                delivery_charges_per_km: '',
-                                minimum_delivery_charges: '',
-                                minimum_delivery_charges_within_km: '',
-                                base_delivery_charge: 23,
-                                free_delivery_distance_km: 5,
-                                per_km_charge_above_free_distance: 7,
-                                item_total_threshold: 199
-                            });
-                            deliveryChargeSettings = {};
-                        }
-
+                    $.get(deliveryGetUrl, function(deliveryChargeSettings){
                         jQuery("#data-table_processing").hide();
 
                         try {
-                            // Vendor can modify checkbox
                             if (deliveryChargeSettings.vendor_can_modify) {
                                 $("#vendor_can_modify").prop('checked', true);
                             }
-
-                            // Populate only if value exists and is not null/undefined
-                            if (deliveryChargeSettings.delivery_charges_per_km !== undefined && deliveryChargeSettings.delivery_charges_per_km !== null && deliveryChargeSettings.delivery_charges_per_km !== '') {
+                            if (deliveryChargeSettings.delivery_charges_per_km != null && deliveryChargeSettings.delivery_charges_per_km !== '') {
                                 $("#delivery_charges_per_km").val(deliveryChargeSettings.delivery_charges_per_km);
                             }
-                            if (deliveryChargeSettings.minimum_delivery_charges !== undefined && deliveryChargeSettings.minimum_delivery_charges !== null && deliveryChargeSettings.minimum_delivery_charges !== '') {
+                            if (deliveryChargeSettings.minimum_delivery_charges != null && deliveryChargeSettings.minimum_delivery_charges !== '') {
                                 $("#minimum_delivery_charges").val(deliveryChargeSettings.minimum_delivery_charges);
                             }
-                            if (deliveryChargeSettings.minimum_delivery_charges_within_km !== undefined && deliveryChargeSettings.minimum_delivery_charges_within_km !== null && deliveryChargeSettings.minimum_delivery_charges_within_km !== '') {
+                            if (deliveryChargeSettings.minimum_delivery_charges_within_km != null && deliveryChargeSettings.minimum_delivery_charges_within_km !== '') {
                                 $("#minimum_delivery_charges_within_km").val(deliveryChargeSettings.minimum_delivery_charges_within_km);
                             }
-
-                            // New PDF fields
-                            if (deliveryChargeSettings.base_delivery_charge !== undefined && deliveryChargeSettings.base_delivery_charge !== null) {
+                            if (deliveryChargeSettings.base_delivery_charge != null) {
                                 $("#base_delivery_charge").val(deliveryChargeSettings.base_delivery_charge);
                             }
-                            if (deliveryChargeSettings.free_delivery_distance_km !== undefined && deliveryChargeSettings.free_delivery_distance_km !== null) {
+                            if (deliveryChargeSettings.free_delivery_distance_km != null) {
                                 $("#free_delivery_distance_km").val(deliveryChargeSettings.free_delivery_distance_km);
                             }
-                            if (deliveryChargeSettings.per_km_charge_above_free_distance !== undefined && deliveryChargeSettings.per_km_charge_above_free_distance !== null) {
+                            if (deliveryChargeSettings.per_km_charge_above_free_distance != null) {
                                 $("#per_km_charge_above_free_distance").val(deliveryChargeSettings.per_km_charge_above_free_distance);
                             }
-                            if (deliveryChargeSettings.item_total_threshold !== undefined && deliveryChargeSettings.item_total_threshold !== null) {
+                            if (deliveryChargeSettings.item_total_threshold != null) {
                                 $("#item_total_threshold").val(deliveryChargeSettings.item_total_threshold);
                             }
                         } catch(error) {
@@ -191,38 +169,17 @@
                         // Validation for required fields (now only new PDF fields are required)
                         // Old fields are optional and hidden
 
-                        // Keep existing PDF fields intact if not null in Firestore
-                        // We'll read existing doc and merge
-                        ref_deliverycharge.get().then(doc => {
-                            if (doc.exists) {
-                                var existing = doc.data();
-
-                                // Preserve fields from PDF if they exist and we're not updating them
-                                [
-                                    'base_delivery_charge',
-                                    'free_delivery_distance_km',
-                                    'per_km_charge_above_free_distance',
-                                    'item_total_threshold',
-                                    'amount'
-                                ].forEach(field => {
-                                    if (existing[field] !== undefined && existing[field] !== null && dataToUpdate[field] === undefined) {
-                                        dataToUpdate[field] = existing[field];
-                                    }
-                                });
-
-                                database.collection('settings').doc("DeliveryCharge")
-                                    .update(dataToUpdate)
-                                    .then(function(result) {
-                                        window.location.href = '{{ url("settings/app/deliveryCharge")}}';
-                                    })
-                                    .catch(function(error) {
-                                        console.error('Error updating delivery charge settings:', error);
-                                        $(".error_top").show();
-                                        $(".error_top").html("");
-                                        $(".error_top").append("<p>Error updating settings. Please try again.</p>");
-                                        window.scrollTo(0,0);
-                                    });
-                            }
+                        $.post({
+                            url: deliveryPostUrl,
+                            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                            data: dataToUpdate
+                        }).done(function(){
+                            window.location.href = '{{ url("settings/app/deliveryCharge")}}';
+                        }).fail(function(){
+                            $(".error_top").show();
+                            $(".error_top").html("");
+                            $(".error_top").append("<p>Error updating settings. Please try again.</p>");
+                            window.scrollTo(0,0);
                         });
                     });
                 });

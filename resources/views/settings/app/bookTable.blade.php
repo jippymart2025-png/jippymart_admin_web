@@ -36,34 +36,29 @@
  @endsection
 @section('scripts')
 <script>
-    var database = firebase.firestore();
-    var ref = database.collection('settings').doc("DineinForRestaurant");
+    const dineGetUrl = "{{ route('api.dinein.settings') }}";
+    const dinePostUrl = "{{ route('api.dinein.update') }}";
     $(document).ready(function(){
         jQuery("#data-table_processing").show();
-        ref.get().then( async function(snapshots){
-          var dineinSetting = snapshots.data();
-          if(dineinSetting == undefined){
-                database.collection('settings').doc('DineinForRestaurant').set({});
-          }
+        $.get(dineGetUrl, function(resp){
           try{
-              if(dineinSetting.isEnabled){
-                  $("#enable_dine_in_for_restaurant").prop('checked',true);
-              }
-              if(dineinSetting.isEnabledForCustomer){
-                  $("#dine_in_customers").prop('checked',true);
-              }
-          }catch(error){
-          }
+            if(resp.isEnabled){ $("#enable_dine_in_for_restaurant").prop('checked',true); }
+            if(resp.isEnabledForCustomer){ $("#dine_in_customers").prop('checked',true); }
+          }catch(e){}
           jQuery("#data-table_processing").hide();
-        })
+        });
         $(".edit-setting-btn").click(function(){
           var checkboxValue = $("#enable_dine_in_for_restaurant").is(":checked");
           var isEnabledForCustomer = $('#dine_in_customers').is(":checked");
-              database.collection('settings').doc("DineinForRestaurant").update({'isEnabled':checkboxValue,'isEnabledForCustomer':isEnabledForCustomer}).then(async function(result) {
-                            // Log the activity
-                            await logActivity('dine_in', 'updated', 'Updated dine-in settings: Restaurant=' + (checkboxValue ? 'Enabled' : 'Disabled') + ', Customer=' + (isEnabledForCustomer ? 'Enabled' : 'Disabled'));
-                            window.location.href = '{{ url("settings/app/bookTable")}}';
-                });
+          $.post({
+            url: dinePostUrl,
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+            data: { isEnabled: checkboxValue ? 1 : 0, isEnabledForCustomer: isEnabledForCustomer ? 1 : 0 }
+          }).done(function(){
+            window.location.href = '{{ url("settings/app/bookTable")}}';
+          }).fail(function(){
+            alert('Failed to update settings');
+          });
         })
     })
 </script>

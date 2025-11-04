@@ -65,67 +65,56 @@
 @endsection
 @section('scripts')
 <script>
-  var database = firebase.firestore();
   $(document).ready(function(){
-$(".save-setting-btn").click(function(){
-  var currencyName = $(".currency_name").val();
-    var currencyCode = $(".currency_code").val();
-    var currencySymbol = $(".currency_symbol").val();
-    var decimal_degits = $(".decimal_degits").val();
-    var active = $(".currency_active").is(":checked");
-    var symbolAtRight = $(".symbol_at_right").is(":checked");
-    var id = "<?php echo uniqid(); ?>";
-    if(currencyName == ''){
-        $(".error_top").show();
-        $(".error_top").html("");
-        $(".error_top").append("<p>{{trans('lang.enter_currency_name_error')}}</p>");
-    } else if(currencySymbol == ''){
-        $(".error_top").show();
-        $(".error_top").html("");
-        $(".error_top").append("<p>{{trans('lang.enter_currency_symbol_error')}}</p>");
-    } else if (decimal_degits < 0) {
-        $(".error_top").show();
-        $(".error_top").html("");
-        $(".error_top").append("<p>{{trans('lang.digit_after_decimal_point_error')}}</p>");
-    } else {
-        if(active){
-            database.collection('currencies').where('isActive',"==",true).get().then(function(snapshots) {
-                if (!snapshots.empty) {
-                    var activeCurrency = snapshots.docs[0].data();
-                    var activeCurrencyId = activeCurrency.id;
-                    database.collection('currencies').doc(activeCurrencyId).update({'isActive':false});
-                }
-                database.collection('currencies').doc(id).set({
-                    'id':id,
-                    'name':currencyName,
-                    'code':currencyCode,
-                    'symbol':currencySymbol,
-                    'decimal_degits': parseInt(decimal_degits),
-                    'isActive':active,
-                    'symbolAtRight':symbolAtRight
-                }).then(async function(result) {
-                    // Log the activity
-                    await logActivity('currencies', 'created', 'Created new currency: ' + currencyName);
-                    window.location.href = '{{ route("currencies")}}';
-                });
-            });
-        } else {
-            database.collection('currencies').doc(id).set({
-                'id':id,
-                'name':currencyName,
-                'code':currencyCode,
-                'symbol':currencySymbol,
-                'decimal_degits': parseInt(decimal_degits),
-                'isActive':active,
-                'symbolAtRight':symbolAtRight
-            }).then(async function(result) {
-                // Log the activity
-                await logActivity('currencies', 'created', 'Created new currency: ' + currencyName);
-                window.location.href = '{{ route("currencies")}}';
-            });
+    $(".save-setting-btn").click(function(){
+      var currencyName = $(".currency_name").val();
+      var currencyCode = $(".currency_code").val();
+      var currencySymbol = $(".currency_symbol").val();
+      var decimal_degits = $(".decimal_degits").val();
+      var active = $(".currency_active").is(":checked");
+      var symbolAtRight = $(".symbol_at_right").is(":checked");
+
+      if(currencyName == ''){
+          $(".error_top").show();
+          $(".error_top").html("");
+          $(".error_top").append("<p>{{trans('lang.enter_currency_name_error')}}</p>");
+          return;
+      } else if(currencySymbol == ''){
+          $(".error_top").show();
+          $(".error_top").html("");
+          $(".error_top").append("<p>{{trans('lang.enter_currency_symbol_error')}}</p>");
+          return;
+      } else if (decimal_degits < 0) {
+          $(".error_top").show();
+          $(".error_top").html("");
+          $(".error_top").append("<p>{{trans('lang.digit_after_decimal_point_error')}}</p>");
+          return;
+      }
+
+      $.ajax({
+        url: '{{ route('currencies.store') }}',
+        type: 'POST',
+        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+        data: {
+          name: currencyName,
+          code: currencyCode,
+          symbol: currencySymbol,
+          decimal_degits: parseInt(decimal_degits || 0),
+          isActive: active ? 1 : 0,
+          symbolAtRight: symbolAtRight ? 1 : 0
+        },
+        success: function(){
+          window.location.href = '{{ route("currencies")}}';
+        },
+        error: function(xhr){
+          var msg = 'Failed to save';
+          if(xhr.responseJSON && xhr.responseJSON.message){ msg = xhr.responseJSON.message; }
+          $(".error_top").show();
+          $(".error_top").html("");
+          $(".error_top").append('<p>'+msg+'</p>');
         }
-    }
-});
-});
+      });
+    });
+  });
 </script>
 @endsection

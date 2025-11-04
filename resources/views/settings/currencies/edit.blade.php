@@ -22,34 +22,34 @@
                             <div class="form-group row width-50">
                               <label class="col-5 control-label">{{trans('lang.currency_name')}}</label>
                               <div class="col-7">
-                                <input type="text" class="form-control currency_name">
+                                <input type="text" class="form-control currency_name" value="{{ $currency->name }}">
                               </div>
                             </div>
                             <div class="form-group row width-50">
                               <label class="col-5 control-label">{{trans('lang.currency_code')}}</label>
                               <div class="col-7">
-                                <input type="text" class="form-control currency_code">
+                                <input type="text" class="form-control currency_code" value="{{ $currency->code }}">
                               </div>
                             </div>
                             <div class="form-group row width-50">
                               <label class="col-5 control-label">{{trans('lang.currency_symbol')}}</label>
                               <div class="col-7">
-                                <input type="text" class="form-control currency_symbol">
+                                <input type="text" class="form-control currency_symbol" value="{{ $currency->symbol }}">
                               </div>
                             </div>
                            <div class="form-group row width-50">
                               <label class="col-5 control-label">{{trans('lang.digit_after_decimal_point')}}</label>
                               <div class="col-7">
-                                <input type="number" class="form-control decimal_degits" value="0">
+                                <input type="number" class="form-control decimal_degits" value="{{ (int)($currency->decimal_degits ?? 0) }}">
                                 <div class="form-text text-muted">{{trans('lang.digit_after_decimal_point_help')}}</div>
                               </div>
                             </div>
                             <div class="form-check width-100">
-                              <input type="checkbox" class="symbol_at_right" id="symbol_at_right">
+                              <input type="checkbox" class="symbol_at_right" id="symbol_at_right" {{ $currency->symbolAtRight ? 'checked' : '' }}>
                               <label class="col-5 control-label" for="symbol_at_right">{{trans('lang.symbole_at_right')}}</label>
                             </div>
                             <div class="form-check width-100">
-                              <input type="checkbox" class="currency_active" id="currency_active">
+                              <input type="checkbox" class="currency_active" id="currency_active" {{ $currency->isActive ? 'checked' : '' }}>
                               <label class="col-3 control-label" for="currency_active">{{trans('lang.active')}}</label>
                             </div>
                           </fieldset>
@@ -66,97 +66,54 @@
 @section('scripts')
  <script>
 var id = "<?php echo $id;?>";
-var database = firebase.firestore();
-var ref = database.collection('currencies').where('id','==',id);
 $(document).ready(function(){
-var currencyName, currencyCode, currencySymbol, decimal_degits, active, symbolAtRight;
-jQuery("#data-table_processing").show();
-ref.get().then(async function(snapshots){
-  var currency = snapshots.docs[0].data();
-  $(".currency_name").val(currency.name);
-  $(".currency_code").val(currency.code);
-  $(".currency_symbol").val(currency.symbol);
-  if (currency.decimal_degits) {
-      $(".decimal_degits").val(currency.decimal_degits);
-  }
-  if(currency.isActive){
-    $(".currency_active").prop('checked',true);
-  }
-  if(currency.symbolAtRight){
-    $(".symbol_at_right").prop('checked',true);
-  }
-  jQuery("#data-table_processing").hide();
-});
-$(".edit-setting-btn").click(function(){
-  currencyName = $(".currency_name").val();
-  currencyCode = $(".currency_code").val();
-  currencySymbol = $(".currency_symbol").val();
-  decimal_degits = $(".decimal_degits").val();
-  active = $(".currency_active").is(":checked");
-  symbolAtRight = $(".symbol_at_right").is(":checked");
-  if(currencyName == ''){
-    $(".error_top").show();
-    $(".error_top").html("");
-    $(".error_top").append("<p>{{trans('lang.enter_currency_name_error')}}</p>");
-  } else if(currencySymbol == ''){
-    $(".error_top").show();
-    $(".error_top").html("");
-    $(".error_top").append("<p>{{trans('lang.enter_currency_symbol_error')}}</p>");
-  } else if (decimal_degits < 0) {
-    $(".error_top").show();
-    $(".error_top").html("");
-    $(".error_top").append("<p>{{trans('lang.digit_after_decimal_point_error')}}</p>");
-  } else {
-    if (!active) {
-      // If the currency is being disabled, check if there are any active currencies left
-      database.collection('currencies').where('isActive', '==', true).get().then(function(snapshots) {
-        if (snapshots.size === 1) {
-          // Only one active currency remaining, show alert
-          alert("You can't disable all currencies. At least one currency must be active.");
-        } else {
-          // Continue with disabling the currency
-          disableCurrency();
-        }
-      }).catch(function(error) {
-        console.error("Error getting active currencies: ", error);
-      });
-    } else {
-      // If the currency is being enabled or remains active, proceed without checking
-      disableCurrency();
+  $(".edit-setting-btn").click(function(){
+    var currencyName = $(".currency_name").val();
+    var currencyCode = $(".currency_code").val();
+    var currencySymbol = $(".currency_symbol").val();
+    var decimal_degits = $(".decimal_degits").val();
+    var active = $(".currency_active").is(":checked");
+    var symbolAtRight = $(".symbol_at_right").is(":checked");
+
+    if(currencyName == ''){
+      $(".error_top").show();
+      $(".error_top").html("");
+      $(".error_top").append("<p>{{trans('lang.enter_currency_name_error')}}</p>");
+      return;
+    } else if(currencySymbol == ''){
+      $(".error_top").show();
+      $(".error_top").html("");
+      $(".error_top").append("<p>{{trans('lang.enter_currency_symbol_error')}}</p>");
+      return;
+    } else if (decimal_degits < 0) {
+      $(".error_top").show();
+      $(".error_top").html("");
+      $(".error_top").append("<p>{{trans('lang.digit_after_decimal_point_error')}}</p>");
+      return;
     }
-  }
-});
-// Function to disable the currency
-function disableCurrency() {
-   var ref = database.collection('currencies').where('isActive', '==', true);
-      ref.get().then(async function(snapshots){
-      var currency = snapshots.docs[0].data();
-          database.collection('currencies').doc(currency.id).update({
-            'isActive': false,
-          }).then(async function(result) {
-            // Log the activity
-            await logActivity('currencies', 'updated', 'Updated currency: ' + currencyName);
-            window.location.href = '{{ route("currencies")}}';
-          }).catch(function(error) {
-            console.error("Error updating currency: ", error);
-          });
-          // Only one active currency remaining, show alert
-          database.collection('currencies').doc(id).update({
-            'name': currencyName,
-            'code': currencyCode,
-            'symbol': currencySymbol,
-            'decimal_degits': parseInt(decimal_degits),
-            'isActive': active,
-            'symbolAtRight': symbolAtRight
-          }).then(async function(result) {
-            // Log the activity
-            await logActivity('currencies', 'updated', 'Updated currency: ' + currencyName);
-            window.location.href = '{{ route("currencies")}}';
-          }).catch(function(error) {
-            console.error("Error updating currency: ", error);
-          });
-      });
-    }
+
+    $.ajax({
+      url: '{{ route('currencies.update', $currency->id) }}',
+      type: 'POST',
+      headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+      data: {
+        name: currencyName,
+        code: currencyCode,
+        symbol: currencySymbol,
+        decimal_degits: parseInt(decimal_degits || 0),
+        isActive: active ? 1 : 0,
+        symbolAtRight: symbolAtRight ? 1 : 0
+      },
+      success: function(){
+        window.location.href = '{{ route("currencies")}}';
+      },
+      error: function(xhr){
+        var msg = 'Failed to update';
+        if(xhr.responseJSON && xhr.responseJSON.message){ msg = xhr.responseJSON.message; }
+        alert(msg);
+      }
+    });
+  });
 });
   </script>
 @endsection
