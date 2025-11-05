@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AppUserController;
 use App\Http\Controllers\Api\FirebaseUserController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\ZoneController;
 
 /*
 |--------------------------------------------------------------------------
@@ -19,7 +20,6 @@ use App\Http\Controllers\Api\PaymentController;
 | is assigned the "api" middleware group. Enjoy building your API!
 |
 */
-
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
@@ -53,4 +53,17 @@ Route::post('/sms-delivery-status', [App\Http\Controllers\OTPController::class, 
 
 // Debug route - remove in production
 Route::get('/debug-otp/{phone}', [App\Http\Controllers\OTPController::class, 'debugOtp']);
+
+
+
+
+// Zone detection routes
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/zones/current', [ZoneController::class, 'getCurrentZone']);
+    Route::get('/zones/detect-id', [ZoneController::class, 'detectZoneId']);
+    Route::get('/zones/check-service-area', [ZoneController::class, 'checkServiceArea']);
+    Route::get('/zones/all', [ZoneController::class, 'getAllZones']);
+});
+
 
