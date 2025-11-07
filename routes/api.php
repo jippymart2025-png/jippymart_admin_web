@@ -14,7 +14,9 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\BannerController;
 use App\Http\Controllers\Api\MenuItemBannerController;
 use App\Http\Controllers\Api\StoryController;
+use App\Http\Controllers\Api\CouponApiController;
 use App\Http\Controllers\Api\UserProfileController;
+use App\Http\Controllers\Api\ShippingAddressController;
 
 /*
 |--------------------------------------------------------------------------
@@ -55,9 +57,7 @@ Route::patch('/app-users/{id}/active', [AppUserController::class, 'setActive']);
 Route::post('/send-otp', [App\Http\Controllers\OTPController::class, 'sendOtp']);
 Route::post('/verify-otp', [App\Http\Controllers\OTPController::class, 'verifyOtp']);
 Route::post('/resend-otp', [App\Http\Controllers\OTPController::class, 'resendOtp']);
-Route::middleware('auth:sanctum')->group(function () {
 Route::post('/signup', [App\Http\Controllers\OTPController::class, 'signUp']);
-});
 
 Route::post('/sms-delivery-status', [App\Http\Controllers\OTPController::class, 'smsDeliveryStatus']);
 
@@ -107,6 +107,18 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::middleware('auth:sanctum')->group(function () {
 // Stories API routes (Public - no auth required)
 Route::get('/stories', [StoryController::class, 'index']);
+});
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::match(['put', 'post'], '/users/{userId}/shipping-address', [ShippingAddressController::class, 'update']);
+    Route::post('/users/shipping-address', [ShippingAddressController::class, 'update']);
+});
+
+Route::middleware('auth:sanctum')->group(function () {
+// Coupons API routes (Public - no auth required)
+    Route::prefix('coupons')->group(function () {
+        Route::get('/{type}', [CouponApiController::class, 'byType']);
+    });
 });
 // User Profile API routes (Customers only)
 Route::middleware('auth:sanctum')->group(function () {

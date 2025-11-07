@@ -30,9 +30,10 @@ class RestaurantController extends Controller
             'zone_id' => 'required|string',
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
-            'radius' => 'required|numeric|min:0',
+            'radius' => 'nullable|numeric|min:0',
             'is_dining' => 'nullable|boolean',
-            'user_id' => 'nullable|string'
+            'user_id' => 'nullable|string',
+            'filter' => 'nullable|string|in:distance,rating',
         ]);
 
         if ($validator->fails()) {
@@ -46,63 +47,97 @@ class RestaurantController extends Controller
         $zoneId = $request->input('zone_id');
         $userLat = $request->input('latitude');
         $userLon = $request->input('longitude');
-        $radius = $request->input('radius', 10); // Default 10km
+        $radius = $request->has('radius') ? $request->input('radius') : null;
         $isDining = $request->input('is_dining', false);
         $userId = $request->input('user_id');
+        $filter = $request->input('filter', 'distance'); // default filter
 
         try {
-            // Build query for restaurants/vendors
-            $query = Vendor::select('vendors.*')
-                ->selectRaw(
-                    '(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) AS distance',
-                    [$userLat, $userLon, $userLat]
-                )
-                // 1. Zone Filtering
+            // Build query
+            $query = Vendor::query()
+                ->select('vendors.*')
                 ->where('zoneId', $zoneId)
-                ->where(function($q) {
-                    // Treat NULL and TRUE as published, only FALSE as not published
+                ->where(function ($q) {
                     $q->where('publish', true)->orWhereNull('publish');
-                })
-                ->whereNotNull('latitude')
-                ->whereNotNull('longitude')
-                // 2. Geographic Filtering - radius check
-                ->havingRaw('distance <= ?', [$radius]);
+                });
 
-            // Filter for dine-in if requested
+            $hasCoordinates = $request->filled('latitude') && $request->filled('longitude');
+
+            if ($hasCoordinates) {
+                $query->whereNotNull('latitude')
+                    ->whereNotNull('longitude')
+                    ->selectRaw(
+                        '(6371 * acos(cos(radians(?)) * cos(radians(latitude))
+                    * cos(radians(longitude) - radians(?))
+                    + sin(radians(?)) * sin(radians(latitude)))) AS distance',
+                        [$userLat, $userLon, $userLat]
+                    );
+
+                if ($radius !== null && $filter !== 'rating') {
+                    $query->havingRaw('distance <= ?', [$radius]);
+                }
+            }
+
+            // Dine-in filter
             if ($isDining) {
                 $query->where('enabledDiveInFuture', true);
             }
 
-            // 4. Type Filtering - Exclude 'mart' vType (for food category)
+            // Type filter (exclude marts)
             if (DB::getSchemaBuilder()->hasColumn('vendors', 'vType')) {
-                $query->where(function($q) {
+                $query->where(function ($q) {
                     $q->where('vType', 'restaurant')
-                      ->orWhere('vType', 'food')
-                      ->orWhereNull('vType'); // Include NULL as restaurant by default
+                        ->orWhere('vType', 'food')
+                        ->orWhereNull('vType');
                 })
-                ->where('vType', '!=', 'mart'); // Explicitly exclude mart
+                    ->where('vType', '!=', 'mart');
             }
 
-            // 6. Sorting - Sort by distance first, then by rating
-            $query->orderBy('distance', 'asc')
-                  ->orderByRaw('COALESCE(reviewsSum, 0) DESC'); // Secondary sort by rating
+            // Apply sorting based on filter
+            switch ($filter) {
+                case 'rating':
+                    $query->orderByRaw('CASE WHEN COALESCE(reviewsCount, 0) > 0 THEN COALESCE(reviewsSum, 0) / NULLIF(reviewsCount, 0) ELSE 0 END DESC')
+                          ->orderByRaw('COALESCE(reviewsCount, 0) DESC');
+                    break;
 
-            // Get results
-            $restaurants = $query->get();
+                case 'distance':
+                default:
+                    if ($hasCoordinates) {
+                        $query->orderBy('distance', 'asc');
+                    } else {
+                        $query->orderBy('title', 'asc');
+                    }
+                    break;
+            }
 
-            // Format response with subscription data
-            $data = $restaurants->map(function ($restaurant) use ($userId) {
-                return $this->formatRestaurantResponse($restaurant, $userId);
-            });
+        // Fetch restaurants
+        $restaurants = $query->get();
 
-            // 3. Subscription Filtering - Apply after fetching subscription data
-            $filteredData = $data->filter(function($restaurant) {
-                return $this->isSubscriptionValid($restaurant);
-            })->values(); // Re-index array after filtering
+        // Format and filter subscriptions
+        $data = $restaurants->map(function ($restaurant) use ($userId) {
+            return $this->formatRestaurantResponse($restaurant, $userId);
+        })->filter(function ($restaurant) {
+            return $this->isSubscriptionValid($restaurant);
+        })->values();
+
+        // Apply rating sort if requested
+        if ($filter === 'rating') {
+            $data = $data->sortByDesc(function ($restaurant) {
+                return $restaurant['reviewsAverage'] ?? 0;
+            })->values();
+        }
+
+        // Always sort closed restaurants to bottom while preserving current order
+        $sortedData = $data->sortBy(function ($r, $index) {
+            return [$r['isOpen'] ? 0 : 1, $index];
+        })->values();
 
             return response()->json([
                 'success' => true,
-                'data' => $filteredData
+                'filter' => $filter,
+                'availableFilters' => ['distance','rating'],
+                'count' => $sortedData->count(),
+                'data' => $sortedData,
             ]);
 
         } catch (\Exception $e) {
@@ -111,20 +146,20 @@ class RestaurantController extends Controller
                 'latitude' => $userLat,
                 'longitude' => $userLon,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch nearest restaurants',
-                'error' => config('app.debug') ? $e->getMessage() : null
+                'error' => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }
     }
 
     /**
      * Check if subscription is valid (Business Logic #3)
-     * 
+     *
      * Rules:
      * - Include if subscriptionTotalOrders = "-1" (unlimited)
      * - OR if subscription is valid (not expired) AND subscriptionTotalOrders > 0
@@ -347,7 +382,7 @@ class RestaurantController extends Controller
             if ($request->has('latitude') && $request->has('longitude')) {
                 $lat = $request->input('latitude');
                 $lon = $request->input('longitude');
-                
+
                 $query->selectRaw(
                     'vendors.*, (6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) AS distance',
                     [$lat, $lon, $lat]
