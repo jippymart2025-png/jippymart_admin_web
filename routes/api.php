@@ -9,6 +9,12 @@ use App\Http\Controllers\Api\AppUserController;
 use App\Http\Controllers\Api\FirebaseUserController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ZoneController;
+use App\Http\Controllers\Api\RestaurantController;
+use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\BannerController;
+use App\Http\Controllers\Api\MenuItemBannerController;
+use App\Http\Controllers\Api\StoryController;
+use App\Http\Controllers\Api\UserProfileController;
 
 /*
 |--------------------------------------------------------------------------
@@ -49,7 +55,10 @@ Route::patch('/app-users/{id}/active', [AppUserController::class, 'setActive']);
 Route::post('/send-otp', [App\Http\Controllers\OTPController::class, 'sendOtp']);
 Route::post('/verify-otp', [App\Http\Controllers\OTPController::class, 'verifyOtp']);
 Route::post('/resend-otp', [App\Http\Controllers\OTPController::class, 'resendOtp']);
+Route::middleware('auth:sanctum')->group(function () {
 Route::post('/signup', [App\Http\Controllers\OTPController::class, 'signUp']);
+});
+
 Route::post('/sms-delivery-status', [App\Http\Controllers\OTPController::class, 'smsDeliveryStatus']);
 
 // Debug route - remove in production
@@ -59,7 +68,6 @@ Route::get('/debug-otp/{phone}', [App\Http\Controllers\OTPController::class, 'de
 
 
 // Zone detection routes
-
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/zones/current', [ZoneController::class, 'getCurrentZone']);
     Route::get('/zones/detect-id', [ZoneController::class, 'detectZoneId']);
@@ -67,4 +75,37 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/zones/all', [ZoneController::class, 'getAllZones']);
 });
 
+// Restaurant/Vendor API routes
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/restaurants/nearest', [RestaurantController::class, 'nearest']);
+    Route::get('/restaurants/search', [RestaurantController::class, 'search']);
+    Route::get('/restaurants/by-zone/{zone_id}', [RestaurantController::class, 'byZone']);
+    Route::get('/restaurants/{id}', [RestaurantController::class, 'show']);
+});
+
+// Category API routes (Public - no auth required)
+Route::get('/categories/home', [CategoryController::class, 'home']);
+Route::get('/categories', [CategoryController::class, 'index']);
+Route::get('/categories/{id}', [CategoryController::class, 'show']);
+
+// Banner API routes (Public - no auth required)
+Route::get('/banners/top', [BannerController::class, 'top']);
+Route::get('/banners', [BannerController::class, 'index']);
+Route::get('/banners/{id}', [BannerController::class, 'show']);
+
+// Menu Item Banner API routes (Public - no auth required)
+Route::get('/menu-items/banners/top', [MenuItemBannerController::class, 'top']);
+Route::get('/menu-items/banners', [MenuItemBannerController::class, 'index']);
+Route::get('/menu-items/banners/{id}', [MenuItemBannerController::class, 'show']);
+
+// Stories API routes (Public - no auth required)
+Route::get('/stories', [StoryController::class, 'index']);
+
+// User Profile API routes (Customers only)
+Route::middleware('auth:sanctum')->group(function () {
+
+Route::get('/users/profile/{firebase_id}', [UserProfileController::class, 'show']); // Public - get customer by firebase_id
+    Route::get('/user/profile', [UserProfileController::class, 'me']); // Get current customer profile
+    Route::put('/user/profile', [UserProfileController::class, 'update']); // Update current customer profile
+});
 
