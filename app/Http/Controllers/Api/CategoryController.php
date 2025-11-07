@@ -13,7 +13,7 @@ class CategoryController extends Controller
      * GET /api/categories/home
      *
      * Purpose: Get categories to display on home page
-     * 
+     *
      * Business Logic:
      * - Filter where show_in_homepage = true AND publish = true
      * - Order by display order (if available)
@@ -103,41 +103,41 @@ class CategoryController extends Controller
      * Get Single Category
      * GET /api/categories/{id}
      */
-    public function show($id)
-    {
-        try {
-            $category = VendorCategory::find($id);
-
-            if (!$category) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Category not found'
-                ], 404);
-            }
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'id' => $category->id,
-                    'title' => $category->title ?? '',
-                    'photo' => $category->photo ?? '',
-                    'show_in_homepage' => (bool) $category->show_in_homepage,
-                    'publish' => (bool) $category->publish,
-                    'description' => $category->description ?? '',
-                    'vType' => $category->vType ?? null,
-                ]
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Get Category Error: ' . $e->getMessage(), ['id' => $id]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch category',
-                'error' => config('app.debug') ? $e->getMessage() : null
-            ], 500);
-        }
-    }
+//    public function show($id)
+//    {
+//        try {
+//            $category = VendorCategory::find($id);
+//
+//            if (!$category) {
+//                return response()->json([
+//                    'success' => false,
+//                    'message' => 'Category not found'
+//                ], 404);
+//            }
+//
+//            return response()->json([
+//                'success' => true,
+//                'data' => [
+//                    'id' => $category->id,
+//                    'title' => $category->title ?? '',
+//                    'photo' => $category->photo ?? '',
+//                    'show_in_homepage' => (bool) $category->show_in_homepage,
+//                    'publish' => (bool) $category->publish,
+//                    'description' => $category->description ?? '',
+//                    'vType' => $category->vType ?? null,
+//                ]
+//            ]);
+//
+//        } catch (\Exception $e) {
+//            Log::error('Get Category Error: ' . $e->getMessage(), ['id' => $id]);
+//
+//            return response()->json([
+//                'success' => false,
+//                'message' => 'Failed to fetch category',
+//                'error' => config('app.debug') ? $e->getMessage() : null
+//            ], 500);
+//        }
+//    }
 }
 
 

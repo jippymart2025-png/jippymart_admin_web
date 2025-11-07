@@ -29,6 +29,24 @@ class MenuItemBannerController extends Controller
      */
     public function top(Request $request)
     {
+        return $this->getMenuItemsByPosition($request, 'top');
+    }
+
+    public function middle(Request $request)
+    {
+        return $this->getMenuItemsByPosition($request, 'middle');
+    }
+
+    public function bottom(Request $request)
+    {
+        return $this->getMenuItemsByPosition($request, 'bottom');
+    }
+
+    /**
+     * Common function to fetch menu items by position
+     */
+    private function getMenuItemsByPosition(Request $request, string $position)
+    {
         // Validate optional zone_id parameter
         $validator = Validator::make($request->all(), [
             'zone_id' => 'nullable|string'
@@ -45,42 +63,38 @@ class MenuItemBannerController extends Controller
         $zoneId = $request->input('zone_id');
 
         try {
-            // Base query: published banners with position = "top"
+            // Base query: published menu items with given position
             $query = MenuItem::where('is_publish', true)
-                ->where('position', 'top');
+                ->where('position', $position);
 
             // Apply zone filtering logic
             if ($zoneId) {
-                // If user has a zone, show:
-                // 1. Banners with matching zoneId
-                // 2. Banners with no zoneId (null or empty) - shown to all zones
-                $query->where(function($q) use ($zoneId) {
+                $query->where(function ($q) use ($zoneId) {
                     $q->where('zoneId', $zoneId)
-                      ->orWhereNull('zoneId')
-                      ->orWhere('zoneId', '');
+                        ->orWhereNull('zoneId')
+                        ->orWhere('zoneId', '');
                 });
             }
-            // If no zone_id provided, show all (fallback)
 
             // Order by set_order
             $query->orderBy('set_order', 'asc');
 
-            // Get banners
-            $banners = $query->get();
+            // Get menu items
+            $menuItems = $query->get();
 
             // Format response
-            $data = $banners->map(function ($banner) {
+            $data = $menuItems->map(function ($item) {
                 return [
-                    'id' => $banner->id,
-                    'title' => $banner->title ?? '',
-                    'photo' => $banner->photo ?? '',
-                    'position' => $banner->position ?? 'top',
-                    'is_publish' => (bool) $banner->is_publish,
-                    'set_order' => (int) ($banner->set_order ?? 0),
-                    'zoneId' => $banner->zoneId ?? null,
-                    'zoneTitle' => $banner->zoneTitle ?? null,
-                    'redirect_type' => $banner->redirect_type ?? null,
-                    'redirect_id' => $banner->redirect_id ?? null,
+                    'id' => $item->id,
+                    'title' => $item->title ?? '',
+                    'photo' => $item->photo ?? '',
+                    'position' => $item->position ?? '',
+                    'is_publish' => (bool) $item->is_publish,
+                    'set_order' => (int) ($item->set_order ?? 0),
+                    'zoneId' => $item->zoneId ?? null,
+                    'zoneTitle' => $item->zoneTitle ?? null,
+                    'redirect_type' => $item->redirect_type ?? null,
+                    'redirect_id' => $item->redirect_id ?? null,
                 ];
             });
 
@@ -90,7 +104,7 @@ class MenuItemBannerController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Get Top Menu Item Banners Error: ' . $e->getMessage(), [
+            Log::error("Get {$position} Menu Item Error: " . $e->getMessage(), [
                 'zone_id' => $zoneId,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
@@ -98,7 +112,7 @@ class MenuItemBannerController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to fetch top menu item banners',
+                'message' => "Failed to fetch {$position} menu item banners",
                 'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }

@@ -98,9 +98,11 @@ Route::get('/banners/{id}', [BannerController::class, 'show']);
 });
 Route::middleware('auth:sanctum')->group(function () {
 // Menu Item Banner API routes (Public - no auth required)
-Route::get('/menu-items/banners/top', [MenuItemBannerController::class, 'top']);
-Route::get('/menu-items/banners', [MenuItemBannerController::class, 'index']);
-Route::get('/menu-items/banners/{id}', [MenuItemBannerController::class, 'show']);
+    Route::get('/menu-items/banners/top', [MenuItemBannerController::class, 'top']);
+    Route::get('/menu-items/banners/middle', [MenuItemBannerController::class, 'middle']);
+    Route::get('/menu-items/banners/bottom', [MenuItemBannerController::class, 'bottom']);
+//Route::get('/menu-items/banners', [MenuItemBannerController::class, 'index']);
+//Route::get('/menu-items/banners/{id}', [MenuItemBannerController::class, 'show']);
 });
 Route::middleware('auth:sanctum')->group(function () {
 // Stories API routes (Public - no auth required)
