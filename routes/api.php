@@ -84,23 +84,28 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 // Category API routes (Public - no auth required)
+Route::middleware('auth:sanctum')->group(function () {
 Route::get('/categories/home', [CategoryController::class, 'home']);
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/categories/{id}', [CategoryController::class, 'show']);
+});
+Route::middleware('auth:sanctum')->group(function () {
 
 // Banner API routes (Public - no auth required)
 Route::get('/banners/top', [BannerController::class, 'top']);
 Route::get('/banners', [BannerController::class, 'index']);
 Route::get('/banners/{id}', [BannerController::class, 'show']);
-
+});
+Route::middleware('auth:sanctum')->group(function () {
 // Menu Item Banner API routes (Public - no auth required)
 Route::get('/menu-items/banners/top', [MenuItemBannerController::class, 'top']);
 Route::get('/menu-items/banners', [MenuItemBannerController::class, 'index']);
 Route::get('/menu-items/banners/{id}', [MenuItemBannerController::class, 'show']);
-
+});
+Route::middleware('auth:sanctum')->group(function () {
 // Stories API routes (Public - no auth required)
 Route::get('/stories', [StoryController::class, 'index']);
-
+});
 // User Profile API routes (Customers only)
 Route::middleware('auth:sanctum')->group(function () {
 
