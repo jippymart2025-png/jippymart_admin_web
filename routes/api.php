@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\StoryController;
 use App\Http\Controllers\Api\CouponApiController;
 use App\Http\Controllers\Api\UserProfileController;
 use App\Http\Controllers\Api\ShippingAddressController;
+use App\Http\Controllers\Api\FavoriteController;
 
 /*
 |--------------------------------------------------------------------------
@@ -110,6 +111,8 @@ Route::get('/stories', [StoryController::class, 'index']);
 });
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/users/{userId}/shipping-address', [ShippingAddressController::class, 'show']);
+    Route::get('/users/shipping-address', [ShippingAddressController::class, 'show']);
     Route::match(['put', 'post'], '/users/{userId}/shipping-address', [ShippingAddressController::class, 'update']);
     Route::post('/users/shipping-address', [ShippingAddressController::class, 'update']);
 });
@@ -127,4 +130,22 @@ Route::get('/users/profile/{firebase_id}', [UserProfileController::class, 'show'
     Route::get('/user/profile', [UserProfileController::class, 'me']); // Get current customer profile
     Route::put('/user/profile', [UserProfileController::class, 'update']); // Update current customer profile
 });
+
+
+Route::middleware('auth:sanctum')->group(function () {
+
+Route::prefix('favorites')->group(function () {
+    // Restaurants
+    Route::get('restaurants/{firebase_id}', [FavoriteController::class, 'getFavoriteRestaurants']);
+    Route::post('restaurants', [FavoriteController::class, 'addFavoriteRestaurant']);
+    Route::delete('restaurants', [FavoriteController::class, 'removeFavoriteRestaurant']);
+
+    // Items
+    Route::get('items/{firebase_id}', [FavoriteController::class, 'getFavoriteItems']);
+    Route::post('items', [FavoriteController::class, 'addFavoriteItem']);
+    Route::delete('items', [FavoriteController::class, 'removeFavoriteItem']);
+});
+});
+
+
 

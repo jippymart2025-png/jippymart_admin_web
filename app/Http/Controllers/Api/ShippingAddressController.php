@@ -13,6 +13,73 @@ use Illuminate\Support\Str;
 class ShippingAddressController extends Controller
 {
     /**
+     * Fetch user's shipping addresses.
+     *
+     * Routes examples:
+     * GET /api/users/{userId}/shipping-address
+     * GET /api/users/shipping-address?phone=9999999999
+     */
+    public function show(Request $request, $userId = null)
+    {
+        try {
+            if ($userId) {
+                $user = User::where('id', $userId)
+                            ->orWhere('firebase_id', $userId)
+                            ->first();
+            } elseif ($request->query('phone')) {
+                $user = User::where('phone', $request->query('phone'))->first();
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Missing user identifier. Provide route userId, firebase_id, or ?phone=.',
+                ], 400);
+            }
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found.',
+                ], 404);
+            }
+
+            $addresses = [];
+
+            $rawExisting = $user->shippingAddress;
+            if (!empty($rawExisting)) {
+                if (is_string($rawExisting)) {
+                    $decoded = json_decode($rawExisting, true);
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                        $addresses = $decoded;
+                    }
+                } elseif (is_array($rawExisting)) {
+                    $addresses = $rawExisting;
+                }
+            }
+
+            if (!is_array($addresses)) {
+                $addresses = [];
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => array_values($addresses),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Failed fetching shipping address', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'userId' => $userId ?? $request->query('phone'),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch shipping address',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
+    }
+
+    /**
      * Update user's shipping addresses (replace or merge).
      *
      * Routes examples:
