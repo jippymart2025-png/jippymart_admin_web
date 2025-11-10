@@ -5,20 +5,22 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class UserProfileController extends Controller
 {
     /**
      * Get User Profile
      * GET /api/users/profile/{firebase_id}
-     * 
+     *
      * Purpose: Get complete customer profile with all details
-     * 
+     *
      * Path Parameters:
      * - firebase_id (required): User's firebase_id
-     * 
+     *
      * Note: Only returns customers (role = 'customer')
      */
     public function show($firebase_id)
@@ -78,10 +80,10 @@ class UserProfileController extends Controller
     /**
      * Get Authenticated User Profile
      * GET /api/user/profile
-     * 
+     *
      * Purpose: Get profile of currently authenticated customer
      * Requires: auth:sanctum middleware
-     * 
+     *
      * Note: Only returns customers (role = 'customer')
      */
     public function me(Request $request)
@@ -133,43 +135,105 @@ class UserProfileController extends Controller
     public function update(Request $request)
     {
         try {
-            $user = $request->user();
+            // ✅ Get user by firebase_id (if sent) OR by token
+            $user = null;
+
+            if ($request->has('firebase_id')) {
+                $user = User::where('firebase_id', $request->input('firebase_id'))->first();
+            } else {
+                $user = $request->user();
+            }
 
             if (!$user) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'User not authenticated'
-                ], 401);
+                    'message' => 'User not found or not authenticated',
+                ], 404);
             }
 
-            // Update allowed fields
+            $data = $request->all();
+            $data['firstName'] = $data['firstName'] ?? $data['first_name'] ?? null;
+            $data['lastName'] = $data['lastName'] ?? $data['last_name'] ?? null;
+            $data['email'] = $data['email'] ?? $data['Email'] ?? null;
+            $data['countryCode'] = $data['countryCode'] ?? $data['country_code'] ?? null;
+            $data['phoneNumber'] = $data['phoneNumber'] ?? $data['phone_number'] ?? null;
+            $data['profilePictureURL'] = $data['profilePictureURL'] ?? $data['profile_picture_url'] ?? null;
+            $data['shippingAddress'] = $data['shippingAddress'] ?? $data['shipping_address'] ?? null;
+            $data['location'] = $data['location'] ?? $data['location_data'] ?? null;
+
+            // ✅ Validate request
+            $validationData = array_merge($data, $request->allFiles());
+
+            $validator = Validator::make($validationData, [
+                'firstName' => 'nullable|string|max:100',
+                'lastName' => 'nullable|string|max:100',
+                'email' => 'nullable|email|max:255',
+                'countryCode' => 'nullable|string|max:10',
+                'profile_picture' => 'nullable|image|max:4096',
+                'fcmToken' => 'nullable|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
             $updateData = [];
 
-            if ($request->has('firstName')) $updateData['firstName'] = $request->input('firstName');
-            if ($request->has('lastName')) $updateData['lastName'] = $request->input('lastName');
-            if ($request->has('email')) $updateData['email'] = $request->input('email');
-            if ($request->has('profilePictureURL')) $updateData['profilePictureURL'] = $request->input('profilePictureURL');
-            if ($request->has('fcmToken')) $updateData['fcmToken'] = $request->input('fcmToken');
-            if ($request->has('countryCode')) $updateData['countryCode'] = $request->input('countryCode');
-            if ($request->has('shippingAddress')) $updateData['shippingAddress'] = json_encode($request->input('shippingAddress'));
-            if ($request->has('location')) $updateData['location'] = json_encode($request->input('location'));
-            if ($request->has('zoneId')) $updateData['zoneId'] = $request->input('zoneId');
+            // ✅ Handle profile picture file upload
+            if ($request->hasFile('profile_picture')) {
+                $file = $request->file('profile_picture');
+                $fileName = Str::uuid() . '.' . $file->getClientOriginalExtension();
+                $file->storeAs('public/users', $fileName);
+                $updateData['profilePictureURL'] = url('storage/users/' . $fileName);
+            } elseif ($data['profilePictureURL'] !== null) {
+                $updateData['profilePictureURL'] = $data['profilePictureURL'];
+            }
 
+            // ✅ Handle normal fields
+            foreach ([
+                'firstName' => 'firstName',
+                'lastName' => 'lastName',
+                'email' => 'email',
+                'fcmToken' => 'fcmToken',
+                'countryCode' => 'countryCode',
+                'zoneId' => 'zoneId',
+                'phoneNumber' => 'phoneNumber',
+            ] as $payloadKey => $column) {
+                if (array_key_exists($payloadKey, $data) && $data[$payloadKey] !== null) {
+                    $updateData[$column] = $data[$payloadKey];
+                }
+            }
+
+            // ✅ Handle JSON fields (shippingAddress, location)
+            foreach (['shippingAddress', 'location'] as $jsonField) {
+                if (array_key_exists($jsonField, $data) && $data[$jsonField] !== null) {
+                    $value = $data[$jsonField];
+                    $updateData[$jsonField] = is_array($value)
+                        ? json_encode($value)
+                        : $value;
+                }
+            }
+
+            // ✅ Save and refresh user
             if (!empty($updateData)) {
-                $user->update($updateData);
+                foreach ($updateData as $attribute => $value) {
+                    $user->{$attribute} = $value;
+                }
+
+                $user->save();
                 $user->refresh();
             }
 
-            // Get subscription plan if exists
+            // ✅ Get subscription plan if needed
             $subscriptionPlan = $this->getSubscriptionPlan($user);
-
-            // Format response
-            $data = $this->formatUserProfile($user, $subscriptionPlan);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Profile updated successfully',
-                'data' => $data
+                'data' => $this->formatUserProfile($user, $subscriptionPlan),
             ]);
 
         } catch (\Exception $e) {
@@ -178,7 +242,7 @@ class UserProfileController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update user profile',
-                'error' => config('app.debug') ? $e->getMessage() : null
+                'error' => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }
     }
@@ -254,7 +318,7 @@ class UserProfileController extends Controller
             return [];
         }
 
-        // If it's a string, decode it
+        // Decode if it's a JSON string
         if (is_string($shippingAddress)) {
             try {
                 $decoded = json_decode($shippingAddress, true);
@@ -269,41 +333,39 @@ class UserProfileController extends Controller
             }
         }
 
-        // If it's not an array at this point, return empty
+        // Validate array type
         if (!is_array($shippingAddress)) {
             return [];
         }
 
-        // Ensure it's a list of addresses
-        $addresses = [];
-        
-        // If it's a single address (associative array), wrap it
+        // If it's a single address object, wrap it in an array
         if (isset($shippingAddress['address']) || isset($shippingAddress['locality'])) {
-            $addresses = [$shippingAddress];
-        } else {
-            $addresses = $shippingAddress;
+            $shippingAddress = [$shippingAddress];
         }
 
-        // Format each address
-        return array_map(function($addr) {
+        // Normalize each address
+        return array_map(function ($addr) {
             if (!is_array($addr)) {
                 return null;
             }
 
             return [
                 'id' => $addr['id'] ?? null,
+                'label' => $addr['label'] ?? '',              // ✅ Added
                 'address' => $addr['address'] ?? '',
                 'addressAs' => $addr['addressAs'] ?? '',
                 'landmark' => $addr['landmark'] ?? '',
+                'city' => $addr['city'] ?? '',                // ✅ Added
+                'pincode' => $addr['pincode'] ?? '',          // ✅ Added
                 'locality' => $addr['locality'] ?? '',
-                'location' => isset($addr['location']) ? [
-                    'latitude' => (float) ($addr['location']['latitude'] ?? 0),
-                    'longitude' => (float) ($addr['location']['longitude'] ?? 0),
-                ] : null,
+                'location' => [
+                    'latitude' => (float) ($addr['latitude'] ?? ($addr['location']['latitude'] ?? 0)),
+                    'longitude' => (float) ($addr['longitude'] ?? ($addr['location']['longitude'] ?? 0)),
+                ],
                 'isDefault' => (bool) ($addr['isDefault'] ?? false),
                 'zoneId' => $addr['zoneId'] ?? null,
             ];
-        }, array_filter($addresses));
+        }, array_filter($shippingAddress));
     }
 
     /**
@@ -427,5 +489,6 @@ class UserProfileController extends Controller
             return null;
         }
     }
+
 }
 
