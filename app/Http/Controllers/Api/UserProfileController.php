@@ -358,10 +358,9 @@ class UserProfileController extends Controller
                 'city' => $addr['city'] ?? '',                // ✅ Added
                 'pincode' => $addr['pincode'] ?? '',          // ✅ Added
                 'locality' => $addr['locality'] ?? '',
-                'location' => [
+
                     'latitude' => (float) ($addr['latitude'] ?? ($addr['location']['latitude'] ?? 0)),
                     'longitude' => (float) ($addr['longitude'] ?? ($addr['location']['longitude'] ?? 0)),
-                ],
                 'isDefault' => (bool) ($addr['isDefault'] ?? false),
                 'zoneId' => $addr['zoneId'] ?? null,
             ];

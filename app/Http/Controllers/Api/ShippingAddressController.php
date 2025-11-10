@@ -22,10 +22,11 @@ class ShippingAddressController extends Controller
     public function show(Request $request, $userId = null)
     {
         try {
+            // 🔹 Step 1: Identify the user
             if ($userId) {
                 $user = User::where('id', $userId)
-                            ->orWhere('firebase_id', $userId)
-                            ->first();
+                    ->orWhere('firebase_id', $userId)
+                    ->first();
             } elseif ($request->query('phone')) {
                 $user = User::where('phone', $request->query('phone'))->first();
             } else {
@@ -35,6 +36,7 @@ class ShippingAddressController extends Controller
                 ], 400);
             }
 
+            // 🔹 Step 2: Handle not found
             if (!$user) {
                 return response()->json([
                     'success' => false,
@@ -42,28 +44,15 @@ class ShippingAddressController extends Controller
                 ], 404);
             }
 
-            $addresses = [];
+            // 🔹 Step 3: Get and parse the shipping addresses
+            $addresses = $this->parseShippingAddress($user->shippingAddress);
 
-            $rawExisting = $user->shippingAddress;
-            if (!empty($rawExisting)) {
-                if (is_string($rawExisting)) {
-                    $decoded = json_decode($rawExisting, true);
-                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                        $addresses = $decoded;
-                    }
-                } elseif (is_array($rawExisting)) {
-                    $addresses = $rawExisting;
-                }
-            }
-
-            if (!is_array($addresses)) {
-                $addresses = [];
-            }
-
+            // 🔹 Step 4: Send standardized response
             return response()->json([
                 'success' => true,
                 'data' => array_values($addresses),
             ]);
+
         } catch (\Throwable $e) {
             Log::error('Failed fetching shipping address', [
                 'error' => $e->getMessage(),
@@ -105,7 +94,7 @@ class ShippingAddressController extends Controller
                     'message' => 'Missing user identifier. Provide route userId, firebase_id, or ?phone=.',
                 ], 400);
             }
-            
+
 
             if (!$user) {
                 return response()->json([
@@ -239,4 +228,62 @@ class ShippingAddressController extends Controller
             ], 500);
         }
     }
+
+
+
+    private function parseShippingAddress($shippingAddress)
+    {
+        if (empty($shippingAddress)) {
+            return [];
+        }
+
+        // Decode if it's a JSON string
+        if (is_string($shippingAddress)) {
+            try {
+                $decoded = json_decode($shippingAddress, true);
+                if (is_array($decoded)) {
+                    $shippingAddress = $decoded;
+                } else {
+                    return [];
+                }
+            } catch (\Exception $e) {
+                Log::error('Error parsing shipping address: ' . $e->getMessage());
+                return [];
+            }
+        }
+
+        // Validate array type
+        if (!is_array($shippingAddress)) {
+            return [];
+        }
+
+        // If it's a single address object, wrap it in an array
+        if (isset($shippingAddress['address']) || isset($shippingAddress['locality'])) {
+            $shippingAddress = [$shippingAddress];
+        }
+
+        // Normalize each address
+        return array_map(function ($addr) {
+            if (!is_array($addr)) {
+                return null;
+            }
+
+            return [
+                'id' => $addr['id'] ?? null,
+                'label' => $addr['label'] ?? '',              // ✅ Added
+                'address' => $addr['address'] ?? '',
+                'addressAs' => $addr['addressAs'] ?? '',
+                'landmark' => $addr['landmark'] ?? '',
+                'city' => $addr['city'] ?? '',                // ✅ Added
+                'pincode' => $addr['pincode'] ?? '',          // ✅ Added
+                'locality' => $addr['locality'] ?? '',
+
+                'latitude' => (float) ($addr['latitude'] ?? ($addr['location']['latitude'] ?? 0)),
+                'longitude' => (float) ($addr['longitude'] ?? ($addr['location']['longitude'] ?? 0)),
+                'isDefault' => (bool) ($addr['isDefault'] ?? false),
+                'zoneId' => $addr['zoneId'] ?? null,
+            ];
+        }, array_filter($shippingAddress));
+    }
+
 }
