@@ -50,10 +50,14 @@ class FavoriteController extends Controller
                 };
 
                 // ✅ Decode relevant fields
+                $item->restaurantMenuPhotos = $safeDecode($item->restaurantMenuPhotos);
                 $item->photos       = $safeDecode($item->photos);
                 $item->workingHours = $safeDecode($item->workingHours);
                 $item->filters      = $safeDecode($item->filters);
                 $item->coordinates  = $safeDecode($item->coordinates);
+                $item->lastAutoScheduleUpdate  = $safeDecode($item->lastAutoScheduleUpdate);
+
+
 
                 // ✅ (optional) decode more fields if you have them
                 $item->categoryID       = $safeDecode($item->categoryID);
