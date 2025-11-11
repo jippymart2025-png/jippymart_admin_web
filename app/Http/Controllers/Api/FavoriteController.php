@@ -19,7 +19,10 @@ class FavoriteController extends Controller
     {
         $user = User::where('firebase_id', $firebaseId)->first();
         if (!$user) {
-            return response()->json(['success' => false, 'message' => 'User not found'], 404);
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found',
+            ], 404);
         }
 
         $userIdValues = array_unique(array_filter([$user->firebase_id, $user->id]));
@@ -37,7 +40,30 @@ class FavoriteController extends Controller
 
         $favorites = Vendor::query()
             ->whereIn('id', $favoriteRestaurantIds)
-            ->get();
+            ->get()
+            ->map(function ($item) {
+                // ✅ Helper closure to safely decode JSON
+                $safeDecode = function ($value) {
+                    if (empty($value) || !is_string($value)) return $value;
+                    $decoded = json_decode($value, true);
+                    return json_last_error() === JSON_ERROR_NONE ? $decoded : $value;
+                };
+
+                // ✅ Decode relevant fields
+                $item->photos       = $safeDecode($item->photos);
+                $item->workingHours = $safeDecode($item->workingHours);
+                $item->filters      = $safeDecode($item->filters);
+                $item->coordinates  = $safeDecode($item->coordinates);
+
+                // ✅ (optional) decode more fields if you have them
+                $item->categoryID       = $safeDecode($item->categoryID);
+                $item->categoryTitle    = $safeDecode($item->categoryTitle);
+                $item->specialDiscount  = $safeDecode($item->specialDiscount);
+                $item->adminCommission  = $safeDecode($item->adminCommission);
+                $item->g                = $safeDecode($item->g);
+
+                return $item;
+            });
 
         return response()->json([
             'success' => true,
