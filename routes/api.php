@@ -1,12 +1,10 @@
 <?php
 
-use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\FirebaseOrderController;
-use App\Http\Controllers\Api\FirebaseLiveTrackingController;
+
+use App\Http\Controllers\Api\SettingsApiController;
+use App\Http\Controllers\Api\VendorController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\AppUserController;
-use App\Http\Controllers\Api\FirebaseUserController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ZoneController;
 use App\Http\Controllers\Api\RestaurantController;
@@ -18,6 +16,8 @@ use App\Http\Controllers\Api\CouponApiController;
 use App\Http\Controllers\Api\UserProfileController;
 use App\Http\Controllers\Api\ShippingAddressController;
 use App\Http\Controllers\Api\FavoriteController;
+use App\Http\Controllers\Api\WalletController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -33,27 +33,29 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::post('/login', [AuthController::class, 'login']);
-Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/profile', [AuthController::class, 'profile']);
-    Route::post('/logout', [AuthController::class, 'logout']);
-});
+//Route::post('/login', [AuthController::class, 'login']);
+//Route::middleware('auth:sanctum')->group(function () {
+//    Route::get('/profile', [AuthController::class, 'profile']);
+//    Route::post('/logout', [AuthController::class, 'logout']);
+//});
+//
+//Route::middleware(['throttle:5,1'])->group(function () {
+//    Route::get('/firebase/users', [FirebaseUserController::class, 'index']);
+//    Route::get('/firebase/orders', [FirebaseOrderController::class, 'index']);
+//
+//    // Live tracking endpoints
+//    Route::get('/firebase/live-tracking', [FirebaseLiveTrackingController::class, 'index']);
+//    Route::get('/firebase/drivers/{driverId}/location', [FirebaseLiveTrackingController::class, 'getDriverLocation']);
+//    Route::post('/firebase/drivers/locations', [FirebaseLiveTrackingController::class, 'batchDriverLocations']);
+//});
+//
+//// SQL users listing (replaces client-side Firebase usage on Users page)
+//Route::get('/app-users', [AppUserController::class, 'index']);
+//Route::post('/app-users', [AppUserController::class, 'store']);
+//Route::delete('/app-users/{id}', [AppUserController::class, 'destroy']);
+//Route::patch('/app-users/{id}/active', [AppUserController::class, 'setActive']);
 
-Route::middleware(['throttle:5,1'])->group(function () {
-    Route::get('/firebase/users', [FirebaseUserController::class, 'index']);
-    Route::get('/firebase/orders', [FirebaseOrderController::class, 'index']);
-
-    // Live tracking endpoints
-    Route::get('/firebase/live-tracking', [FirebaseLiveTrackingController::class, 'index']);
-    Route::get('/firebase/drivers/{driverId}/location', [FirebaseLiveTrackingController::class, 'getDriverLocation']);
-    Route::post('/firebase/drivers/locations', [FirebaseLiveTrackingController::class, 'batchDriverLocations']);
-});
-
-// SQL users listing (replaces client-side Firebase usage on Users page)
-Route::get('/app-users', [AppUserController::class, 'index']);
-Route::post('/app-users', [AppUserController::class, 'store']);
-Route::delete('/app-users/{id}', [AppUserController::class, 'destroy']);
-Route::patch('/app-users/{id}/active', [AppUserController::class, 'setActive']);
+Route::get('/settings/mobile', [SettingsApiController::class, 'mobileSettings']);
 
 Route::post('/send-otp', [App\Http\Controllers\OTPController::class, 'sendOtp']);
 Route::post('/verify-otp', [App\Http\Controllers\OTPController::class, 'verifyOtp']);
@@ -128,10 +130,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
 Route::get('/users/profile/{firebase_id}', [UserProfileController::class, 'show']); // Public - get customer by firebase_id
     Route::get('/user/profile', [UserProfileController::class, 'me']); // Get current customer profile
-    Route::put('/user/profile', [UserProfileController::class, 'update']); // Update current customer profile
+    Route::post('/user/profile', [UserProfileController::class, 'update']); // Update current customer profile
+
 });
 
-
+//restaurants
 Route::middleware('auth:sanctum')->group(function () {
 
 Route::prefix('favorites')->group(function () {
@@ -148,4 +151,23 @@ Route::prefix('favorites')->group(function () {
 });
 
 
+// vendor
+Route::middleware('auth:sanctum')->group(function () {
+
+Route::prefix('vendors')->group(function () {
+    Route::get('{vendorId}/products', [\App\Http\Controllers\Api\productcontroller::class, 'getProductsByVendorId']);
+    Route::get('{vendorId}/offers', [VendorController::class, 'getOffersByVendorId']);
+    Route::get('{categoryId}/category', [VendorController::class, 'getRestaurantCategory']);
+});
+
+Route::get('vendor-categories/{id}', [VendorController::class, 'getVendorCategoryById']);
+Route::get('products/{id}', [VendorController::class, 'getProductById']);
+});
+
+//wallet
+Route::middleware('auth:sanctum')->group(function () {
+
+Route::post('/update-wallet', [WalletController::class, 'updateWallet']);
+
+});
 

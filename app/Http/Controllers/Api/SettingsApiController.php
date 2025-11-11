@@ -11,7 +11,7 @@ class SettingsApiController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('auth');
+        $this->middleware('auth')->except(['mobileSettings']);
     }
 
     /**
@@ -331,6 +331,161 @@ class SettingsApiController extends Controller
             Log::error('Error fetching driver settings: ' . $e->getMessage());
             return response()->json([]);
         }
+    }
+
+    /**
+     * Unified settings payload for mobile clients (replaces Firestore listeners)
+     */
+    public function mobileSettings()
+    {
+        try {
+            $documents = [
+                'restaurant',
+                'RestaurantNearBy',
+                'DriverNearBy',
+                'globalSettings',
+                'googleMapKey',
+                'notification_setting',
+                'privacyPolicy',
+                'termsAndConditions',
+                'walletSettings',
+                'WalletSetting',
+                'Version',
+                'story',
+                'referral_amount',
+                'placeHolderImage',
+                'emailSetting',
+                'specialDiscountOffer',
+                'DineinForRestaurant',
+                'AdminCommission',
+                'DeliveryCharge',
+                'martDeliveryCharge',
+                'PriceSettings',
+                'payment',
+                'languages',
+                'digitalProduct',
+                'driver_total_charges',
+                'CODSettings'
+            ];
+
+            $settingsRows = DB::table('settings')
+                ->whereIn('document_name', $documents)
+                ->get();
+
+            $settings = [];
+
+            foreach ($settingsRows as $row) {
+                $decoded = $this->decodeSetting($row->fields);
+                $settings[$row->document_name] = $decoded;
+            }
+
+            $currency = $this->resolveCurrency();
+
+            $derived = [
+                'isSubscriptionModelApplied' => (bool)($settings['restaurant']['subscription_model'] ?? false),
+                'autoApproveRestaurant' => (bool)($settings['restaurant']['auto_approve_restaurant'] ?? false),
+                'radius' => $settings['RestaurantNearBy']['radios'] ?? null,
+                'driverRadios' => $settings['DriverNearBy']['driverRadios'] ?? null,
+                'distanceType' => $settings['RestaurantNearBy']['distanceType'] ?? null,
+                'isEnableAdsFeature' => (bool)($settings['globalSettings']['isEnableAdsFeature'] ?? false),
+                'isSelfDeliveryFeature' => (bool)($settings['globalSettings']['isSelfDelivery'] ?? false),
+                'themeColors' => [
+                    'app_customer_color' => $settings['globalSettings']['app_customer_color'] ?? null,
+                    'app_driver_color' => $settings['globalSettings']['app_driver_color'] ?? null,
+                    'app_restaurant_color' => $settings['globalSettings']['app_restaurant_color'] ?? null,
+                ],
+                'mapAPIKey' => $settings['googleMapKey']['key'] ?? '',
+                'placeHolderImage' => $settings['googleMapKey']['placeHolderImage'] ?? ($settings['placeHolderImage']['image'] ?? ''),
+                'senderId' => $settings['notification_setting']['projectId'] ?? '',
+                'jsonNotificationFileURL' => $settings['notification_setting']['serviceJson'] ?? '',
+                'selectedMapType' => $settings['DriverNearBy']['selectedMapType'] ?? null,
+                'mapType' => $settings['DriverNearBy']['mapType'] ?? null,
+                'privacyPolicy' => $settings['privacyPolicy']['privacy_policy'] ?? '',
+                'termsAndConditions' => $settings['termsAndConditions']['termsAndConditions'] ?? '',
+                'walletEnabled' => (bool)(
+                    $settings['walletSettings']['isEnabled']
+                    ?? $settings['WalletSetting']['isEnabled']
+                    ?? false
+                ),
+                'googlePlayLink' => $settings['Version']['googlePlayLink'] ?? '',
+                'appStoreLink' => $settings['Version']['appStoreLink'] ?? '',
+                'appVersion' => $settings['Version']['app_version'] ?? '',
+                'websiteUrl' => $settings['Version']['websiteUrl'] ?? '',
+                'storyEnable' => (bool)($settings['story']['isEnabled'] ?? false),
+                'referralAmount' => $settings['referral_amount']['referralAmount'] ?? '0',
+                'placeholderImage' => $settings['placeHolderImage']['image'] ?? '',
+                'specialDiscountOffer' => (bool)($settings['specialDiscountOffer']['isEnable'] ?? false),
+                'isEnabledForCustomer' => (bool)($settings['DineinForRestaurant']['isEnabledForCustomer'] ?? false),
+                'adminCommission' => $settings['AdminCommission'] ?? [],
+                'mailSettings' => $settings['emailSetting'] ?? [],
+                'currency' => $currency,
+            ];
+
+            $response = [
+                'documents' => $settings,
+                'derived' => $derived,
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $response,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Error building mobile settings payload: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to fetch settings at the moment.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Decode a JSON settings payload safely.
+     */
+    protected function decodeSetting(?string $payload): array
+    {
+        if (empty($payload)) {
+            return [];
+        }
+
+        $decoded = json_decode($payload, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($decoded)) {
+            return [];
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Resolve active currency information.
+     */
+    protected function resolveCurrency(): array
+    {
+        $currency = DB::table('currencies')
+            ->where('isActive', 1)
+            ->first();
+
+        if ($currency) {
+            return [
+                'symbol' => $currency->symbol ?? '₹',
+                'code' => $currency->code ?? 'INR',
+                'name' => $currency->name ?? 'Indian Rupee',
+                'symbolAtRight' => (bool)($currency->symbolAtRight ?? false),
+                'decimal_digits' => (int)($currency->decimal_degits ?? 2),
+            ];
+        }
+
+        return [
+            'symbol' => '₹',
+            'code' => 'INR',
+            'name' => 'Indian Rupee',
+            'symbolAtRight' => false,
+            'decimal_digits' => 2,
+        ];
     }
 }
 
