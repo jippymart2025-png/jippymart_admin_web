@@ -30,6 +30,7 @@ class productcontroller extends Controller
 
                     // ✅ Decode relevant fields
                     $item->photos       = $safeDecode($item->photos);
+                    $item->createdAt    = $safeDecode($item->createdAt);
 
                     // ✅ (optional) decode more fields if you have them
 //                    $item->categoryTitle    = $safeDecode($item->categoryTitle);

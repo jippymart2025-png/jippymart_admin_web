@@ -122,10 +122,12 @@ class VendorController extends Controller
         $item->filters      = $safeDecode($item->filters);
         $item->coordinates  = $safeDecode($item->coordinates);
         $item->lastAutoScheduleUpdate  = $safeDecode($item->lastAutoScheduleUpdate);
+        $item->createdAt    = $safeDecode($item->createdAt);
 
 
 
-        // ✅ (optional) decode more fields if you have them
+
+            // ✅ (optional) decode more fields if you have them
         $item->categoryID       = $safeDecode($item->categoryID);
         $item->categoryTitle    = $safeDecode($item->categoryTitle);
         $item->specialDiscount  = $safeDecode($item->specialDiscount);
