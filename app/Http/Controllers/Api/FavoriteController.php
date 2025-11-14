@@ -159,7 +159,7 @@ class FavoriteController extends Controller
             ]);
         }
 
-        $favorites = DB::table('mart_items')
+        $favorites = DB::table('vendor_products')
             ->whereIn('id', $favoriteProductIds)
             ->get();
 
@@ -179,7 +179,7 @@ class FavoriteController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'firebase_id' => 'required|string',
-            'product_id' => 'required|string|exists:mart_items,id',
+            'product_id' => 'required|string|exists:vendor_products,id',
         ]);
 
         if ($validator->fails()) {
@@ -199,7 +199,7 @@ class FavoriteController extends Controller
         }
 
         // Get product details from mart_items
-        $martItem = DB::table('mart_items')->where('id', $request->product_id)->first();
+        $martItem = DB::table('vendor_products')->where('id', $request->product_id)->first();
         if (!$martItem) {
             return response()->json([
                 'success' => false,

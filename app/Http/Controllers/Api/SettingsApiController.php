@@ -6,12 +6,17 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use \Illuminate\Http\JsonResponse;
 
 class SettingsApiController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('auth')->except(['mobileSettings']);
+        $this->middleware('auth')->except([
+            'mobileSettings',
+            'getDeliveryChargeSettings',
+            'getVendorAttributes',
+        ]);
     }
 
     /**
@@ -487,5 +492,86 @@ class SettingsApiController extends Controller
             'decimal_digits' => 2,
         ];
     }
+
+    /**
+     * Fetch delivery charge settings only.
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getDeliveryChargeSettings()
+    {
+        try {
+            // Default structure (ensures consistent response)
+            $defaultData = [
+                'base_delivery_charge' => 234,
+                'minimum_delivery_charges' => null,
+                'minimum_delivery_charges_within_km' => null,
+                'delivery_charges_per_km' => null,
+                'amount' => null,
+                'item_total_threshold' => 1994,
+                'vendor_can_modify' => false,
+                'per_km_charge_above_free_distance' => 74,
+                'free_delivery_distance_km' => 54,
+            ];
+
+            // Fetch record from DB
+            $setting = DB::table('settings')
+                ->where('document_name', 'DeliveryCharge')
+                ->first();
+
+            $data = $defaultData;
+
+            if ($setting && !empty($setting->fields)) {
+                $decoded = json_decode($setting->fields, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    // Merge DB values with defaults (DB overrides defaults)
+                    $data = array_merge($defaultData, $decoded);
+                } else {
+                    Log::warning('Invalid JSON format in DeliveryCharge settings, using defaults.');
+                }
+            } else {
+                Log::info('No DeliveryCharge settings found, using default values.');
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Error fetching delivery charge settings: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to fetch delivery charge settings.',
+            ], 500);
+        }
+    }
+
+
+
+    public function getVendorAttributes()
+    {
+        try {
+            $attributes = DB::table('vendor_attributes')->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $attributes,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Error fetching vendor attributes: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to fetch vendor attributes.',
+            ], 500);
+        }
+    }
+
+
 }
 

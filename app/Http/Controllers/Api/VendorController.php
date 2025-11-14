@@ -7,6 +7,7 @@ use App\Models\vendor_products;
 use App\Models\VendorCategory;
 use App\Models\Coupon;
 use App\Models\Vendor;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -91,56 +92,101 @@ class VendorController extends Controller
     }
 
 
-    public function getRestaurantCategory($categoryId)
+    public function getNearestRestaurantByCategory(Request $request, $categoryId)
     {
-        $vendors = Vendor::query()
-            // ✅ Match categoryID (string, not JSON)
-            ->where('categoryID', 'LIKE', "%{$categoryId}%")
-
-            // ✅ Filter only published vendors
-            ->where('publish', 1)
-
-            // ✅ Filter only vendors that are open
-            ->where('isOpen', 1)
-
-            // ✅ Optional: Filter only those that deliver
-//            ->where('enabledDelivery', 1)
-
-            ->get()
-        ->map(function ($item) {
-        // ✅ Helper closure to safely decode JSON
-        $safeDecode = function ($value) {
-            if (empty($value) || !is_string($value)) return $value;
-            $decoded = json_decode($value, true);
-            return json_last_error() === JSON_ERROR_NONE ? $decoded : $value;
-        };
-
-        // ✅ Decode relevant fields
-        $item->restaurantMenuPhotos = $safeDecode($item->restaurantMenuPhotos);
-        $item->photos       = $safeDecode($item->photos);
-        $item->workingHours = $safeDecode($item->workingHours);
-        $item->filters      = $safeDecode($item->filters);
-        $item->coordinates  = $safeDecode($item->coordinates);
-        $item->lastAutoScheduleUpdate  = $safeDecode($item->lastAutoScheduleUpdate);
-        $item->createdAt    = $safeDecode($item->createdAt);
-
-
-
-
-            // ✅ (optional) decode more fields if you have them
-        $item->categoryID       = $safeDecode($item->categoryID);
-        $item->categoryTitle    = $safeDecode($item->categoryTitle);
-        $item->specialDiscount  = $safeDecode($item->specialDiscount);
-        $item->adminCommission  = $safeDecode($item->adminCommission);
-        $item->g                = $safeDecode($item->g);
-
-        return $item;
-        });
-
-        return response()->json([
-            'success' => true,
-            'data' => $vendors,
+        $validator = Validator::make($request->all(), [
+            'latitude' => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180',
+            'radius' => 'nullable|numeric|min:0',
+            'filter' => 'nullable|string|in:distance,rating',
         ]);
+    
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+    
+        $userLat = $request->input('latitude');
+        $userLon = $request->input('longitude');
+        $radius = $request->input('radius', 10); // default radius = 10 km
+        $filter = strtolower($request->input('filter', 'distance'));
+    
+        try {
+            // ✅ Base query
+            $query = Vendor::query()
+                ->where('publish', 1)
+                ->where('isOpen', 1)
+                ->where(function ($q) use ($categoryId) {
+                    $q->where('categoryID', 'LIKE', "%{$categoryId}%");
+                });
+    
+            // ✅ Ensure coordinates exist
+            $query->whereNotNull('latitude')
+                  ->whereNotNull('longitude')
+                  ->select('vendors.*')
+                  ->selectRaw(
+                      '(6371 * acos(cos(radians(?)) * cos(radians(latitude)) 
+                      * cos(radians(longitude) - radians(?)) 
+                      + sin(radians(?)) * sin(radians(latitude)))) AS distance',
+                      [$userLat, $userLon, $userLat]
+                  )
+                  ->having('distance', '<=', $radius);
+    
+            // ✅ Sorting
+            if ($filter === 'rating') {
+                $query->orderByRaw('CASE WHEN COALESCE(reviewsCount, 0) > 0 THEN COALESCE(reviewsSum, 0) / NULLIF(reviewsCount, 0) ELSE 0 END DESC')
+                      ->orderByRaw('COALESCE(reviewsCount, 0) DESC');
+            } else {
+                $query->orderBy('distance', 'asc');
+            }
+    
+            // ✅ Fetch
+            $vendors = $query->get()->map(function ($item) {
+                $safeDecode = function ($value) {
+                    if (empty($value) || !is_string($value)) return $value;
+                    $decoded = json_decode($value, true);
+                    return json_last_error() === JSON_ERROR_NONE ? $decoded : $value;
+                };
+    
+                // Decode all JSON fields safely
+                foreach ([
+                    'restaurantMenuPhotos', 'photos', 'workingHours', 'filters',
+                    'coordinates', 'lastAutoScheduleUpdate', 'createdAt',
+                    'categoryID', 'categoryTitle', 'specialDiscount',
+                    'adminCommission', 'g'
+                ] as $field) {
+                    if (isset($item->$field)) {
+                        $item->$field = $safeDecode($item->$field);
+                    }
+                }
+    
+                return $item;
+            });
+    
+            return response()->json([
+                'success' => true,
+                'count' => $vendors->count(),
+                'filter' => $filter,
+                'data' => $vendors->values(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Nearest Category Restaurants Error: ' . $e->getMessage(), [
+                'category_id' => $categoryId,
+                'latitude' => $userLat,
+                'longitude' => $userLon,
+                'trace' => $e->getTraceAsString(),
+            ]);
+    
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch nearest restaurants',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
     }
+    
 
 }

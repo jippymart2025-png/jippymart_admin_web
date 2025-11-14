@@ -286,4 +286,95 @@ class ShippingAddressController extends Controller
         }, array_filter($shippingAddress));
     }
 
+
+
+
+    public function delete(Request $request, $userId = null, $addressId = null)
+    {
+        try {
+            // Step 1: Validate inputs
+            if (empty($addressId)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Missing address ID.',
+                ], 400);
+            }
+
+            // Step 2: Identify user (by route param or ?phone)
+            if ($userId) {
+                $user = User::where('id', $userId)
+                    ->orWhere('firebase_id', $userId)
+                    ->first();
+            } elseif ($request->query('phone')) {
+                $user = User::where('phone', $request->query('phone'))->first();
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Missing user identifier. Provide userId, firebase_id, or ?phone=.',
+                ], 400);
+            }
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found.',
+                ], 404);
+            }
+
+            // Step 3: Decode shippingAddress field
+            $existing = [];
+            $raw = $user->shippingAddress;
+
+            if (!empty($raw)) {
+                if (is_string($raw)) {
+                    $decoded = json_decode($raw, true);
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                        $existing = $decoded;
+                    }
+                } elseif (is_array($raw)) {
+                    $existing = $raw;
+                }
+            }
+
+            // Step 4: Filter out the address by id
+            $filtered = array_filter($existing, function ($addr) use ($addressId) {
+                return isset($addr['id']) && $addr['id'] !== $addressId;
+            });
+
+            // Check if anything was actually removed
+            if (count($filtered) === count($existing)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Address not found for deletion.',
+                ], 404);
+            }
+
+            // Step 5: Save updated list
+            DB::transaction(function () use ($user, $filtered) {
+                $user->shippingAddress = json_encode(array_values($filtered), JSON_UNESCAPED_UNICODE);
+                $user->save();
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Shipping address deleted successfully.',
+                'data' => array_values($filtered),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Failed deleting shipping address', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'userId' => $userId ?? $request->query('phone'),
+                'addressId' => $addressId,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete shipping address.',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
+    }
+
+
 }

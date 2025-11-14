@@ -18,7 +18,6 @@ class CouponApiController extends Controller
     public function byType(Request $request, string $type)
     {
         try {
-            // Allow only 'restaurant' or 'mart'
             if (!in_array($type, ['restaurant', 'mart'])) {
                 return response()->json([
                     'success' => false,
@@ -26,33 +25,66 @@ class CouponApiController extends Controller
                 ], 400);
             }
 
-            $now = Carbon::now('UTC')->toDateTimeString();
+            $resturantId = $request->input('resturant_id');
+            if (empty($resturantId)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The resturant_id field is required.',
+                ], 400);
+            }
 
-            // Query active, public coupons of given type
+            $now = Carbon::now('UTC');
+
             $coupons = Coupon::query()
                 ->where('isEnabled', true)
                 ->where('isPublic', true)
                 ->where('cType', $type)
+                ->where(function ($query) use ($resturantId) {
+                    $query->where('resturant_id', $resturantId)
+                        ->orWhere('resturant_id', 'ALL');
+                })
                 ->orderBy('expiresAt', 'asc')
                 ->get();
 
+            // Filter expired coupons
+            $coupons = $coupons->filter(function (Coupon $coupon) use ($now) {
+                $expiresAt = $this->parseTimestamp($coupon->expiresAt);
+                return $expiresAt === null || $expiresAt->greaterThanOrEqualTo($now);
+            });
+
+            // Format response data
             $data = $coupons->map(function (Coupon $coupon) {
+                $usedBy = $coupon->usedBy;
+                if (is_string($usedBy) && $usedBy !== '') {
+                    $decoded = json_decode($usedBy, true);
+                    if (json_last_error() === JSON_ERROR_NONE) {
+                        $usedBy = $decoded;
+                    }
+                }
+
                 return [
-                    'id' => $coupon->id,
-                    'code' => $coupon->code ?? '',
+                    'id' => (string) ($coupon->id ?? ''),
+                    'code' => (string) ($coupon->code ?? ''),
+                    'description' => (string) ($coupon->description ?? ''),
                     'discount' => (string) ($coupon->discount ?? '0'),
-                    'discountType' => $coupon->discountType ?? '',
-                    'cType' => $coupon->cType ?? '',
-                    'resturantId' => $coupon->resturant_id ?? '',
                     'expiresAt' => $this->formatTimestamp($coupon->expiresAt),
-                    'isEnabled' => (bool) $coupon->isEnabled,
+                    'discountType' => (string) ($coupon->discountType ?? ''),
+                    'image' => $coupon->image ?? null,
+                    'resturant_id' => (string) ($coupon->resturant_id ?? ''),
+                    'cType' => (string) ($coupon->cType ?? ''),
+                    'item_value' => (float) ($coupon->item_value ?? 0),
+                    'usageLimit' => (int) ($coupon->usageLimit ?? 0),
+                    'usedCount' => (int) ($coupon->usedCount ?? 0),
+                    'usedBy' => is_array($usedBy) ? $usedBy : [],
                     'isPublic' => (bool) $coupon->isPublic,
+                    'isEnabled' => (bool) $coupon->isEnabled,
                 ];
             });
 
             return response()->json([
                 'success' => true,
-                'data' => $data,
+                'data' => $data->values(),
+                'count' => $data->count(),
             ]);
         } catch (\Exception $e) {
             Log::error('Coupon fetch failed: ' . $e->getMessage(), [
@@ -68,22 +100,29 @@ class CouponApiController extends Controller
         }
     }
 
-    private function formatTimestamp($value): ?string
+
+    private function parseTimestamp($value): ?Carbon
     {
         if (empty($value)) {
             return null;
         }
 
-        $value = trim($value, " \t\n\r\0\x0B\"'");
+        $value = trim((string) $value, " \t\n\r\0\x0B\"'");
 
         if ($value === '') {
             return null;
         }
 
         try {
-            return Carbon::parse($value)->toIso8601String();
+            return Carbon::parse($value);
         } catch (\Throwable $e) {
-            return $value;
+            return null;
         }
+    }
+
+    private function formatTimestamp($value): ?string
+    {
+        $parsed = $this->parseTimestamp($value);
+        return $parsed ? $parsed->toIso8601String() : null;
     }
 }
