@@ -82,7 +82,8 @@
                 serverSide: true,
                 responsive: true,
                 ajax: function (data, callback) {
-                    const params = { start: data.start, length: data.length, draw: data.draw, search: data.search.value };
+                    const params = { start: data.start, length: data.length, draw: data.draw,
+                        search: { value: data.search.value || ''} };
                     $.get('{{ route('on-board.data') }}', params, function (json) {
                         $('.total_count').text(json.recordsTotal || 0);
                         callback(json);

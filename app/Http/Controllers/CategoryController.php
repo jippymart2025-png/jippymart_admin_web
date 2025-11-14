@@ -88,7 +88,9 @@ class CategoryController extends Controller
         $pageRows = $filteredQuery->offset($start)->limit($length)->get();
         $filtered = ($search==='') ? $total : (clone $filteredQuery)->count();
 
-        $placeholder = asset('assets/images/placeholder-image.png');
+        // Get placeholder image from settings
+        $placeholder = $this->getPlaceholderImage();
+
         $data = [];
         foreach ($pageRows as $row) {
             // Count foods for this category (supports exact and JSON-like storage)
@@ -99,7 +101,9 @@ class CategoryController extends Controller
                        ->orWhere('categoryID','like','%'.$row->id.'%');
                 })
                 ->count();
-            $imageHtml = '<img alt="" width="100%" style="width:70px;height:70px;" src="'.($row->photo ?: $placeholder).'" onerror="this.onerror=null;this.src=\''.$placeholder.'\'" alt="image">';
+
+            $imageUrl = $row->photo ?: $placeholder;
+            $imageHtml = '<img alt="" width="100%" style="width:70px;height:70px;" src="'.e($imageUrl).'" onerror="this.onerror=null;this.src=\''.$placeholder.'\'" alt="image">';
             $editUrl = route('categories.edit', $row->id);
             $titleHtml = $imageHtml.'<a href="'.$editUrl.'">'.e($row->title).'</a>';
             $totalProductsLink = '<a href="'.url('foods?categoryID='.$row->id).'">'.$foodsCount.'</a>';
@@ -126,7 +130,35 @@ class CategoryController extends Controller
             'recordsTotal' => $total,
             'recordsFiltered' => $filtered,
             'data' => $data,
+            'stats' => [
+                'total' => $total,
+                'filtered' => $filtered
+            ]
         ]);
+    }
+
+    /**
+     * Get placeholder image from settings
+     */
+    private function getPlaceholderImage()
+    {
+        try {
+            $setting = DB::table('settings')
+                ->where('document_name', 'placeHolderImage')
+                ->first();
+
+            if ($setting && !empty($setting->fields)) {
+                $fields = is_string($setting->fields) ? json_decode($setting->fields, true) : $setting->fields;
+                if (isset($fields['image'])) {
+                    return $fields['image'];
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::error('Error fetching placeholder image: ' . $e->getMessage());
+        }
+
+        // Fallback to default placeholder
+        return asset('assets/images/placeholder-image.png');
     }
 
     public function store(Request $request)
@@ -139,8 +171,8 @@ class CategoryController extends Controller
         $id = (string) Str::uuid();
         $photoUrl = null;
         if ($request->hasFile('photo')) {
-            $photoUrl = $request->file('photo')->store('public/uploads/categories');
-            $photoUrl = Storage::url($photoUrl);
+            $path = $request->file('photo')->store('public/uploads/categories');
+            $photoUrl = asset('storage/' . str_replace('public/', '', $path));
         }
 
         VendorCategory::create([
@@ -152,6 +184,9 @@ class CategoryController extends Controller
             'publish' => $request->boolean('item_publish') || $request->boolean('publish') ? 1 : 0,
             'show_in_homepage' => $request->boolean('show_in_homepage') ? 1 : 0,
         ]);
+
+        // Log activity
+        \Log::info('✅ Category created:', ['id' => $id, 'title' => $request->input('title')]);
 
         return response()->json(['success' => true, 'id' => $id]);
     }
@@ -166,8 +201,8 @@ class CategoryController extends Controller
 
         $photoUrl = $category->photo;
         if ($request->hasFile('photo')) {
-            $photoUrl = $request->file('photo')->store('public/uploads/categories');
-            $photoUrl = Storage::url($photoUrl);
+            $path = $request->file('photo')->store('public/uploads/categories');
+            $photoUrl = asset('storage/' . str_replace('public/', '', $path));
         }
 
         $category->update([
@@ -179,55 +214,115 @@ class CategoryController extends Controller
             'show_in_homepage' => $request->boolean('show_in_homepage') ? 1 : 0,
         ]);
 
+        // Log activity
+        \Log::info('✅ Category updated:', ['id' => $id, 'title' => $request->input('title')]);
+
         return response()->json(['success' => true]);
     }
 
     public function togglePublish(Request $request, $id)
     {
         $category = VendorCategory::findOrFail($id);
-        $category->publish = $request->boolean('publish') ? 1 : 0;
+        $oldStatus = $category->publish;
+        $newStatus = $request->boolean('publish') ? 1 : 0;
+        $category->publish = $newStatus;
         $category->save();
-        return response()->json(['success' => true]);
+
+        // Log activity
+        \Log::info('✅ Category publish toggled:', ['id' => $id, 'title' => $category->title, 'publish' => $newStatus]);
+
+        return response()->json(['success' => true, 'publish' => $newStatus]);
     }
 
     public function import(Request $request)
     {
-        $request->validate([
-            'file' => 'required|mimes:xlsx,xls',
-        ]);
-
-        $spreadsheet = IOFactory::load($request->file('file'));
-        $rows = $spreadsheet->getActiveSheet()->toArray();
-
-        if (empty($rows) || count($rows) < 2) {
-            return back()->withErrors(['file' => 'The uploaded file is empty or missing data.']);
-        }
-
-        $headers = array_map('trim', array_shift($rows));
-
-        $imported = 0;
-        foreach ($rows as $row) {
-            $data = array_combine($headers, $row);
-            if (empty($data['title'])) {
-                continue;
-            }
-            VendorCategory::create([
-                'id' => (string) Str::uuid(),
-                'title' => $data['title'],
-                'description' => $data['description'] ?? '',
-                'photo' => $data['photo'] ?? '',
-                'publish' => strtolower($data['publish'] ?? '') === 'true' ? 1 : 0,
-                'show_in_homepage' => strtolower($data['show_in_homepage'] ?? '') === 'true' ? 1 : 0,
-                'restaurant_id' => $data['restaurant_id'] ?? '',
-                'review_attributes' => $data['review_attributes'] ?? '',
-                'migratedBy' => 'migrate:categories',
+        try {
+            $request->validate([
+                'file' => 'required|mimes:xlsx,xls',
             ]);
-            $imported++;
+
+            \Log::info('📁 Starting category import from file: ' . $request->file('file')->getClientOriginalName());
+
+            $spreadsheet = IOFactory::load($request->file('file'));
+            $rows = $spreadsheet->getActiveSheet()->toArray();
+
+            \Log::info('📊 Excel file loaded, total rows: ' . count($rows));
+
+            if (empty($rows) || count($rows) < 2) {
+                \Log::warning('❌ Excel file is empty or has no data rows');
+                return back()->withErrors(['file' => 'The uploaded file is empty or missing data.']);
+            }
+
+            $headers = array_map('trim', array_shift($rows));
+            \Log::info('📋 Headers found: ' . implode(', ', $headers));
+
+            $imported = 0;
+            $errors = [];
+
+            foreach ($rows as $rowIndex => $row) {
+                try {
+                    // Skip completely empty rows
+                    if (empty(array_filter($row))) {
+                        continue;
+                    }
+
+                    $data = array_combine($headers, $row);
+
+                    // Title is required
+                    if (empty($data['title']) || trim($data['title']) === '') {
+                        $errors[] = "Row " . ($rowIndex + 2) . ": Title is required";
+                        continue;
+                    }
+
+                    // Parse boolean values
+                    $publish = in_array(strtolower(trim($data['publish'] ?? '')), ['true', '1', 'yes'], true) ? 1 : 0;
+                    $showInHomepage = in_array(strtolower(trim($data['show_in_homepage'] ?? '')), ['true', '1', 'yes'], true) ? 1 : 0;
+
+                    VendorCategory::create([
+                        'id' => (string) Str::uuid(),
+                        'title' => trim($data['title']),
+                        'description' => trim($data['description'] ?? ''),
+                        'photo' => trim($data['photo'] ?? ''),
+                        'publish' => $publish,
+                        'show_in_homepage' => $showInHomepage,
+                        'restaurant_id' => trim($data['restaurant_id'] ?? ''),
+                        'review_attributes' => trim($data['review_attributes'] ?? ''),
+                        'migratedBy' => 'bulk_import',
+                    ]);
+
+                    $imported++;
+                    \Log::info('✅ Imported category: ' . trim($data['title']));
+
+                } catch (\Exception $e) {
+                    $errors[] = "Row " . ($rowIndex + 2) . ": " . $e->getMessage();
+                    \Log::error('❌ Error importing row ' . ($rowIndex + 2) . ': ' . $e->getMessage());
+                }
+            }
+
+            // Log activity
+            if ($imported > 0) {
+                \Log::info('✅ Category bulk import completed:', ['imported' => $imported, 'errors' => count($errors)]);
+            }
+
+            if ($imported === 0) {
+                $errorMessage = 'No valid rows were found to import.';
+                if (!empty($errors)) {
+                    $errorMessage .= ' Errors: ' . implode(', ', array_slice($errors, 0, 5));
+                }
+                return back()->withErrors(['file' => $errorMessage]);
+            }
+
+            $successMessage = "Categories imported successfully! ($imported rows)";
+            if (!empty($errors)) {
+                $successMessage .= " with " . count($errors) . " errors. Check logs for details.";
+            }
+
+            return back()->with('success', $successMessage);
+
+        } catch (\Exception $e) {
+            \Log::error('❌ Category import failed: ' . $e->getMessage());
+            return back()->withErrors(['file' => 'Import failed: ' . $e->getMessage()]);
         }
-        if ($imported === 0) {
-            return back()->withErrors(['file' => 'No valid rows were found to import.']);
-        }
-        return back()->with('success', "Categories imported successfully! ($imported rows)");
     }
 
     public function downloadTemplate()
@@ -258,9 +353,16 @@ class CategoryController extends Controller
             if(!$cat){
                 return redirect()->back()->with('error','Category not found.');
             }
+
+            $categoryTitle = $cat->title;
             $cat->delete();
+
+            // Log activity
+            \Log::info('✅ Category deleted:', ['id' => $id, 'title' => $categoryTitle]);
+
             return redirect()->back()->with('success','Category deleted successfully.');
         } catch (\Throwable $e) {
+            \Log::error('❌ Error deleting category:', ['id' => $id, 'error' => $e->getMessage()]);
             return redirect()->back()->with('error','Error deleting category: '.$e->getMessage());
         }
     }

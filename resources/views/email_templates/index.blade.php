@@ -79,11 +79,24 @@
                 serverSide: true,
                 responsive: true,
                 ajax: function (data, callback) {
-                    const params = { start: data.start, length: data.length, draw: data.draw, search: data.search.value };
+                    const params = { start: data.start, length: data.length, draw: data.draw,
+                        search: { value: data.search.value} };
+                    console.log('📡 Fetching email templates:', params);
+
                     $.get('{{ route('email-templates.data') }}', params, function (json) {
-                        $('.total_count').text(json.recordsTotal || 0);
+                        console.log('📥 Email templates response:', json);
+
+                        // Update count display
+                        if (json.stats && json.stats.total) {
+                            $('.total_count').text(json.stats.total);
+                            console.log('📊 Total email templates:', json.stats.total);
+                        } else {
+                            $('.total_count').text(json.recordsTotal || 0);
+                        }
+
                         callback(json);
                     }).fail(function(xhr){
+                        console.error('❌ Failed to load email templates:', xhr);
                         alert('Failed to load ('+xhr.status+'): '+xhr.statusText);
                     }).always(function(){ $('#data-table_processing').hide(); });
                 },
@@ -95,10 +108,34 @@
             // Delete single template
             $('#emailTemplatesTable').on('click', '.delete-template', function(){
                 var id = $(this).data('id');
+                var templateType = $(this).closest('tr').find('td:first').text().trim();
+
+                console.log('🗑️ Delete email template clicked:', { id: id, type: templateType });
+
                 if(!confirm("{{trans('lang.selected_delete_alert')}}")) return;
-                $.post({ url: '{{ url('email-templates') }}' + '/' + id + '/delete', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-                    .done(function(){ $('#emailTemplatesTable').DataTable().ajax.reload(null,false); })
-                    .fail(function(xhr){ alert('Failed to delete ('+xhr.status+'): '+xhr.statusText); });
+
+                jQuery("#data-table_processing").show();
+
+                $.get('{{ url('email-templates/delete') }}' + '/' + id, function(response){
+                    console.log('✅ Email template deleted:', response);
+
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        logActivity('email_templates', 'deleted', 'Deleted email template: ' + templateType);
+                    }
+
+                    jQuery("#data-table_processing").hide();
+                    $('#emailTemplatesTable').DataTable().ajax.reload(null,false);
+
+                    if (typeof toastr !== 'undefined') {
+                        toastr.success(response.message || 'Email template deleted successfully');
+                    }
+                })
+                .fail(function(xhr){
+                    console.error('❌ Delete failed:', xhr);
+                    jQuery("#data-table_processing").hide();
+                    alert('Failed to delete ('+xhr.status+'): '+xhr.statusText);
+                });
             });
         });
     </script>

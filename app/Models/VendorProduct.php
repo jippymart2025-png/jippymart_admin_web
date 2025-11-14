@@ -51,6 +51,23 @@ class VendorProduct extends Model
         'categoryTitle',
         'vendorTitle',
     ];
+
+    protected $casts = [
+        'addOnsPrice' => 'array',
+        'addOnsTitle' => 'array',
+        'photos' => 'array',
+        'item_attribute' => 'array',
+        'product_specification' => 'array',
+        'sizeTitle' => 'array',
+        'sizePrice' => 'array',
+        'attributes' => 'array',
+        'variants' => 'array',
+        'nonveg' => 'boolean',
+        'veg' => 'boolean',
+        'publish' => 'boolean',
+        'takeawayOption' => 'boolean',
+        'isAvailable' => 'boolean',
+    ];
 }
 
 

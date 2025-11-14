@@ -167,6 +167,7 @@
 
         $(".save-form-btn").click(function(){
             $(".error_top").hide().html('');
+
             var code = $(".coupon_code").val();
             var discount = $(".coupon_discount").val();
             var description = $(".coupon_description").val();
@@ -174,11 +175,56 @@
             var usage_limit = parseInt($(".usage_limit").val()||'0',10);
             var couponType = $("#coupon_type").val();
             var selectedVendor = $('#vendor_restaurant_select').val();
-            var newdate = new Date($(".date_picker").val());
-            if(!code || !discount || !couponType || !selectedVendor || newdate.toString()==='Invalid Date'){
-                $(".error_top").show().html('<p>Please fill required fields correctly</p>'); window.scrollTo(0,0); return;
+            var dateValue = $(".date_picker").val();
+
+            console.log('💾 Creating coupon - Form values:', {
+                code: code,
+                discount: discount,
+                couponType: couponType,
+                selectedVendor: selectedVendor,
+                dateValue: dateValue
+            });
+
+            // Detailed validation
+            if(!code) {
+                $(".error_top").show().html('<p>Coupon code is required</p>');
+                window.scrollTo(0,0);
+                return;
             }
+            if(!discount) {
+                $(".error_top").show().html('<p>Discount is required</p>');
+                window.scrollTo(0,0);
+                return;
+            }
+            if(!couponType) {
+                $(".error_top").show().html('<p>Coupon type is required</p>');
+                window.scrollTo(0,0);
+                return;
+            }
+            if(!selectedVendor) {
+                $(".error_top").show().html('<p>Please select a restaurant/mart</p>');
+                window.scrollTo(0,0);
+                return;
+            }
+            if(!dateValue) {
+                $(".error_top").show().html('<p>Expiry date is required</p>');
+                window.scrollTo(0,0);
+                return;
+            }
+
+            var newdate = new Date(dateValue);
+            if(newdate.toString()==='Invalid Date'){
+                $(".error_top").show().html('<p>Invalid expiry date format</p>');
+                window.scrollTo(0,0);
+                return;
+            }
+
             var expiresAt = (newdate.getMonth()+1).toString().padStart(2,'0') + '/' + newdate.getDate().toString().padStart(2,'0') + '/' + newdate.getFullYear() + ' 11:59:59 PM';
+
+            console.log('📅 Formatted expiry date:', expiresAt);
+
+            jQuery("#data-table_processing").show();
+
             var fd = new FormData();
             fd.append('code', code);
             fd.append('discount', discount);
@@ -191,10 +237,36 @@
             fd.append('resturant_id', selectedVendor);
             fd.append('isPublic', $(".coupon_public").is(":checked") ? 1 : 0);
             fd.append('isEnabled', $(".coupon_enabled").is(":checked") ? 1 : 0);
-            var f = document.querySelector('input[type=file]')?.files?.[0]; if(f){ fd.append('image', f); }
-            $.ajax({ url: '{{ route('coupons.store') }}', method: 'POST', data: fd, processData: false, contentType: false, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-                .done(function(){ window.location.href = '{{ $id ? route('restaurants.coupons',$id) : route('coupons') }}'; })
-                .fail(function(xhr){ $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>'); window.scrollTo(0,0); });
+            var f = document.querySelector('input[type=file]')?.files?.[0];
+            if(f){
+                fd.append('image', f);
+                console.log('📤 Including image file:', f.name);
+            }
+
+            $.ajax({
+                url: '{{ route('coupons.store') }}',
+                method: 'POST',
+                data: fd,
+                processData: false,
+                contentType: false,
+                headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+            })
+            .done(function(response){
+                console.log('✅ Coupon created successfully:', response);
+
+                // Log activity
+                if (typeof logActivity === 'function') {
+                    logActivity('coupons', 'created', 'Created coupon: ' + code);
+                }
+
+                window.location.href = '{{ $id ? route('restaurants.coupons',$id) : route('coupons') }}';
+            })
+            .fail(function(xhr){
+                console.error('❌ Create failed:', xhr);
+                jQuery("#data-table_processing").hide();
+                $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+(xhr.responseJSON?.message || xhr.statusText)+'</p>');
+                window.scrollTo(0,0);
+            });
         });
     });
 </script>

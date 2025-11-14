@@ -70,16 +70,16 @@ class RoleController extends Controller
         $permission = $request->all();
         $roleHasPermissions = Permission::where('role_id', $id)->pluck('routes')->toArray();
         $chkPermissionArr = [];
-        
+
         // Update role
         $roles = Role::find($id);
         if ($roles) {
             $roles->role_name = $request->input('name');
             $roles->save();
         }
-        
+
         $roleId = (int) $id;
-        
+
         // Add new permissions
         foreach ($permission as $key => $data) {
             if (is_array($data)) {
@@ -96,7 +96,7 @@ class RoleController extends Controller
                 }
             }
         }
-        
+
         // Remove old permissions that are no longer selected
         for ($i = 0; $i < count($roleHasPermissions); $i++) {
             if (!in_array($roleHasPermissions[$i], $chkPermissionArr)) {
@@ -107,7 +107,7 @@ class RoleController extends Controller
                 }
             }
         }
- 
+
         return redirect('role')->with('success', 'Role updated successfully');
     }
 

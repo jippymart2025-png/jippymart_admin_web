@@ -287,14 +287,14 @@ class OrderController extends Controller
             $result = \App\Models\restaurant_orders::fetchForDatatable($filters);
             $rows = $result['rows'];
             $recordsFiltered = $result['recordsFiltered'];
-            
-            // Debug: Log query results
-            \Log::info('Orders DataTable Request', [
-                'draw' => $draw,
-                'recordsFiltered' => $recordsFiltered,
-                'rows_count' => count($rows),
-                'filters' => $filters
-            ]);
+
+            // Log search queries for debugging
+            if (!empty($filters['search'])) {
+                \Log::info('📡 Orders search query:', [
+                    'search_term' => $filters['search'],
+                    'results_count' => $recordsFiltered
+                ]);
+            }
 
             // Extract filter values for use in row processing
             $vendorId = $filters['vendor_id'];
@@ -320,7 +320,7 @@ class OrderController extends Controller
                 $id = (string) $row->id;
                 $vendorTitle = (string) ($row->vendor_title ?? '');
                 $vendorType = (string) ($row->vendor_type ?? 'restaurant');
-                
+
                 // If vendor join failed, try to extract from vendor JSON if available
                 if (empty($vendorTitle)) {
                     // Check if there's vendor data in the order JSON (might be in a 'vendor' field)
@@ -343,23 +343,34 @@ class OrderController extends Controller
                 // Driver name from JSON if available
                 $driverName = $this->extractNameFromJson($row->driver);
 
-                // Order type
-                $takeAway = strtolower((string) ($row->takeAway ?? ''));
-                $orderTypeText = ($takeAway === '1' || $takeAway === 'true') ? trans('lang.order_takeaway') : trans('lang.order_delivery');
+                // // Order type
+                // $takeAway = strtolower((string) ($row->takeAway ?? ''));
+                // $orderTypeText = ($takeAway === '1' || $takeAway === 'true') ? trans('lang.order_takeaway') : trans('lang.order_delivery');
 
                 // Amount
                 $amountValue = $this->resolveAmount($row);
                 $amountText = $this->formatCurrency($amountValue);
 
-                // Date render (createdAt stored as ISO string)
+                // Date render - Format like "Oct 1, 2025 11:27 PM"
                 $dateText = '';
                 if (!empty($row->createdAt)) {
                     try {
                         // Parse ISO 8601 string (e.g., "2025-10-14T14:53:43.860219Z")
                         $date = \Carbon\Carbon::parse($row->createdAt);
-                        $dateText = $date->format('M d, Y') . ' ' . $date->format('h:i A');
+                        // Format: "Oct 1, 2025 11:27 PM"
+                        $dateText = $date->format('M j, Y g:i A');
+
+                        // Log first row for debugging
+                        if ($id === ($rows->first()->id ?? '')) {
+                            \Log::info('📅 Date formatting sample:', [
+                                'raw_date' => $row->createdAt,
+                                'formatted_date' => $dateText,
+                                'format_used' => 'M j, Y g:i A'
+                            ]);
+                        }
                     } catch (\Throwable $e) {
                         // Fallback to raw string if parsing fails
+                        \Log::warning('⚠️ Date parsing failed:', ['date' => $row->createdAt, 'error' => $e->getMessage()]);
                         $dateText = (string) $row->createdAt;
                     }
                 }
@@ -457,7 +468,7 @@ class OrderController extends Controller
                 $rowCells[] = '<span class="text-green">' . e($amountText) . '</span>';
 
                 // Order Type column
-                $rowCells[] = e($orderTypeText);
+                // $rowCells[] = e($orderTypeText);
 
                 // Status column with proper styling
                 $statusClass = $this->getStatusClass($statusText);
@@ -486,16 +497,16 @@ class OrderController extends Controller
                 'data' => $data,
             ]);
         }
-        
+
         // Regular page load - return view with zones
         $status = $request->query('status');
-        
+
         // Load zones from MySQL
         $zones = DB::table('zone')
             ->where('publish', 1)
             ->orderBy('name', 'asc')
             ->get(['id', 'name']);
-        
+
         return view('orders.index', compact('status', 'id', 'zones'));
     }
 
@@ -596,5 +607,187 @@ class OrderController extends Controller
         $digits = (int) config('app.currency_decimal_digits', 2);
         $val = number_format($amount, $digits, '.', '');
         return $atRight ? ($val . $symbol) : ($symbol . $val);
+    }
+
+    /**
+     * Update order status
+     */
+    public function updateStatus(Request $request, $id)
+    {
+        try {
+            $request->validate([
+                'status' => 'required|string'
+            ]);
+
+            $order = DB::table('restaurant_orders')->where('id', $id)->first();
+
+            if (!$order) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order not found'
+                ], 404);
+            }
+
+            $oldStatus = $order->status;
+            $newStatus = $request->input('status');
+
+            DB::table('restaurant_orders')
+                ->where('id', $id)
+                ->update(['status' => $newStatus]);
+
+            // Log activity
+            \Log::info('✅ Order status updated:', [
+                'order_id' => $id,
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order status updated successfully',
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('❌ Error updating order status:', [
+                'order_id' => $id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating order status: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Assign driver to order
+     */
+    public function assignDriver(Request $request, $id)
+    {
+        try {
+            $request->validate([
+                'driver_id' => 'required|string'
+            ]);
+
+            $order = DB::table('restaurant_orders')->where('id', $id)->first();
+
+            if (!$order) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order not found'
+                ], 404);
+            }
+
+            $driverId = $request->input('driver_id');
+
+            // Get driver details
+            $driver = DB::table('users')->where('id', $driverId)->where('role', 'driver')->first();
+
+            if (!$driver) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Driver not found'
+                ], 404);
+            }
+
+            // Build driver JSON
+            $driverData = [
+                'id' => $driver->id,
+                'firstName' => $driver->firstName ?? '',
+                'lastName' => $driver->lastName ?? '',
+                'email' => $driver->email ?? '',
+                'phoneNumber' => $driver->phoneNumber ?? '',
+                'carName' => $driver->carName ?? '',
+                'carNumber' => $driver->carNumber ?? ''
+            ];
+
+            DB::table('restaurant_orders')
+                ->where('id', $id)
+                ->update([
+                    'driverID' => $driverId,
+                    'driver' => json_encode($driverData)
+                ]);
+
+            // Log activity
+            \Log::info('✅ Driver assigned to order:', [
+                'order_id' => $id,
+                'driver_id' => $driverId,
+                'driver_name' => ($driver->firstName ?? '') . ' ' . ($driver->lastName ?? '')
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Driver assigned successfully',
+                'driver_id' => $driverId,
+                'driver_name' => ($driver->firstName ?? '') . ' ' . ($driver->lastName ?? '')
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('❌ Error assigning driver:', [
+                'order_id' => $id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error assigning driver: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Remove driver from order
+     */
+    public function removeDriver(Request $request, $id)
+    {
+        try {
+            $order = DB::table('restaurant_orders')->where('id', $id)->first();
+
+            if (!$order) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order not found'
+                ], 404);
+            }
+
+            $oldDriverId = $order->driverID;
+            $oldDriverData = !empty($order->driver) ? json_decode($order->driver, true) : [];
+            $oldDriverName = ($oldDriverData['firstName'] ?? '') . ' ' . ($oldDriverData['lastName'] ?? '');
+
+            DB::table('restaurant_orders')
+                ->where('id', $id)
+                ->update([
+                    'driverID' => null,
+                    'driver' => null
+                ]);
+
+            // Log activity
+            \Log::info('✅ Driver removed from order:', [
+                'order_id' => $id,
+                'driver_id' => $oldDriverId,
+                'driver_name' => $oldDriverName
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Driver removed successfully',
+                'old_driver_id' => $oldDriverId,
+                'old_driver_name' => $oldDriverName
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('❌ Error removing driver:', [
+                'order_id' => $id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error removing driver: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

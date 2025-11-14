@@ -1,62 +1,62 @@
 @extends('layouts.app')
 @section('content')
-<div class="page-wrapper">
-    <div class="row page-titles">
-        <div class="col-md-5 align-self-center">
-            <h3 class="text-themecolor">{{ trans('lang.create_role') }}</h3>
+    <div class="page-wrapper">
+        <div class="row page-titles">
+            <div class="col-md-5 align-self-center">
+                <h3 class="text-themecolor">{{ trans('lang.create_role') }}</h3>
+            </div>
+            <div class="col-md-7 align-self-center">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url('/dashboard') }}">{{ trans('lang.dashboard') }}</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url('role') }}">{{ trans('lang.role_plural') }}</a>
+                    </li>
+                    <li class="breadcrumb-item active">{{ trans('lang.create_role') }}</li>
+                </ol>
+            </div>
         </div>
-        <div class="col-md-7 align-self-center">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url('/dashboard') }}">{{ trans('lang.dashboard') }}</a></li>
-                <li class="breadcrumb-item"><a href="{{ url('role') }}">{{ trans('lang.role_plural') }}</a>
-                </li>
-                <li class="breadcrumb-item active">{{ trans('lang.create_role') }}</li>
-            </ol>
-        </div>
-    </div>
-    <div>
-        <div class="card-body">
-            <div class="error_top" style="display:none"></div>
-            <div class="success_top" style="display:none"></div>
-            <form action="{{ route('role.store') }}" method="post" id="roleForm">
-                @csrf
-                <div class="row restaurant_payout_create">
-                    <div class="restaurant_payout_create-inner">
-                        <fieldset>
-                            <legend>{{ trans('lang.role_details') }}</legend>
-                            <div class="form-group row width-100 d-flex">
-                                <label class="col-3 control-label">{{ trans('lang.name') }}</label>
-                                <div class="col-6">
-                                    <input type="text" class="form-control" id="name" name="name">
-                                </div>
-                                <div class="col-6 text-right">
-                                    <label for="permissions"
-                                        class="form-label">{{ trans('lang.assign_permissions') }}</label>
-                                    <div class="text-right">
-                                        <input type="checkbox" name="all_permission" id="all_permission">
-                                        <label class="control-label"
-                                            for="all_permission">{{ trans('lang.all_permissions') }}</label>
+        <div>
+            <div class="card-body">
+                <div class="error_top" style="display:none"></div>
+                <div class="success_top" style="display:none"></div>
+                <form action="{{ route('role.store') }}" method="post" id="roleForm">
+                    @csrf
+                    <div class="row restaurant_payout_create">
+                        <div class="restaurant_payout_create-inner">
+                            <fieldset>
+                                <legend>{{ trans('lang.role_details') }}</legend>
+                                <div class="form-group row width-100 d-flex">
+                                    <label class="col-3 control-label">{{ trans('lang.name') }}</label>
+                                    <div class="col-6">
+                                        <input type="text" class="form-control" id="name" name="name">
+                                    </div>
+                                    <div class="col-6 text-right">
+                                        <label for="permissions"
+                                               class="form-label">{{ trans('lang.assign_permissions') }}</label>
+                                        <div class="text-right">
+                                            <input type="checkbox" name="all_permission" id="all_permission">
+                                            <label class="control-label"
+                                                   for="all_permission">{{ trans('lang.all_permissions') }}</label>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="form-group row width-100">
-                                <div class="role-table width-100">
-                                    <div class="col-12">
-                                        <table class="table table-striped">
-                                            <thead>
+                                <div class="form-group row width-100">
+                                    <div class="role-table width-100">
+                                        <div class="col-12">
+                                            <table class="table table-striped">
+                                                <thead>
                                                 <th>Menu</th>
                                                 <th>Permission</th>
-                                            </thead>
-                                            <tbody>
+                                                </thead>
+                                                <tbody>
                                                 <tr>
                                                     <td>
                                                         <strong>{{ trans('lang.god_eye') }}</strong>
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="god-eye" value="map" name="god-eye[]"
-                                                            class="permission">
+                                                               class="permission">
                                                         <label class="control-label2"
-                                                            for="god-eye">{{ trans('lang.view') }}</label>
+                                                               for="god-eye">{{ trans('lang.view') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -65,21 +65,21 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="zone-list" value="zone.list"
-                                                            name="zone[]" class="permission">
+                                                               name="zone[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="zone-list">{{ trans('lang.list') }}</label>
+                                                               for="zone-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="zone-create" value="zone.create"
-                                                            name="zone[]" class="permission">
+                                                               name="zone[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="zone-create">{{ trans('lang.create') }}</label>
+                                                               for="zone-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="zone-edit" value="zone.edit"
-                                                            name="zone[]" class="permission">
+                                                               name="zone[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="zone-edit">{{ trans('lang.edit') }}</label>
+                                                               for="zone-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="zone-delete" value="zone.delete"
-                                                            name="zone[]" class="permission">
+                                                               name="zone[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="zone-delete">{{ trans('lang.delete') }}</label>
+                                                               for="zone-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -88,29 +88,29 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="role-list" value="role.index"
-                                                            name="roles[]" class="permission">
+                                                               name="roles[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="role-list">{{ trans('lang.list') }}</label>
+                                                               for="role-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="role-save" value="role.save"
-                                                            name="roles[]" class="permission">
+                                                               name="roles[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="role-save">{{ trans('lang.create') }}</label>
+                                                               for="role-save">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="role-store" value="role.store"
-                                                            name="roles[]" class="permission">
+                                                               name="roles[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="role-store">{{ trans('lang.store') }}</label>
+                                                               for="role-store">{{ trans('lang.store') }}</label>
                                                         <input type="checkbox" id="role-edit" value="role.edit"
-                                                            name="roles[]" class="permission">
+                                                               name="roles[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="role-edit">{{ trans('lang.edit') }}</label>
+                                                               for="role-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="role-update" value="role.update"
-                                                            name="roles[]" class="permission">
+                                                               name="roles[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="role-update">{{ trans('lang.update') }}</label>
+                                                               for="role-update">{{ trans('lang.update') }}</label>
                                                         <input type="checkbox" id="role-delete" value="role.delete"
-                                                            name="roles[]" class="permission">
+                                                               name="roles[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="role-delete">{{ trans('lang.delete') }}</label>
+                                                               for="role-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -119,33 +119,33 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="admin-list" value="admin.users"
-                                                            name="admins[]" class="permission">
+                                                               name="admins[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="admin-list">{{ trans('lang.list') }}</label>
+                                                               for="admin-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="admin-create"
-                                                            value="admin.users.create" name="admins[]"
-                                                            class="permission">
+                                                               value="admin.users.create" name="admins[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="admin-create">{{ trans('lang.create') }}</label>
+                                                               for="admin-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="admin-store"
-                                                            value="admin.users.store" name="admins[]"
-                                                            class="permission">
+                                                               value="admin.users.store" name="admins[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="admin-store">{{ trans('lang.store') }}</label>
+                                                               for="admin-store">{{ trans('lang.store') }}</label>
                                                         <input type="checkbox" id="admin-edit" value="admin.users.edit"
-                                                            name="admins[]" class="permission">
+                                                               name="admins[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="admin-edit">{{ trans('lang.edit') }}</label>
+                                                               for="admin-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="admin-update"
-                                                            value="admin.users.update" name="admins[]"
-                                                            class="permission">
+                                                               value="admin.users.update" name="admins[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="admin-update">{{ trans('lang.update') }}</label>
+                                                               for="admin-update">{{ trans('lang.update') }}</label>
                                                         <input type="checkbox" id="admin-delete"
-                                                            value="admin.users.delete" name="admins[]"
-                                                            class="permission">
+                                                               value="admin.users.delete" name="admins[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="admin-delete">{{ trans('lang.delete') }}</label>
+                                                               for="admin-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -154,25 +154,25 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="user-list" value="users"
-                                                            name="users[]" class="permission">
+                                                               name="users[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="user-list">{{ trans('lang.list') }}</label>
+                                                               for="user-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="user-create" value="users.create"
-                                                            name="users[]" class="permission">
+                                                               name="users[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="user-create">{{ trans('lang.create') }}</label>
+                                                               for="user-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="user-edit" value="users.edit"
-                                                            name="users[]" class="permission">
+                                                               name="users[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="user-edit">{{ trans('lang.edit') }}</label>
+                                                               for="user-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="user-view" value="users.view"
-                                                            name="users[]" class="permission">
+                                                               name="users[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="user-view">{{ trans('lang.view') }}</label>
+                                                               for="user-view">{{ trans('lang.view') }}</label>
                                                         <input type="checkbox" id="user-delete" value="user.delete"
-                                                            name="user[]" class="permission">
+                                                               name="user[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="user-delete">{{ trans('lang.delete') }}</label>
+                                                               for="user-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -181,21 +181,21 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="vendors-list" value="vendors"
-                                                            name="vendors[]" class="permission">
+                                                               name="vendors[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="vendors-list">{{ trans('lang.list') }}</label>
+                                                               for="vendors-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="vendors-create" value="vendors.create"
-                                                            name="vendors[]" class="permission">
+                                                               name="vendors[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="vendors-create">{{ trans('lang.create') }}</label>
+                                                               for="vendors-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="vendors-edit" value="vendors.edit"
-                                                            name="vendors[]" class="permission">
+                                                               name="vendors[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="vendors-edit">{{ trans('lang.edit') }}</label>
+                                                               for="vendors-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="vendors-delete"
-                                                            value="vendors.delete" name="vendors[]" class="permission">
+                                                               value="vendors.delete" name="vendors[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="vendors-delete">{{ trans('lang.delete') }}</label>
+                                                               for="vendors-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -204,15 +204,15 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="approved-vendors-list"
-                                                            value="approve.vendors.list" name="approve_vendors[]"
-                                                            class="permission">
+                                                               value="approve.vendors.list" name="approve_vendors[]"
+                                                               class="permission">
                                                         <label class="contol-label2"
-                                                            for="approved-vendors-list">{{ trans('lang.list') }}</label>
+                                                               for="approved-vendors-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="approved-vendors-delete"
-                                                            value="approve.vendors.delete" name="approve_vendors[]"
-                                                            class="permission">
+                                                               value="approve.vendors.delete" name="approve_vendors[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="approved-vendors-delete">{{ trans('lang.delete') }}</label>
+                                                               for="approved-vendors-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -221,15 +221,15 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="pending-vendors-list"
-                                                            value="pending.vendors.list" name="pending_vendors[]"
-                                                            class="permission">
+                                                               value="pending.vendors.list" name="pending_vendors[]"
+                                                               class="permission">
                                                         <label class="contol-label2"
-                                                            for="pending-vendors-list">{{ trans('lang.list') }}</label>
+                                                               for="pending-vendors-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="pending-vendors-delete"
-                                                            value="pending.vendors.delete" name="pending_vendors[]"
-                                                            class="permission">
+                                                               value="pending.vendors.delete" name="pending_vendors[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="pending-vendors-delete">{{ trans('lang.delete') }}</label>
+                                                               for="pending-vendors-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -238,15 +238,15 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="vendor-document-list"
-                                                            value="vendor.document.list" name="vendors-document[]"
-                                                            class="permission">
+                                                               value="vendor.document.list" name="vendors-document[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="vendor-document-list">{{ trans('lang.list') }}</label>
+                                                               for="vendor-document-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="vendor-document-edit"
-                                                            value="vendor.document.edit" name="vendors-document[]"
-                                                            class="permission">
+                                                               value="vendor.document.edit" name="vendors-document[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="vendor-document-edit">{{ trans('lang.edit') }}</label>
+                                                               for="vendor-document-edit">{{ trans('lang.edit') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -255,29 +255,29 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="restaurants-list" value="restaurants"
-                                                            name="restaurants[]" class="permission">
+                                                               name="restaurants[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="restaurants-list">{{ trans('lang.list') }}</label>
+                                                               for="restaurants-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="restaurants-create"
-                                                            value="restaurants.create" name="restaurants[]"
-                                                            class="permission">
+                                                               value="restaurants.create" name="restaurants[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="restaurants-create">{{ trans('lang.create') }}</label>
+                                                               for="restaurants-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="restaurants-edit"
-                                                            value="restaurants.edit" name="restaurants[]"
-                                                            class="permission">
+                                                               value="restaurants.edit" name="restaurants[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="restaurants-edit">{{ trans('lang.edit') }}</label>
+                                                               for="restaurants-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="restaurants-view"
-                                                            value="restaurants.view" name="restaurants[]"
-                                                            class="permission">
+                                                               value="restaurants.view" name="restaurants[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="restaurants-view">{{ trans('lang.view') }}</label>
+                                                               for="restaurants-view">{{ trans('lang.view') }}</label>
                                                         <input type="checkbox" id="restaurant-delete"
-                                                            value="restaurant.delete" name="restaurant[]"
-                                                            class="permission">
+                                                               value="restaurant.delete" name="restaurant[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="restaurant-delete">{{ trans('lang.delete') }}</label>
+                                                               for="restaurant-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -286,25 +286,25 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="drivers-list" value="drivers"
-                                                            name="drivers[]" class="permission">
+                                                               name="drivers[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="drivers-list">{{ trans('lang.list') }}</label>
+                                                               for="drivers-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="drivers-create"
-                                                            value="drivers.create" name="drivers[]" class="permission">
+                                                               value="drivers.create" name="drivers[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="drivers-create">{{ trans('lang.create') }}</label>
+                                                               for="drivers-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="drivers-edit" value="drivers.edit"
-                                                            name="drivers[]" class="permission">
+                                                               name="drivers[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="drivers-edit">{{ trans('lang.edit') }}</label>
+                                                               for="drivers-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="drivers-view" value="drivers.view"
-                                                            name="drivers[]" class="permission">
+                                                               name="drivers[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="drivers-view">{{ trans('lang.view') }}</label>
+                                                               for="drivers-view">{{ trans('lang.view') }}</label>
                                                         <input type="checkbox" id="driver-delete" value="driver.delete"
-                                                            name="driver[]" class="permission">
+                                                               name="driver[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="driver-delete">{{ trans('lang.delete') }}</label>
+                                                               for="driver-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -313,15 +313,15 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="drivers-list-approved"
-                                                            value="approve.driver.list" name="approve_drivers[]"
-                                                            class="permission">
+                                                               value="approve.driver.list" name="approve_drivers[]"
+                                                               class="permission">
                                                         <label class="contol-label2"
-                                                            for="drivers-list-approved">{{ trans('lang.list') }}</label>
+                                                               for="drivers-list-approved">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="drivers-approved-delete"
-                                                            value="approve.driver.delete" name="approve_drivers[]"
-                                                            class="permission">
+                                                               value="approve.driver.delete" name="approve_drivers[]"
+                                                               class="permission">
                                                         <label class="contol-label2"
-                                                            for="drivers-approved-delete">{{ trans('lang.delete') }}</label>
+                                                               for="drivers-approved-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -330,15 +330,15 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="drivers-list-pending"
-                                                            value="pending.driver.list" name="pending_drivers[]"
-                                                            class="permission">
+                                                               value="pending.driver.list" name="pending_drivers[]"
+                                                               class="permission">
                                                         <label class="contol-label2"
-                                                            for="drivers-list-pending">{{ trans('lang.list') }}</label>
+                                                               for="drivers-list-pending">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="drivers-pending-delete"
-                                                            value="pending.driver.delete" name="pending_drivers[]"
-                                                            class="permission">
+                                                               value="pending.driver.delete" name="pending_drivers[]"
+                                                               class="permission">
                                                         <label class="contol-label2"
-                                                            for="drivers-pending-delete">{{ trans('lang.delete') }}</label>
+                                                               for="drivers-pending-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -347,15 +347,15 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="driver-document-list"
-                                                            value="driver.document.list" name="drivers-document[]"
-                                                            class="permission">
+                                                               value="driver.document.list" name="drivers-document[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="driver-document-list">{{ trans('lang.list') }}</label>
+                                                               for="driver-document-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="driver-document-edit"
-                                                            value="driver.document.edit" name="drivers-document[]"
-                                                            class="permission">
+                                                               value="driver.document.edit" name="drivers-document[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="driver-document-edit">{{ trans('lang.edit') }}</label>
+                                                               for="driver-document-edit">{{ trans('lang.edit') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -364,9 +364,9 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="report" value="report.index"
-                                                            name="reports[]" class="permission">
+                                                               name="reports[]" class="permission">
                                                         <label class="control-label2"
-                                                            for="report">{{ trans('lang.create') }}</label>
+                                                               for="report">{{ trans('lang.create') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -375,24 +375,24 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="categories-list" value="categories"
-                                                            name="category[]" class="permission">
+                                                               name="category[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="categories-list">{{ trans('lang.list') }}</label>
+                                                               for="categories-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="categories-create"
-                                                            value="categories.create" name="category[]"
-                                                            class="permission">
+                                                               value="categories.create" name="category[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="categories-create">{{ trans('lang.create') }}</label>
+                                                               for="categories-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="categories-edit"
-                                                            value="categories.edit" name="category[]"
-                                                            class="permission">
+                                                               value="categories.edit" name="category[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="categories-edit">{{ trans('lang.edit') }}</label>
+                                                               for="categories-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="category-delete"
-                                                            value="category.delete" name="category[]"
-                                                            class="permission">
+                                                               value="category.delete" name="category[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="category-delete">{{ trans('lang.delete') }}</label>
+                                                               for="category-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -401,24 +401,24 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="mart-categories-list" value="mart-categories"
-                                                            name="mart-categories[]" class="permission">
+                                                               name="mart-categories[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="mart-categories-list">{{ trans('lang.list') }}</label>
+                                                               for="mart-categories-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="mart-categories-create"
-                                                            value="mart-categories.create" name="mart-categories[]"
-                                                            class="permission">
+                                                               value="mart-categories.create" name="mart-categories[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="mart-categories-create">{{ trans('lang.create') }}</label>
+                                                               for="mart-categories-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="mart-categories-edit"
-                                                            value="mart-categories.edit" name="mart-categories[]"
-                                                            class="permission">
+                                                               value="mart-categories.edit" name="mart-categories[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="mart-categories-edit">{{ trans('lang.edit') }}</label>
+                                                               for="mart-categories-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="mart-categories-delete"
-                                                            value="mart-categories.delete" name="mart-categories[]"
-                                                            class="permission">
+                                                               value="mart-categories.delete" name="mart-categories[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="mart-categories-delete">{{ trans('lang.delete') }}</label>
+                                                               for="mart-categories-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -427,24 +427,24 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="mart-subcategories-list" value="mart-subcategories"
-                                                            name="mart-subcategories[]" class="permission">
+                                                               name="mart-subcategories[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="mart-subcategories-list">{{ trans('lang.list') }}</label>
+                                                               for="mart-subcategories-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="mart-subcategories-create"
-                                                            value="mart-subcategories.create" name="mart-subcategories[]"
-                                                            class="permission">
+                                                               value="mart-subcategories.create" name="mart-subcategories[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="mart-subcategories-create">{{ trans('lang.create') }}</label>
+                                                               for="mart-subcategories-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="mart-subcategories-edit"
-                                                            value="mart-subcategories.edit" name="mart-subcategories[]"
-                                                            class="permission">
+                                                               value="mart-subcategories.edit" name="mart-subcategories[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="mart-subcategories-edit">{{ trans('lang.edit') }}</label>
+                                                               for="mart-subcategories-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="mart-subcategories-delete"
-                                                            value="mart-subcategories.delete" name="mart-subcategories[]"
-                                                            class="permission">
+                                                               value="mart-subcategories.delete" name="mart-subcategories[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="mart-subcategories-delete">{{ trans('lang.delete') }}</label>
+                                                               for="mart-subcategories-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -453,24 +453,24 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="cuisines-list" value="cuisines"
-                                                            name="cuisines[]" class="permission">
+                                                               name="cuisines[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="cuisines-list">{{ trans('lang.list') }}</label>
+                                                               for="cuisines-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="cuisines-create"
-                                                            value="cuisines.create" name="cuisines[]"
-                                                            class="permission">
+                                                               value="cuisines.create" name="cuisines[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="cuisines-create">{{ trans('lang.create') }}</label>
+                                                               for="cuisines-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="cuisines-edit"
-                                                            value="cuisines.edit" name="cuisines[]"
-                                                            class="permission">
+                                                               value="cuisines.edit" name="cuisines[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="cuisines-edit">{{ trans('lang.edit') }}</label>
+                                                               for="cuisines-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="cuisines-delete"
-                                                            value="cuisines.delete" name="cuisines[]"
-                                                            class="permission">
+                                                               value="cuisines.delete" name="cuisines[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="cuisines-delete">{{ trans('lang.delete') }}</label>
+                                                               for="cuisines-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -479,24 +479,24 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="brands-list" value="brands"
-                                                            name="brands[]" class="permission">
+                                                               name="brands[]" class="permission">
                                                         <label class="contol-label2"
-                                                            for="brands-list">{{ trans('lang.list') }}</label>
+                                                               for="brands-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="brands-create"
-                                                            value="brands.create" name="brands[]"
-                                                            class="permission">
+                                                               value="brands.create" name="brands[]"
+                                                               class="permission">
                                                         <label class="contol-label2"
-                                                            for="brands-create">{{ trans('lang.create') }}</label>
+                                                               for="brands-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="brands-edit"
-                                                            value="brands.edit" name="brands[]"
-                                                            class="permission">
+                                                               value="brands.edit" name="brands[]"
+                                                               class="permission">
                                                         <label class="contol-label2"
-                                                            for="brands-edit">{{ trans('lang.edit') }}</label>
+                                                               for="brands-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="brands-delete"
-                                                            value="brands.delete" name="brands[]"
-                                                            class="permission">
+                                                               value="brands.delete" name="brands[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="brands-delete">{{ trans('lang.delete') }}</label>
+                                                               for="brands-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -505,24 +505,24 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="menu-periods-list" value="menu-periods"
-                                                            name="menu-periods[]" class="permission">
+                                                               name="menu-periods[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="menu-periods-list">{{ trans('lang.list') }}</label>
+                                                               for="menu-periods-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="menu-periods-create"
-                                                            value="menu-periods.create" name="menu-periods[]"
-                                                            class="permission">
+                                                               value="menu-periods.create" name="menu-periods[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="menu-periods-create">{{ trans('lang.create') }}</label>
+                                                               for="menu-periods-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="menu-periods-edit"
-                                                            value="menu-periods.edit" name="menu-periods[]"
-                                                            class="permission">
+                                                               value="menu-periods.edit" name="menu-periods[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="menu-periods-edit">{{ trans('lang.edit') }}</label>
+                                                               for="menu-periods-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="menu-periods-delete"
-                                                            value="menu-periods.delete" name="menu-periods[]"
-                                                            class="permission">
+                                                               value="menu-periods.delete" name="menu-periods[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="menu-periods-delete">{{ trans('lang.delete') }}</label>
+                                                               for="menu-periods-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -531,21 +531,21 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="foods-list" value="foods"
-                                                            name="foods[]" class="permission">
+                                                               name="foods[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="foods-list">{{ trans('lang.list') }}</label>
+                                                               for="foods-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="foods-create" value="foods.create"
-                                                            name="foods[]" class="permission">
+                                                               name="foods[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="foods-create">{{ trans('lang.create') }}</label>
+                                                               for="foods-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="foods-edit" value="foods.edit"
-                                                            name="foods[]" class="permission">
+                                                               name="foods[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="foods-edit">{{ trans('lang.edit') }}</label>
+                                                               for="foods-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="foods-delete" value="foods.delete"
-                                                            name="foods[]" class="permission">
+                                                               name="foods[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="foods-delete">{{ trans('lang.delete') }}</label>
+                                                               for="foods-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -554,21 +554,21 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="mart-items-list" value="mart-items"
-                                                            name="mart-items[]" class="permission">
+                                                               name="mart-items[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="mart-items-list">{{ trans('lang.list') }}</label>
+                                                               for="mart-items-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="mart-items-create" value="mart-items.create"
-                                                            name="mart-items[]" class="permission">
+                                                               name="mart-items[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="mart-items-create">{{ trans('lang.create') }}</label>
+                                                               for="mart-items-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="mart-items-edit" value="mart-items.edit"
-                                                            name="mart-items[]" class="permission">
+                                                               name="mart-items[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="mart-items-edit">{{ trans('lang.edit') }}</label>
+                                                               for="mart-items-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="mart-items-delete" value="mart-items.delete"
-                                                            name="mart-items[]" class="permission">
+                                                               name="mart-items[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="mart-items-delete">{{ trans('lang.delete') }}</label>
+                                                               for="mart-items-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -577,24 +577,24 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="attributes-list" value="attributes"
-                                                            name="item-attribute[]" class="permission">
+                                                               name="item-attribute[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="attributes-list">{{ trans('lang.list') }}</label>
+                                                               for="attributes-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="attributes-create"
-                                                            value="attributes.create" name="item-attribute[]"
-                                                            class="permission">
+                                                               value="attributes.create" name="item-attribute[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="attributes-create">{{ trans('lang.create') }}</label>
+                                                               for="attributes-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="attributes-edit"
-                                                            value="attributes.edit" name="item-attribute[]"
-                                                            class="permission">
+                                                               value="attributes.edit" name="item-attribute[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="attributes-edit">{{ trans('lang.edit') }}</label>
+                                                               for="attributes-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="attributes-delete"
-                                                            value="attributes.delete" name="attributes[]"
-                                                            class="permission">
+                                                               value="attributes.delete" name="attributes[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="attributes-delete">{{ trans('lang.delete') }}</label>
+                                                               for="attributes-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -603,25 +603,25 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="reviewattributes-list"
-                                                            value="reviewattributes" name="review-attribute[]"
-                                                            class="permission">
+                                                               value="reviewattributes" name="review-attribute[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="reviewattributes-list">{{ trans('lang.list') }}</label>
+                                                               for="reviewattributes-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="reviewattributes-create"
-                                                            value="reviewattributes.create" name="review-attribute[]"
-                                                            class="permission">
+                                                               value="reviewattributes.create" name="review-attribute[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="reviewattributes-create">{{ trans('lang.create') }}</label>
+                                                               for="reviewattributes-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="reviewattributes-edit"
-                                                            value="reviewattributes.edit" name="review-attribute[]"
-                                                            class="permission">
+                                                               value="reviewattributes.edit" name="review-attribute[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="reviewattributes-edit">{{ trans('lang.edit') }}</label>
+                                                               for="reviewattributes-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="reviewattributes-delete"
-                                                            value="reviewattributes.delete" name="review-attribute[]"
-                                                            class="permission">
+                                                               value="reviewattributes.delete" name="review-attribute[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="reviewattributes-delete">{{ trans('lang.delete') }}</label>
+                                                               for="reviewattributes-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 <tr>
                                                     <td>
@@ -629,25 +629,25 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="subscription-plans-list"
-                                                            value="subscription-plans" name="subscription-plans[]"
-                                                            class="permission">
+                                                               value="subscription-plans" name="subscription-plans[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="subscription-plans-list">{{ trans('lang.list') }}</label>
+                                                               for="subscription-plans-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="subscription-plans-create"
-                                                            value="subscription-plans.create"
-                                                            name="subscription-plans[]" class="permission">
+                                                               value="subscription-plans.create"
+                                                               name="subscription-plans[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="subscription-plans-create">{{ trans('lang.create') }}</label>
+                                                               for="subscription-plans-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="subscription-plans-edit"
-                                                            value="subscription-plans.edit" name="subscription-plans[]"
-                                                            class="permission">
+                                                               value="subscription-plans.edit" name="subscription-plans[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="subscription-plans-edit">{{ trans('lang.edit') }}</label>
+                                                               for="subscription-plans-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="subscription-plans-delete"
-                                                            value="subscription-plans.delete"
-                                                            name="subscription-plans[]" class="permission">
+                                                               value="subscription-plans.delete"
+                                                               name="subscription-plans[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="subscription-plans-delete">{{ trans('lang.delete') }}</label>
+                                                               for="subscription-plans-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 </tr>
@@ -657,10 +657,10 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="subscription.history"
-                                                            value="subscription.history" name="subscription-history[]"
-                                                            class="permission">
+                                                               value="subscription.history" name="subscription-history[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="subscription.history">{{ trans('lang.list') }}</label>
+                                                               for="subscription.history">{{ trans('lang.list') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -669,22 +669,22 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="orders-list" value="orders"
-                                                            name="orders[]" class="permission">
+                                                               name="orders[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="orders-list">{{ trans('lang.list') }}</label>
+                                                               for="orders-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="orders-print"
-                                                            value="vendors.orderprint" name="orders[]"
-                                                            class="permission">
+                                                               value="vendors.orderprint" name="orders[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="orders-print">{{ trans('lang.print') }}</label>
+                                                               for="orders-print">{{ trans('lang.print') }}</label>
                                                         <input type="checkbox" id="orders-edit" value="orders.edit"
-                                                            name="orders[]" class="permission">
+                                                               name="orders[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="orders-edit">{{ trans('lang.edit') }}</label>
+                                                               for="orders-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="orders-delete" value="orders.delete"
-                                                            name="orders[]" class="permission">
+                                                               name="orders[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="orders-delete">{{ trans('lang.delete') }}</label>
+                                                               for="orders-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -693,14 +693,14 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="dinein-list"
-                                                            value="restaurants.booktable" name="dinein-orders[]"
-                                                            class="permission">
+                                                               value="restaurants.booktable" name="dinein-orders[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="dinein-list">{{ trans('lang.list') }}</label>
+                                                               for="dinein-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="dinein-edit" value="booktable.edit"
-                                                            name="dinein-orders[]" class="permission">
+                                                               name="dinein-orders[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="dinein-edit">{{ trans('lang.edit') }}</label>
+                                                               for="dinein-edit">{{ trans('lang.edit') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -709,24 +709,24 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="gift-card" value="gift-card.index"
-                                                            name="gift-cards[]" class="permission">
+                                                               name="gift-cards[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="gift-card">{{ trans('lang.list') }}</label>
+                                                               for="gift-card">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="gift-card-save"
-                                                            value="gift-card.save" name="gift-cards[]"
-                                                            class="permission">
+                                                               value="gift-card.save" name="gift-cards[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="gift-card-save">{{ trans('lang.create') }}</label>
+                                                               for="gift-card-save">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="gift-card-edit"
-                                                            value="gift-card.edit" name="gift-cards[]"
-                                                            class="permission">
+                                                               value="gift-card.edit" name="gift-cards[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="gift-card-edit">{{ trans('lang.edit') }}</label>
+                                                               for="gift-card-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="gift-card-delete"
-                                                            value="gift-card.delete" name="gift-cards[]"
-                                                            class="permission">
+                                                               value="gift-card.delete" name="gift-cards[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="gift-card-delete">{{ trans('lang.delete') }}</label>
+                                                               for="gift-card-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -735,24 +735,24 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="promotions-list" value="promotions"
-                                                            name="promotions[]" class="permission">
+                                                               name="promotions[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="promotions-list">{{ trans('lang.list') }}</label>
+                                                               for="promotions-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="promotions-create"
-                                                            value="promotions.create" name="promotions[]"
-                                                            class="permission">
+                                                               value="promotions.create" name="promotions[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="promotions-create">{{ trans('lang.create') }}</label>
+                                                               for="promotions-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="promotions-edit"
-                                                            value="promotions.edit" name="promotions[]"
-                                                            class="permission">
+                                                               value="promotions.edit" name="promotions[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="promotions-edit">{{ trans('lang.edit') }}</label>
+                                                               for="promotions-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="promotions-delete"
-                                                            value="promotions.delete" name="promotions[]"
-                                                            class="permission">
+                                                               value="promotions.delete" name="promotions[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="promotions-delete">{{ trans('lang.delete') }}</label>
+                                                               for="promotions-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -761,21 +761,21 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="coupons" value="coupons"
-                                                            name="coupons[]" class="permission">
+                                                               name="coupons[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="coupons">{{ trans('lang.list') }}</label>
+                                                               for="coupons">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="coupons-create"
-                                                            value="coupons.create" name="coupons[]" class="permission">
+                                                               value="coupons.create" name="coupons[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="coupons-create">{{ trans('lang.create') }}</label>
+                                                               for="coupons-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="coupons-edit" value="coupons.edit"
-                                                            name="coupons[]" class="permission">
+                                                               name="coupons[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="coupons-edit">{{ trans('lang.edit') }}</label>
+                                                               for="coupons-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="coupons-delete"
-                                                            value="coupons.delete" name="coupons[]" class="permission">
+                                                               value="coupons.delete" name="coupons[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="coupons-delete">{{ trans('lang.delete') }}</label>
+                                                               for="coupons-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -784,25 +784,25 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="documents-list"
-                                                            value="documents.list" name="documents[]"
-                                                            class="permission">
+                                                               value="documents.list" name="documents[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="documents-list">{{ trans('lang.list') }}</label>
+                                                               for="documents-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="documents-create"
-                                                            value="documents.create" name="documents[]"
-                                                            class="permission">
+                                                               value="documents.create" name="documents[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="documents-create">{{ trans('lang.create') }}</label>
+                                                               for="documents-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="documents-edit"
-                                                            value="documents.edit" name="documents[]"
-                                                            class="permission">
+                                                               value="documents.edit" name="documents[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="documents-edit">{{ trans('lang.edit') }}</label>
+                                                               for="documents-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="documents-delete"
-                                                            value="documents.delete" name="documents[]"
-                                                            class="permission">
+                                                               value="documents.delete" name="documents[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="documents-delete">{{ trans('lang.delete') }}</label>
+                                                               for="documents-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -811,20 +811,20 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="notification-list"
-                                                            value="notification" name="general-notifications[]"
-                                                            class="permission">
+                                                               value="notification" name="general-notifications[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="notification-list">{{ trans('lang.list') }}</label>
+                                                               for="notification-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="notification-send"
-                                                            value="notification.send" name="general-notifications[]"
-                                                            class="permission">
+                                                               value="notification.send" name="general-notifications[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="notification-send">{{ trans('lang.create') }}</label>
+                                                               for="notification-send">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="notification-delete"
-                                                            value="notification.delete" name="general-notifications[]"
-                                                            class="permission">
+                                                               value="notification.delete" name="general-notifications[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="notification-delete">{{ trans('lang.delete') }}</label>
+                                                               for="notification-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -833,15 +833,15 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="dynamicnotification-list"
-                                                            value="dynamic-notification.index"
-                                                            name="dynamic-notifications[]" class="permission">
+                                                               value="dynamic-notification.index"
+                                                               name="dynamic-notifications[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="dynamicnotification-list">{{ trans('lang.list') }}</label>
+                                                               for="dynamicnotification-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="dynamicnotification-save"
-                                                            value="dynamic-notification.save"
-                                                            name="dynamic-notifications[]" class="permission">
+                                                               value="dynamic-notification.save"
+                                                               name="dynamic-notifications[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="dynamicnotification-save">{{ trans('lang.edit') }}</label>
+                                                               for="dynamicnotification-save">{{ trans('lang.edit') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -850,9 +850,9 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="payments" value="payments"
-                                                            name="payments[]" class="permission">
+                                                               name="payments[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="payments">{{ trans('lang.list') }}</label>
+                                                               for="payments">{{ trans('lang.list') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -861,15 +861,15 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="restaurant-payouts-list"
-                                                            value="restaurantsPayouts" name="restaurant-payouts[]"
-                                                            class="permission">
+                                                               value="restaurantsPayouts" name="restaurant-payouts[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="restaurant-payouts-list">{{ trans('lang.list') }}</label>
+                                                               for="restaurant-payouts-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="restaurant-payouts-create"
-                                                            value="restaurantsPayouts.create"
-                                                            name="restaurant-payouts[]" class="permission">
+                                                               value="restaurantsPayouts.create"
+                                                               name="restaurant-payouts[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="restaurant-payouts-create">{{ trans('lang.create') }}</label>
+                                                               for="restaurant-payouts-create">{{ trans('lang.create') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -879,15 +879,15 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="driver-payments-list"
-                                                            value="driver.driverpayments" name="driver-payments[]"
-                                                            class="permission">
+                                                               value="driver.driverpayments" name="driver-payments[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="driver-payments-list">{{ trans('lang.list') }}</label>
+                                                               for="driver-payments-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="driver-payments-delete"
-                                                            value="driver.driverpayments.delete"
-                                                            name="driver-payments[]" class="permission">
+                                                               value="driver.driverpayments.delete"
+                                                               name="driver-payments[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="driverpayments-delete">{{ trans('lang.delete') }}</label>
+                                                               for="driverpayments-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -896,15 +896,15 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="driver-payouts-list"
-                                                            value="driversPayouts" name="driver-payouts[]"
-                                                            class="permission">
+                                                               value="driversPayouts" name="driver-payouts[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="driver-payouts-list">{{ trans('lang.list') }}</label>
+                                                               for="driver-payouts-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="driver-payouts-create"
-                                                            value="driversPayouts.create" name="driver-payouts[]"
-                                                            class="permission">
+                                                               value="driversPayouts.create" name="driver-payouts[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="driver-payouts-create">{{ trans('lang.create') }}</label>
+                                                               for="driver-payouts-create">{{ trans('lang.create') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -913,10 +913,10 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="wallet-transaction-list"
-                                                            value="walletstransaction" name="wallet-transaction[]"
-                                                            class="permission">
+                                                               value="walletstransaction" name="wallet-transaction[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="wallet-transaction-list">{{ trans('lang.list') }}</label>
+                                                               for="wallet-transaction-list">{{ trans('lang.list') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -925,16 +925,16 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="payout-request-driver"
-                                                            value="payoutRequests.drivers" name="payout-request[]"
-                                                            class="permission">
+                                                               value="payoutRequests.drivers" name="payout-request[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="payout-request-driver">{{ trans('lang.driver') }}
+                                                               for="payout-request-driver">{{ trans('lang.driver') }}
                                                             {{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="payout-request-restaurant"
-                                                            value="payoutRequests.restaurants" name="payout-request[]"
-                                                            class="permission">
+                                                               value="payoutRequests.restaurants" name="payout-request[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="payout-request-restaurant">{{ trans('lang.restaurant') }}
+                                                               for="payout-request-restaurant">{{ trans('lang.restaurant') }}
                                                             {{ trans('lang.list') }}</label>
                                                     </td>
                                                 </tr>
@@ -944,23 +944,23 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="banners" value="setting.banners"
-                                                            name="banners[]" class="permission">
+                                                               name="banners[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="banners">{{ trans('lang.list') }}</label>
+                                                               for="banners">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="banners-create"
-                                                            value="setting.banners.create" name="banners[]"
-                                                            class="permission">
+                                                               value="setting.banners.create" name="banners[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="banners-create">{{ trans('lang.create') }}</label>
+                                                               for="banners-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="banners-edit"
-                                                            value="setting.banners.edit" name="banners[]"
-                                                            class="permission">
+                                                               value="setting.banners.edit" name="banners[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="banners-edit">{{ trans('lang.edit') }}</label>
+                                                               for="banners-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="banners-delete"
-                                                            value="banners.delete" name="banners[]" class="permission">
+                                                               value="banners.delete" name="banners[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="banners-delete">{{ trans('lang.delete') }}</label>
+                                                               for="banners-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -969,23 +969,23 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="mart-banners" value="mart_banners"
-                                                            name="mart_banners[]" class="permission">
+                                                               name="mart_banners[]" class="permission">
                                                         <label class="contol-label2"
-                                                            for="mart-banners">{{ trans('lang.list') }}</label>
+                                                               for="mart-banners">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="mart-banners-create"
-                                                            value="mart_banners.create" name="mart_banners[]"
-                                                            class="permission">
+                                                               value="mart_banners.create" name="mart_banners[]"
+                                                               class="permission">
                                                         <label class="contol-label2"
-                                                            for="mart-banners-create">{{ trans('lang.create') }}</label>
+                                                               for="mart-banners-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="mart-banners-edit"
-                                                            value="mart_banners.edit" name="mart_banners[]"
-                                                            class="permission">
+                                                               value="mart_banners.edit" name="mart_banners[]"
+                                                               class="permission">
                                                         <label class="contol-label2"
-                                                            for="mart-banners-edit">{{ trans('lang.edit') }}</label>
+                                                               for="mart-banners-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="mart-banners-delete"
-                                                            value="mart_banners.delete" name="mart_banners[]" class="permission">
+                                                               value="mart_banners.delete" name="mart_banners[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="mart-banners-delete">{{ trans('lang.delete') }}</label>
+                                                               for="mart-banners-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -994,21 +994,21 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="cms" value="cms" name="cms[]"
-                                                            class="permission">
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="cms">{{ trans('lang.list') }}</label>
+                                                               for="cms">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="cms-create" value="cms.create"
-                                                            name="cms[]" class="permission">
+                                                               name="cms[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="cms-create">{{ trans('lang.create') }}</label>
+                                                               for="cms-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="cms-edit" value="cms.edit"
-                                                            name="cms[]" class="permission">
+                                                               name="cms[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="cms-edit">{{ trans('lang.edit') }}</label>
+                                                               for="cms-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="cms-delete" value="cms.delete"
-                                                            name="cms[]" class="permission">
+                                                               name="cms[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="cms-delete">{{ trans('lang.delete') }}</label>
+                                                               for="cms-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1017,13 +1017,13 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="on-board-list" value="onboard.list"
-                                                            name="on-board[]" class="permission">
+                                                               name="on-board[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="on-board-list">{{ trans('lang.list') }}</label>
+                                                               for="on-board-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="on-board-edit" value="onboard.edit"
-                                                            name="on-board[]" class="permission">
+                                                               name="on-board[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="on-board-edit">{{ trans('lang.edit') }}</label>
+                                                               for="on-board-edit">{{ trans('lang.edit') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1032,15 +1032,15 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="email-template"
-                                                            value="email-templates.index" name="email-template[]"
-                                                            class="permission">
+                                                               value="email-templates.index" name="email-template[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="email-template">{{ trans('lang.list') }}</label>
+                                                               for="email-template">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="email-template-edit"
-                                                            value="email-templates.edit" name="email-template[]"
-                                                            class="permission">
+                                                               value="email-templates.edit" name="email-template[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="email-template-edit">{{ trans('lang.edit') }}</label>
+                                                               for="email-template-edit">{{ trans('lang.edit') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1049,24 +1049,24 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="media-list" value="media"
-                                                            name="media[]" class="permission">
+                                                               name="media[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="media-list">{{ trans('lang.list') }}</label>
+                                                               for="media-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="media-create"
-                                                            value="media.create" name="media[]"
-                                                            class="permission">
+                                                               value="media.create" name="media[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="media-create">{{ trans('lang.create') }}</label>
+                                                               for="media-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="media-edit"
-                                                            value="media.edit" name="media[]"
-                                                            class="permission">
+                                                               value="media.edit" name="media[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="media-edit">{{ trans('lang.edit') }}</label>
+                                                               for="media-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="media-delete"
-                                                            value="media.delete" name="media[]"
-                                                            class="permission">
+                                                               value="media.delete" name="media[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="media-delete">{{ trans('lang.delete') }}</label>
+                                                               for="media-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1075,9 +1075,9 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="activity-logs-list" value="activity-logs"
-                                                            name="activity-logs[]" class="permission">
+                                                               name="activity-logs[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="activity-logs-list">{{ trans('lang.list') }}</label>
+                                                               for="activity-logs-list">{{ trans('lang.list') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1086,10 +1086,10 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="global-setting"
-                                                            value="settings.app.globals" name="global-setting[]"
-                                                            class="permission">
+                                                               value="settings.app.globals" name="global-setting[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="global-setting">{{ trans('lang.update') }}</label>
+                                                               for="global-setting">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1098,24 +1098,24 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="currency-list" value="currencies"
-                                                            name="currency[]" class="permission">
+                                                               name="currency[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="currency-list">{{ trans('lang.list') }}</label>
+                                                               for="currency-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="currency-create"
-                                                            value="currencies.create" name="currency[]"
-                                                            class="permission">
+                                                               value="currencies.create" name="currency[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="currency-create">{{ trans('lang.create') }}</label>
+                                                               for="currency-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="currency-edit"
-                                                            value="currencies.edit" name="currency[]"
-                                                            class="permission">
+                                                               value="currencies.edit" name="currency[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="currency-edit">{{ trans('lang.edit') }}</label>
+                                                               for="currency-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="currency-delete"
-                                                            value="currency.delete" name="currency[]"
-                                                            class="permission">
+                                                               value="currency.delete" name="currency[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="currency-delete">{{ trans('lang.delete') }}</label>
+                                                               for="currency-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1124,10 +1124,10 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="payment-method-list"
-                                                            value="payment-method" name="payment-method[]"
-                                                            class="permission">
+                                                               value="payment-method" name="payment-method[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="payment-method-list">{{ trans('lang.update') }}</label>
+                                                               for="payment-method-list">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1136,10 +1136,10 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="admin-commission"
-                                                            value="settings.app.adminCommission"
-                                                            name="admin-commission[]" class="permission">
+                                                               value="settings.app.adminCommission"
+                                                               name="admin-commission[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="admin-commission">{{ trans('lang.update') }}</label>
+                                                               for="admin-commission">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1148,10 +1148,10 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="radius"
-                                                            value="settings.app.radiusConfiguration" name="radius[]"
-                                                            class="permission">
+                                                               value="settings.app.radiusConfiguration" name="radius[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="radius">{{ trans('lang.update') }}</label>
+                                                               for="radius">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1160,10 +1160,10 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="dinein"
-                                                            value="settings.app.bookTable" name="dinein[]"
-                                                            class="permission">
+                                                               value="settings.app.bookTable" name="dinein[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="dinein">{{ trans('lang.update') }}</label>
+                                                               for="dinein">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1172,21 +1172,21 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="tax-list" value="tax" name="tax[]"
-                                                            class="permission">
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="tax-list">{{ trans('lang.list') }}</label>
+                                                               for="tax-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="tax-create" value="tax.create"
-                                                            name="tax[]" class="permission">
+                                                               name="tax[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="tax-create">{{ trans('lang.create') }}</label>
+                                                               for="tax-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="tax-edit" value="tax.edit"
-                                                            name="tax[]" class="permission">
+                                                               name="tax[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="tax-edit">{{ trans('lang.edit') }}</label>
+                                                               for="tax-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="tax-delete" value="tax.delete"
-                                                            name="tax[]" class="permission">
+                                                               name="tax[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="tax-delete">{{ trans('lang.delete') }}</label>
+                                                               for="tax-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1195,10 +1195,10 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="delivery-charge"
-                                                            value="settings.app.deliveryCharge" name="delivery-charge[]"
-                                                            class="permission">
+                                                               value="settings.app.deliveryCharge" name="delivery-charge[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="delivery-charge">{{ trans('lang.update') }}</label>
+                                                               for="delivery-charge">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1207,10 +1207,10 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="app-settings"
-                                                            value="settings.app.appSettings" name="app-settings[]"
-                                                            class="permission">
+                                                               value="settings.app.appSettings" name="app-settings[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="app-settings">{{ trans('lang.update') }}</label>
+                                                               for="app-settings">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1219,10 +1219,10 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="mart-settings"
-                                                            value="settings.app.martSettings" name="mart-settings[]"
-                                                            class="permission">
+                                                               value="settings.app.martSettings" name="mart-settings[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="mart-settings">{{ trans('lang.update') }}</label>
+                                                               for="mart-settings">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1231,10 +1231,10 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="surge-rules"
-                                                            value="settings.app.surgeRules" name="surge-rules[]"
-                                                            class="permission">
+                                                               value="settings.app.surgeRules" name="surge-rules[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="surge-rules">{{ trans('lang.update') }}</label>
+                                                               for="surge-rules">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1243,10 +1243,10 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="document-verification"
-                                                            value="settings.app.documentVerification"
-                                                            name="document-verification[]" class="permission">
+                                                               value="settings.app.documentVerification"
+                                                               name="document-verification[]" class="permission">
                                                         <label class="contol-label2"
-                                                            for="document-verification">{{ trans('lang.update') }}</label>
+                                                               for="document-verification">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1255,25 +1255,25 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="language-list"
-                                                            value="settings.app.languages" name="language[]"
-                                                            class="permission">
+                                                               value="settings.app.languages" name="language[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="language-list">{{ trans('lang.list') }}</label>
+                                                               for="language-list">{{ trans('lang.list') }}</label>
                                                         <input type="checkbox" id="language-create"
-                                                            value="settings.app.languages.create" name="language[]"
-                                                            class="permission">
+                                                               value="settings.app.languages.create" name="language[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="language-create">{{ trans('lang.create') }}</label>
+                                                               for="language-create">{{ trans('lang.create') }}</label>
                                                         <input type="checkbox" id="language-edit"
-                                                            value="settings.app.languages.edit" name="language[]"
-                                                            class="permission">
+                                                               value="settings.app.languages.edit" name="language[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="language-edit">{{ trans('lang.edit') }}</label>
+                                                               for="language-edit">{{ trans('lang.edit') }}</label>
                                                         <input type="checkbox" id="language-delete"
-                                                            value="language.delete" name="language[]"
-                                                            class="permission">
+                                                               value="language.delete" name="language[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="language-delete">{{ trans('lang.delete') }}</label>
+                                                               for="language-delete">{{ trans('lang.delete') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1282,10 +1282,10 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="special-offer"
-                                                            value="setting.specialOffer" name="special-offer[]"
-                                                            class="permission">
+                                                               value="setting.specialOffer" name="special-offer[]"
+                                                               class="permission">
                                                         <label class=" control-label2"
-                                                            for="special-offer">{{ trans('lang.update') }}</label>
+                                                               for="special-offer">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1294,9 +1294,9 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="terms" value="termsAndConditions"
-                                                            name="terms[]" class="permission">
+                                                               name="terms[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="terms">{{ trans('lang.update') }}</label>
+                                                               for="terms">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1305,9 +1305,9 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="privacy" value="privacyPolicy"
-                                                            name="privacy[]" class="permission">
+                                                               name="privacy[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="privacy">{{ trans('lang.update') }}</label>
+                                                               for="privacy">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1316,9 +1316,9 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="home-page" value="homepageTemplate"
-                                                            name="home-page[]" class="permission">
+                                                               name="home-page[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="home-page">{{ trans('lang.update') }}</label>
+                                                               for="home-page">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -1327,55 +1327,55 @@
                                                     </td>
                                                     <td>
                                                         <input type="checkbox" id="footer" value="footerTemplate"
-                                                            name="footer[]" class="permission">
+                                                               name="footer[]" class="permission">
                                                         <label class=" control-label2"
-                                                            for="footer">{{ trans('lang.update') }}</label>
+                                                               for="footer">{{ trans('lang.update') }}</label>
                                                     </td>
                                                 </tr>
-                                            </tbody>
-                                        </table>
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        </fieldset>
+                            </fieldset>
+                        </div>
                     </div>
-                </div>
+            </div>
+            <div class="form-group col-12 text-center btm-btn">
+                <button type="button" class="btn btn-primary save-form-btn"><i class="fa fa-save"></i>
+                    {{ trans('lang.save') }}
+                </button>
+                <a href="{{ url('role') }}" class="btn btn-default"><i class="fa fa-undo"></i>{{ trans('lang.cancel') }}</a>
+            </div>
+            <form>
         </div>
-        <div class="form-group col-12 text-center btm-btn">
-            <button type="button" class="btn btn-primary save-form-btn"><i class="fa fa-save"></i>
-                {{ trans('lang.save') }}
-            </button>
-            <a href="{{ url('role') }}" class="btn btn-default"><i class="fa fa-undo"></i>{{ trans('lang.cancel') }}</a>
-        </div>
-        <form>
-    </div>
-    @endsection
-    @section('scripts')
-    <script>
-        $(".save-form-btn").click(async function() {
-            $(".success_top").hide();
-            $(".error_top").hide();
-            var name=$("#name").val();
-            if(name=="") {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{ trans('lang.user_name_help') }}</p>");
-                window.scrollTo(0,0);
-                return false;
-            } else {
-                $('form#roleForm').submit();
-            }
-        });
-        $('#all_permission').on('click',function() {
-            if($(this).is(':checked')) {
-                $.each($('.permission'),function() {
-                    $(this).prop('checked',true);
+        @endsection
+        @section('scripts')
+            <script>
+                $(".save-form-btn").click(async function() {
+                    $(".success_top").hide();
+                    $(".error_top").hide();
+                    var name=$("#name").val();
+                    if(name=="") {
+                        $(".error_top").show();
+                        $(".error_top").html("");
+                        $(".error_top").append("<p>{{ trans('lang.user_name_help') }}</p>");
+                        window.scrollTo(0,0);
+                        return false;
+                    } else {
+                        $('form#roleForm').submit();
+                    }
                 });
-            } else {
-                $.each($('.permission'),function() {
-                    $(this).prop('checked',false);
+                $('#all_permission').on('click',function() {
+                    if($(this).is(':checked')) {
+                        $.each($('.permission'),function() {
+                            $(this).prop('checked',true);
+                        });
+                    } else {
+                        $.each($('.permission'),function() {
+                            $(this).prop('checked',false);
+                        });
+                    }
                 });
-            }
-        });
-    </script>
-    @endsection
+            </script>
+@endsection

@@ -873,7 +873,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                             </div>
 
                         </fieldset>
-                        <fieldset id="story_upload_div" style="display: none;">
+                        <fieldset id="story_upload_div">
                             <legend>Story</legend>
 
                             <div class="form-group row width-50 vendor_image">
@@ -905,8 +905,6 @@ foreach ($countries as $keycountry => $valuecountry) {
                                     <div id="uploding_story_video"></div>
                                 </div>
                             </div>
-
-
                         </fieldset>
                     </div>
                 </div>
@@ -981,6 +979,7 @@ input[type="number"]::-webkit-inner-spin-button {
     // MySQL data injected from controller
     window.phpZones = @json(isset($zones) ? $zones : []);
     window.phpVendors = @json(isset($vendors) ? $vendors : []);
+    window.phpCategories = @json(isset($categories) ? $categories : []);
     (function preloadFromMySQL(){
         try{
             if (Array.isArray(window.phpZones)){
@@ -994,12 +993,29 @@ input[type="number"]::-webkit-inner-spin-button {
                     $('#restaurant_vendors').append($('<option></option>').attr('value', v.id).text(name + (v.vendorID ? ' (Assigned)' : '')));
                 });
             }
-        }catch(e){}
+            if (Array.isArray(window.phpCategories)){
+                window.phpCategories.forEach(function(c){
+                    $('#restaurant_cuisines').append($('<option></option>').attr('value', c.id).text(c.title));
+                });
+                console.log('✅ Loaded ' + window.phpCategories.length + ' categories from PHP');
+            }
+        }catch(e){
+            console.error('Error preloading data:', e);
+        }
     })();
-    var createdAt=firebase.firestore.FieldValue.serverTimestamp();
-    var database=firebase.firestore();
-    var ref_deliverycharge=database.collection('settings').doc("DeliveryCharge");
-    var storageRef=firebase.storage().ref('images');
+    // Generate UUID for restaurant_id (MySQL-based, no Firebase)
+    function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0;
+            var v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+    var restaurant_id = generateUUID();
+
+    // Firebase references removed - using MySQL now
+    // var database=firebase.firestore(); // Not needed for MySQL
+    // var storageRef=firebase.storage().ref('images'); // Using Laravel storage instead
     var photo="";
     var menuPhotoCount=0;
     var restaurantMenuPhotos="";
@@ -1035,60 +1051,29 @@ input[type="number"]::-webkit-inner-spin-button {
     var story_thumbnail='';
     var story_thumbnail_filename='';
     var storyCount=0;
-    var storyRef=firebase.storage().ref('Story');
-    var storyImagesRef=firebase.storage().ref('Story/images');
-    var restaurant_id=database.collection("tmp").doc().id;
 
-    database.collection('settings').doc("AdminCommission").get().then(async function(snapshots) {
-        var adminCommissionSettings=snapshots.data();
-        $(".commission_fix").val(adminCommissionSettings.fix_commission);
-        $("#commission_type").val(adminCommissionSettings.commissionType);
-    });
-    database.collection('settings').doc("story").get().then(async function(snapshots) {
-        var story_data=snapshots.data();
-        if(story_data.isEnabled) {
-            $("#story_upload_div").show();
-        }
-        storevideoDuration=story_data.videoDuration;
-    });
+    // Firebase settings removed - using MySQL now
+    // Default values for admin commission (can be loaded from SQL if needed)
+    $(".commission_fix").val(0);
+    $("#commission_type").val("Percent");
 
-    database.collection('zone').where('publish','==',true).orderBy('name','asc').get().then(async function(snapshots) {
-        snapshots.docs.forEach((listval) => {
-            var data=listval.data();
-            var area=[];
-            data.area.forEach((location) => {
-                area.push({'latitude': location.latitude,'longitude': location.longitude});
-            });
-            $('#zone').append($("<option></option>")
-                .attr("value",data.id)
-                .attr("data-area",JSON.stringify(area))
-                .text(data.name));
-        })
-    });
+    // Story feature is disabled during migration
+    // $("#story_upload_div").hide(); // Already hidden by default
+    var storevideoDuration = 30; // Default value
 
-    var email_templates=database.collection('email_templates').where('type','==','new_vendor_signup');
+    // Zones are now preloaded from PHP (see window.phpZones above)
+    // No need to fetch from Firebase
 
-    var emailTemplatesData=null;
+    // Email templates - not needed for mart creation
+    var emailTemplatesData = null;
+    var adminEmail = '';
 
-    var adminEmail='';
+    // Special discount - set default
+    var specialDiscountOfferisEnable = false;
 
-    var emailSetting=database.collection('settings').doc('emailSetting');
-
-
-    database.collection('settings').doc("specialDiscountOffer").get().then(async function(snapshots) {
-        var specialDiscountOffer=snapshots.data();
-        specialDiscountOfferisEnable=specialDiscountOffer.isEnable;
-    });
-
-
-    var currentCurrency='';
-    var currencyAtRight=false;
-    var refCurrency=database.collection('currencies').where('isActive','==',true);
-    refCurrency.get().then(async function(snapshots) {
-        var currencyData=snapshots.docs[0].data();
-        currentCurrency=currencyData.symbol;
-        currencyAtRight=currencyData.symbolAtRight;
-    });
+    // Currency - set defaults (can be loaded from SQL if needed)
+    var currentCurrency = '$';
+    var currencyAtRight = false;
 
 
     // Function to fix number input precision issues
@@ -1131,134 +1116,83 @@ input[type="number"]::-webkit-inner-spin-button {
 
         jQuery("#data-table_processing").show();
 
-        await email_templates.get().then(async function(snapshots) {
-            emailTemplatesData=snapshots.docs[0].data();
-        });
+        // Email templates and settings removed - not needed for mart creation
+        // (Firebase references removed during migration to MySQL)
 
-        await emailSetting.get().then(async function(snapshots) {
-            var emailSettingData=snapshots.data();
-
-            adminEmail=emailSettingData.userName;
-        });
-
-        database.collection('mart_categories').where('publish','==',true).get().then(async function(snapshots) {
-            snapshots.docs.forEach((listval) => {
-                var data=listval.data();
-                $('#restaurant_cuisines').append($("<option></option>")
-                    .attr("value",data.id)
-                    .text(data.title));
-            })
-        });
-
-        // Function to load vendors - Only show users with vType='mart' AND role='vendor'
-        async function loadVendors() {
-            console.log('Loading mart vendors...');
-            console.log('Firebase database object:', database);
-
-            try {
-                // Test Firebase connection first
-                console.log('Testing Firebase connection...');
-                const testSnapshot = await database.collection('users').limit(1).get();
-                console.log('Firebase connection test successful, found users:', testSnapshot.docs.length);
-
-                // Get all users and filter for the exact criteria we want
-                const snapshots = await database.collection('users').get();
-                console.log('Total users found:', snapshots.docs.length);
-
-                if (snapshots.docs.length === 0) {
-                    console.log('No users found at all');
-                    $('#restaurant_vendors').append($("<option></option>")
-                        .attr("value", "")
-                        .text("No vendors available"));
-                    return;
-                }
-
-                var availableVendors = 0;
-                snapshots.docs.forEach((listval) => {
-                    var data = listval.data();
-                    console.log('User data:', data);
-
-                    // Strict vendor detection - must have BOTH vType='mart' AND role='vendor'
-                    var isMartVendor = (data.vType === 'mart' && data.role === 'vendor');
-                    var hasName = (data.firstName && data.firstName.trim() !== "");
-                    var isActive = (data.active !== false && data.status !== 'inactive');
-
-                    // Check if vendor is assigned to a mart
-                    var isAssigned = (data.vendorID && data.vendorID.trim() !== "");
-
-                    // Filter out test users (users with suspicious names or test patterns)
-                    var isNotTestUser = true;
-                    var firstName = data.firstName ? data.firstName.toLowerCase() : '';
-                    var lastName = data.lastName ? data.lastName.toLowerCase() : '';
-                    var fullName = (firstName + ' ' + lastName).trim();
-
-                    // Check for test user patterns
-                    var testPatterns = ['test', 'demo', 'sample', 'example', 'pandu', 'temp', 'fake', 'dummy'];
-                    testPatterns.forEach(function(pattern) {
-                        if (fullName.includes(pattern)) {
-                            isNotTestUser = false;
-                        }
-                    });
-
-                    // Check for suspicious email patterns
-                    if (data.email && (data.email.includes('test') || data.email.includes('example.com'))) {
-                        isNotTestUser = false;
-                    }
-
-                    console.log('User check:', {
-                        id: data.id,
-                        firstName: data.firstName,
-                        role: data.role,
-                        vType: data.vType,
-                        vendorID: data.vendorID,
-                        active: data.active,
-                        isMartVendor: isMartVendor,
-                        isAssigned: isAssigned,
-                        hasName: hasName,
-                        isActive: isActive,
-                        isNotTestUser: isNotTestUser
-                    });
-
-                    if (isMartVendor && hasName && isActive && isNotTestUser) {
-                        var displayText = data.firstName + " " + (data.lastName || "");
-                        if (isAssigned) {
-                            displayText += " (Assigned)";
-                        }
-
-                        $('#restaurant_vendors').append($("<option></option>")
-                            .attr("value", data.id)
-                            .text(displayText));
-                        availableVendors++;
-                        console.log('Added vendor option:', displayText, 'with ID:', data.id);
-                    } else {
-                        console.log('Skipping user:', data.firstName, '- reasons:', {
-                            notMartVendor: !isMartVendor,
-                            noName: !hasName,
-                            notActive: !isActive,
-                            isTestUser: !isNotTestUser
+        // Categories are now preloaded from PHP (see window.phpCategories above)
+        // Fallback AJAX load if needed
+        if ($('#restaurant_cuisines option').length <= 1) {
+            console.log('⚠️ Categories not preloaded, fetching via AJAX...');
+            $.ajax({
+                url: '{{ route("api.marts.categories") }}',
+                method: 'GET',
+                success: function(response) {
+                    console.log('✅ Mart categories loaded from SQL:', response);
+                    if (response.success && response.data) {
+                        response.data.forEach(function(category) {
+                            $('#restaurant_cuisines').append($("<option></option>")
+                                .attr("value", category.id)
+                                .text(category.title));
                         });
+                        console.log('📦 Total categories loaded:', response.data.length);
                     }
-                });
+                },
+                error: function(xhr, status, error) {
+                    console.error('❌ Error loading mart categories:', error);
+                    alert('Failed to load categories. Please refresh the page.');
+                }
+            });
+        }
 
-                console.log('Total available vendor options:', availableVendors);
+        // Function to load vendors from SQL - Only show users with vType='mart' AND role='vendor'
+        function loadVendors() {
+            console.log('🔍 Loading mart vendors from SQL...');
 
-                if (availableVendors === 0) {
+            $.ajax({
+                url: '{{ route("api.marts.vendors") }}',
+                method: 'GET',
+                success: function(response) {
+                    console.log('✅ Mart vendors loaded from SQL:', response);
+
+                    if (response.success && response.data) {
+                        var vendors = response.data;
+                        console.log('📦 Total vendors found:', vendors.length);
+
+                        if (vendors.length === 0) {
+                            $('#restaurant_vendors').append($("<option></option>")
+                                .attr("value", "")
+                                .text("No mart vendors available"));
+                        } else {
+                            vendors.forEach(function(vendor) {
+                                var displayText = vendor.name || (vendor.firstName + ' ' + (vendor.lastName || '')).trim();
+
+                                // Mark if already assigned to a mart
+                                if (vendor.vendorID && vendor.vendorID.trim() !== '') {
+                                    displayText += " (Assigned)";
+                                }
+
+                                $('#restaurant_vendors').append($("<option></option>")
+                                    .attr("value", vendor.id)
+                                    .text(displayText));
+
+                                console.log('➕ Added vendor:', displayText, '(ID:', vendor.id + ')');
+                            });
+                        }
+                    } else {
+                        console.error('❌ Invalid response from server');
+                        $('#restaurant_vendors').append($("<option></option>")
+                            .attr("value", "")
+                            .text("Error loading vendors"));
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('❌ Error loading mart vendors:', error);
                     $('#restaurant_vendors').append($("<option></option>")
                         .attr("value", "")
-                        .text("No available vendors (all are assigned)"));
-
-                    // Add option to create mart without vendor (admin created)
-                    $('#restaurant_vendors').append($("<option></option>")
-                        .attr("value", "admin_created")
-                        .text("Create without vendor (Admin)"));
+                        .text("Error loading vendors: " + error));
+                    alert('Failed to load vendors. Please refresh the page.');
                 }
-
-            } catch (error) {
-                console.error('Error fetching vendors:', error);
-                $('#restaurant_vendors').append($("<option></option>")
-                    .attr("value", "")
-                    .text("Error loading vendors: " + error.message));
-            }
+            });
         }
 
         // Load vendors initially
@@ -1270,25 +1204,15 @@ input[type="number"]::-webkit-inner-spin-button {
 
 
 
-        ref_deliverycharge.get().then(async function(snapshots_charge) {
-            var deliveryChargeSettings=snapshots_charge.data();
-            try {
-                if(deliveryChargeSettings.vendor_can_modify) {
-                    $("#delivery_charges_per_km").val(deliveryChargeSettings.delivery_charges_per_km);
-                    $("#minimum_delivery_charges").val(deliveryChargeSettings.minimum_delivery_charges);
-                    $("#minimum_delivery_charges_within_km").val(deliveryChargeSettings.minimum_delivery_charges_within_km);
-                } else {
-                    $("#delivery_charges_per_km").val(deliveryChargeSettings.delivery_charges_per_km);
-                    $("#minimum_delivery_charges").val(deliveryChargeSettings.minimum_delivery_charges);
-                    $("#minimum_delivery_charges_within_km").val(deliveryChargeSettings.minimum_delivery_charges_within_km);
-                    $("#delivery_charges_per_km").prop('disabled',true);
-                    $("#minimum_delivery_charges").prop('disabled',true);
-                    $("#minimum_delivery_charges_within_km").prop('disabled',true);
-                }
-            } catch(error) {
-
-            }
-        });
+        // Delivery charges - set default values (Firebase removed)
+        // Can be loaded from SQL settings if needed
+        try {
+            $("#delivery_charges_per_km").val(5);
+            $("#minimum_delivery_charges").val(10);
+            $("#minimum_delivery_charges_within_km").val(5);
+        } catch(error) {
+            console.error('Error setting delivery charges:', error);
+        }
 
         // 1. Filter dropdown options based on search
         $('#category_search').on('keyup', function() {
@@ -1709,38 +1633,8 @@ input[type="number"]::-webkit-inner-spin-button {
                 window.scrollTo(0,0);
             }, 60000); // 60 seconds timeout
 
-            if(story_vedios.length>0||story_thumbnail!='') {
-                if(story_vedios.length>0&&story_thumbnail=='') {
-                    $(".error_top").show();
-                    $(".error_top").html("");
-                    $(".error_top").append("<p>{{trans('lang.story_error')}}</p>");
-                    window.scrollTo(0,0);
-                    return false;
-                } else if(story_thumbnail&&story_vedios.length==0) {
-                    $(".error_top").show();
-                    $(".error_top").html("");
-                    $(".error_top").append("<p>{{trans('lang.story_error')}}</p>");
-                    window.scrollTo(0,0);
-                    return false;
-                } else {
-                    await storeStoryImageData().then(async (IMG) => {
-                        database.collection('story').doc(restaurant_id).set({
-                            'createdAt': new Date(),
-                            'vendorID': restaurant_id,
-                            'videoThumbnail': IMG.storyThumbnailImage,
-                            'videoUrl': story_vedios,
-                        });
-                    }).catch(err => {
-                        clearTimeout(saveTimeout);
-                        jQuery("#data-table_processing").hide();
-                        $(".error_top").show();
-                        $(".error_top").html("");
-                        $(".error_top").append("<p>"+err+"</p>");
-                        window.scrollTo(0,0);
-                    });
-
-                }
-            }
+            // Story feature disabled during Firebase to SQL migration
+            // if(story_vedios.length>0||story_thumbnail!='') { ... }
 
             var delivery_charges_per_km=parseInt($("#delivery_charges_per_km").val());
             var minimum_delivery_charges=parseInt($("#minimum_delivery_charges").val());
@@ -1791,7 +1685,7 @@ input[type="number"]::-webkit-inner-spin-button {
                 }
 
                 // Create mart data with proper validation
-                const coordinates = new firebase.firestore.GeoPoint(latitude, longitude);
+                // No Firebase GeoPoint needed - MySQL uses separate latitude/longitude columns
 
                 // Debug logging to check values
                 console.log('Debug - restaurantname:', restaurantname);
@@ -1827,7 +1721,7 @@ input[type="number"]::-webkit-inner-spin-button {
                     'categoryTitle': categoryTitles || [],
                     'countryCode': rescountry_code || '',
                     'phonenumber': phonenumber || '',
-                    'coordinates': coordinates,
+                    // No Firebase GeoPoint needed - MySQL uses separate lat/lng columns
                     'id': restaurant_id,
                     'vType': 'mart', // This is crucial for mart filtering
                     'filters': filters_new || {},
@@ -1837,7 +1731,8 @@ input[type="number"]::-webkit-inner-spin-button {
                     'authorProfilePic': user_profilepic || null,
                     'isOpen': isOpen || false,
                     'hidephotos': false,
-                    'createdAt': createdAt,
+                    // createdAt will be set by MySQL (or leave empty for controller to handle)
+                    'createdAt': '',
                     'enabledDelivery': enabledDiveInFuture || false,
                     'restaurantMenuPhotos': MenuIMG || [],
                     'restaurantCost': restaurantCost || 0,
@@ -1948,12 +1843,22 @@ input[type="number"]::-webkit-inner-spin-button {
         newPhoto['storyThumbnailImage']='';
         try {
             if(story_thumbnail!='') {
-                story_thumbnail=story_thumbnail.replace(/^data:image\/[a-z]+;base64,/,"")
-                var uploadTask=await storageRef.child(story_thumbnail_filename).putString(story_thumbnail,'base64',{
-                    contentType: 'image/jpg'
-                });
-                var downloadURL=await uploadTask.ref.getDownloadURL();
-                newPhoto['storyThumbnailImage']=downloadURL;
+                // Story feature disabled during migration - return empty
+                console.log('Story feature is disabled during migration');
+                // If you want to enable it later, use Laravel storage API:
+                // const response = await $.ajax({
+                //     url: '{{ route("api.upload.image") }}',
+                //     method: 'POST',
+                //     headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                //     data: {
+                //         image: story_thumbnail,
+                //         folder: 'marts/story',
+                //         filename: story_thumbnail_filename || ('story_' + Date.now() + '.jpg')
+                //     }
+                // });
+                // if (response.success && response.url) {
+                //     newPhoto['storyThumbnailImage'] = response.url;
+                // }
             }
         } catch(error) {
             console.log("ERR ===",error);
@@ -2055,12 +1960,31 @@ input[type="number"]::-webkit-inner-spin-button {
         try {
             if(restaurnt_photos.length>0) {
                 const photoPromises=restaurnt_photos.map(async (resPhoto,index) => {
-                    resPhoto=resPhoto.replace(/^data:image\/[a-z]+;base64,/,"");
-                    const uploadTask=await storageRef.child(restaurant_photos_filename[index]).putString(resPhoto,'base64',{
-                        contentType: 'image/jpg'
-                    });
-                    const downloadURL=await uploadTask.ref.getDownloadURL();
-                    return {index,downloadURL};
+                    // Use Laravel storage API instead of Firebase
+                    const base64Data = resPhoto; // Keep full data URL for API
+                    const filename = restaurant_photos_filename[index] || ('gallery_' + Date.now() + '_' + index + '.jpg');
+
+                    try {
+                        const response = await $.ajax({
+                            url: '{{ route("api.upload.image") }}',
+                            method: 'POST',
+                            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                            data: {
+                                image: base64Data,
+                                folder: 'marts/gallery',
+                                filename: filename
+                            }
+                        });
+
+                        if (response.success && response.url) {
+                            return {index, downloadURL: response.url};
+                        } else {
+                            throw new Error('Upload failed: ' + (response.message || 'Unknown error'));
+                        }
+                    } catch(uploadError) {
+                        console.error('Error uploading image ' + index + ':', uploadError);
+                        throw uploadError;
+                    }
                 });
                 const photoResults=await Promise.all(photoPromises);
                 photoResults.sort((a,b) => a.index-b.index);
@@ -2229,14 +2153,9 @@ input[type="number"]::-webkit-inner-spin-button {
     });
 
     function deleteStoryfromCollection() {
-        if(story_vedios.length==0&&story_thumbnail=='') {
-            database.collection('story').where('vendorID','==',restaurant_id).get().then(async function(snapshot) {
-                if(snapshot.docs.length>0) {
-
-                    database.collection('story').doc(restaurant_id).delete();
-                }
-            });
-        }
+        // Story feature disabled during migration
+        // Firebase story collection removed
+        console.log('Story feature is disabled');
     }
     async function storeStoryImageData() {
         var newPhoto=[];
@@ -2304,12 +2223,30 @@ input[type="number"]::-webkit-inner-spin-button {
         try {
             if(restaurant_menu_photos.length>0) {
                 await Promise.all(restaurant_menu_photos.map(async (menuPhoto,index) => {
-                    menuPhoto=menuPhoto.replace(/^data:image\/[a-z]+;base64,/,"");
-                    var uploadTask=await storageRef.child(restaurant_menu_filename[index]).putString(menuPhoto,'base64',{
-                        contentType: 'image/jpg'
-                    });
-                    var downloadURL=await uploadTask.ref.getDownloadURL();
-                    newPhoto.push(downloadURL);
+                    // Use Laravel storage API instead of Firebase
+                    const base64Data = menuPhoto; // Keep full data URL for API
+                    const filename = restaurant_menu_filename[index] || ('menu_' + Date.now() + '_' + index + '.jpg');
+
+                    try {
+                        const response = await $.ajax({
+                            url: '{{ route("api.upload.image") }}',
+                            method: 'POST',
+                            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                            data: {
+                                image: base64Data,
+                                folder: 'marts/menu',
+                                filename: filename
+                            }
+                        });
+
+                        if (response.success && response.url) {
+                            newPhoto.push(response.url);
+                        } else {
+                            console.error('Upload failed for menu image ' + index + ':', response.message || 'Unknown error');
+                        }
+                    } catch(uploadError) {
+                        console.error('Error uploading menu image ' + index + ':', uploadError);
+                    }
                 }));
             }
             return newPhoto;
@@ -2615,15 +2552,33 @@ input[type="number"]::-webkit-inner-spin-button {
     }
 
     async function getOwnerDetails(selectedOwnerId) {
-        var data='';
         try {
             console.log('Fetching owner details for ID:', selectedOwnerId);
-            await database.collection('users').doc(selectedOwnerId).get().then(async function(
-                snapshot) {
-                data=snapshot.data();
-                console.log('Owner details fetched:', data);
-            })
-            return data;
+
+            // Fetch from SQL instead of Firebase
+            const response = await $.ajax({
+                url: '/api/users/' + selectedOwnerId,
+                method: 'GET',
+                headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+            });
+
+            if (response && response.success && response.user) {
+                console.log('Owner details fetched:', response.user);
+                // Return user object in format expected by the code
+                return {
+                    id: response.user.id,
+                    firstName: response.user.firstName || response.user.first_name,
+                    lastName: response.user.lastName || response.user.last_name,
+                    email: response.user.email,
+                    profilePictureURL: response.user.profilePictureURL || response.user.photo,
+                    subscriptionPlanId: response.user.subscriptionPlanId,
+                    subscription_plan: response.user.subscription_plan ? JSON.parse(response.user.subscription_plan) : null,
+                    subscriptionExpiryDate: response.user.subscriptionExpiryDate
+                };
+            } else {
+                console.error('Failed to fetch owner details');
+                return null;
+            }
         } catch(error) {
             console.error('Error getting owner details:', error);
             return null;
@@ -2632,18 +2587,9 @@ input[type="number"]::-webkit-inner-spin-button {
 
     $('#subscription_plan').on('change',function() {
         var id=$(this).val();
-        database.collection('subscription_plans').where('id','==',id).get().then(async function(snapshot) {
-            var data=snapshot.docs[0].data();
-            if(data.type=="paid") {
-                if(data.features.dineIn==false) {
-                    $('#dine_in_div').addClass('d-none');
-                } else {
-                    $('#dine_in_div').removeClass('d-none');
-                }
-            } else {
-                $('#dine_in_div').removeClass('d-none');
-            }
-        })
+        // Subscription plans - can be loaded from SQL if needed
+        // For now, always show dine-in div
+        $('#dine_in_div').removeClass('d-none');
     })
 
 </script>

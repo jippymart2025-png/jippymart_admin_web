@@ -168,10 +168,36 @@ $(document).ready(function() {
         fd.append('name', name);
         fd.append('slug', slug);
         fd.append('image', photoFile);
-        $.ajax({ url: '{{ route('media.store') }}', method: 'POST', data: fd, processData: false, contentType: false, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-            .done(function(){ window.location.href = '{{ route('media.index') }}'; })
-            .fail(function(xhr){ $('.error_top').show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>'); window.scrollTo(0,0); })
-            .always(function(){ isUploading = false; $('.save-media-btn').prop('disabled', false).html('<i class="fa fa-save"></i> Save'); });
+
+        console.log('💾 Creating new media:', { name: name, slug: slug });
+
+        $.ajax({
+            url: '{{ route('media.store') }}',
+            method: 'POST',
+            data: fd,
+            processData: false,
+            contentType: false,
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+        })
+        .done(function(response){
+            console.log('✅ Media created successfully:', response);
+
+            // Log activity
+            if (typeof logActivity === 'function') {
+                logActivity('media', 'created', 'Created media: ' + name);
+            }
+
+            window.location.href = '{{ route('media.index') }}';
+        })
+        .fail(function(xhr){
+            console.error('❌ Create failed:', xhr);
+            $('.error_top').show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>');
+            window.scrollTo(0,0);
+        })
+        .always(function(){
+            isUploading = false;
+            $('.save-media-btn').prop('disabled', false).html('<i class="fa fa-save"></i> Save');
+        });
     });
 });
 </script>

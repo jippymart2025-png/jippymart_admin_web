@@ -112,245 +112,156 @@
 @endsection
 @section('scripts')
 <script>
-var id = "<?php echo $id;?>";
-var photo = "";
-var fileName="";
-var subcategoryImageFile="";
-var placeholderImage = '{{ asset("images/placeholder.png") }}';
-var subcategory = '';
-var storageRef = firebase.storage().ref('images');
-var storage = firebase.storage();
-var categoryId = '';
+const id = "{{ $id }}";
+const placeholderImage = '{{ asset("images/placeholder.png") }}';
+let existingPhoto = '';
+let selectedFile = null;
+let categoryId = '';
 
 $(document).ready(function () {
     jQuery("#data-table_processing").show();
+    loadSubcategory();
+    registerEvents();
+});
 
-    // Load sub-category data from SQL database
+function loadSubcategory() {
     $.ajax({
         url: '/api/mart-subcategories/' + id,
         type: 'GET',
         success: function(subcategory) {
-            console.log('📊 Loading sub-category data for ID:', id);
-            console.log('📝 Sub-category data loaded:', subcategory);
-
             categoryId = subcategory.parent_category_id;
-
-            // Update breadcrumb link
             $('#subcategoriesLink').attr('href', '{{ url("mart-categories") }}/' + categoryId + '/subcategories');
             $('#cancelLink').attr('href', '{{ url("mart-categories") }}/' + categoryId + '/subcategories');
 
-            $(".subcategory-name").val(subcategory.title);
-            $(".subcategory_description").val(subcategory.description);
+            $(".subcategory-name").val(subcategory.title || '');
+            $(".subcategory_description").val(subcategory.description || '');
             $("#subcategory_order").val(subcategory.subcategory_order || 1);
             $("#section_info").val(subcategory.section || 'General');
             $("#parent_category_info").val(subcategory.parent_category_title || 'Unknown');
 
-            if (subcategory.photo != '' && subcategory.photo != null) {
-                photo = subcategory.photo;
-                subcategoryImageFile = photo;
-                $(".subcategory_image").append('<img onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" class="rounded" style="width:50px" src="' + photo + '" alt="image">');
-                console.log('🖼️ Sub-category image loaded:', photo);
-            } else {
-                $(".subcategory_image").append('<img class="rounded" style="width:50px" src="' + placeholderImage + '" alt="image">');
-                console.log('🖼️ Using placeholder image');
-            }
+            existingPhoto = subcategory.photo || '';
+            renderImagePreview(existingPhoto);
 
-            if (subcategory.publish) {
-                $("#item_publish").prop('checked', true);
-                console.log('✅ Publish checkbox checked');
-            }
+            $("#item_publish").prop('checked', !!subcategory.publish);
+            $("#show_in_homepage").prop('checked', !!subcategory.show_in_homepage);
 
-            if (subcategory.show_in_homepage) {
-                $("#show_in_homepage").prop('checked', true);
-                console.log('✅ Show in homepage checkbox checked');
-            }
-
-            // Load review attributes
             loadReviewAttributes(subcategory.review_attributes || []);
-
-            jQuery("#data-table_processing").hide();
-            console.log('✅ Sub-category data loading completed');
         },
-        error: function(xhr, status, error) {
-            console.error('❌ Error loading sub-category data:', error);
+        error: function(xhr) {
             jQuery("#data-table_processing").hide();
-            alert('Error loading sub-category data: ' + error);
-        }
-    });
-
-    function loadReviewAttributes(selectedAttributes) {
-        $.ajax({
-            url: '/api/review-attributes',
-            type: 'GET',
-            success: function(reviewAttributes) {
-                var ra_html = '';
-                reviewAttributes.forEach(function(data) {
-                    var checked = selectedAttributes.includes(data.id) ? 'checked' : '';
-                    ra_html += '<div class="form-check width-100">';
-                    ra_html += '<input type="checkbox" id="review_attribute_' + data.id + '" value="' + data.id + '" ' + checked + '>';
-                    ra_html += '<label class="col-3 control-label" for="review_attribute_' + data.id + '">' + data.title + '</label>';
-                    ra_html += '</div>';
-                });
-                $('#review_attributes').html(ra_html);
-            },
-            error: function(xhr, status, error) {
-                console.error('Error loading review attributes:', error);
-            }
-        });
-    }
-
-    $(".edit-setting-btn").click(async function () {
-        console.log('🔍 Save button clicked - starting update process...');
-
-        var title = $(".subcategory-name").val();
-        var description = $(".subcategory_description").val();
-        var item_publish = $("#item_publish").is(":checked");
-        var show_in_homepage = $("#show_in_homepage").is(":checked");
-        var subcategory_order = parseInt($("#subcategory_order").val()) || 1;
-        var review_attributes = [];
-
-        console.log('📝 Form values:', {
-            title: title,
-            description: description,
-            item_publish: item_publish,
-            show_in_homepage: show_in_homepage,
-            subcategory_order: subcategory_order
-        });
-
-        $('#review_attributes input').each(function () {
-            if ($(this).is(':checked')) {
-                review_attributes.push($(this).val());
-            }
-        });
-
-        if (title == '') {
-            $(".error_top").show();
-            $(".error_top").html("");
-            $(".error_top").append("<p>Please enter a sub-category name</p>");
-            window.scrollTo(0, 0);
-            return false;
-        }
-
-        try {
-            jQuery("#data-table_processing").show();
-
-            // Upload image to Firebase Storage if new image is selected
-            let IMG = photo;
-            if (photo != subcategoryImageFile && photo && fileName) {
-                console.log('📤 Uploading new image...');
-                IMG = await storeImageData();
-            }
-
-            // Update via SQL database
-            $.ajax({
-                url: '/api/mart-subcategories/' + id + '/update',
-                type: 'POST',
-                data: {
-                    _token: '{{ csrf_token() }}',
-                    title: title,
-                    description: description,
-                    photo: IMG,
-                    subcategory_order: subcategory_order,
-                    publish: item_publish ? 1 : 0,
-                    show_in_homepage: show_in_homepage ? 1 : 0,
-                    review_attributes: review_attributes
-                },
-                success: function(response) {
-                    jQuery("#data-table_processing").hide();
-                    console.log('🎉 Update completed successfully!');
-                    window.location.href = '{{ url("mart-categories") }}/' + categoryId + '/subcategories';
-                },
-                error: function(xhr, status, error) {
-                    jQuery("#data-table_processing").hide();
-                    $(".error_top").show();
-                    $(".error_top").html("");
-                    var errorMessage = xhr.responseJSON && xhr.responseJSON.error
-                        ? xhr.responseJSON.error
-                        : 'Error updating sub-category';
-                    $(".error_top").append("<p>" + errorMessage + "</p>");
-                    window.scrollTo(0, 0);
-                }
-            });
-
-        } catch (error) {
-            console.error('❌ Error during update:', error);
-            jQuery("#data-table_processing").hide();
-            $(".error_top").show();
-            $(".error_top").html("");
-            $(".error_top").append("<p>Error updating sub-category: " + error.message + "</p>");
+            const message = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Unable to load sub-category information.';
+            $(".error_top").show().html("<p>" + message + "</p>");
             window.scrollTo(0, 0);
         }
     });
-});
-
-async function storeImageData() {
-    console.log('🖼️ Starting image processing...');
-
-    var newPhoto = '';
-    try {
-        // Delete old image if it's different from current
-        if (subcategoryImageFile != "" && photo != subcategoryImageFile) {
-            console.log('🗑️ Deleting old image...');
-            try {
-                var subcatOldImageUrlRef = await storage.refFromURL(subcategoryImageFile);
-                var imageBucket = subcatOldImageUrlRef.bucket;
-                var envBucket = "<?php echo env('FIREBASE_STORAGE_BUCKET'); ?>";
-                if (imageBucket == envBucket) {
-                    await subcatOldImageUrlRef.delete();
-                    console.log("✅ Old file deleted successfully!");
-                }
-            } catch (deleteError) {
-                console.log("⚠️ Error deleting old file:", deleteError);
-            }
-        }
-
-        // Upload new image
-        if (photo != subcategoryImageFile && photo && fileName) {
-            console.log('📤 Uploading new image...');
-            photo = photo.replace(/^data:image\/[a-z]+;base64,/, "");
-            var uploadTask = await storageRef.child(fileName).putString(photo, 'base64', { contentType: 'image/jpg' });
-            var downloadURL = await uploadTask.ref.getDownloadURL();
-            newPhoto = downloadURL;
-            photo = downloadURL;
-            console.log('✅ New image uploaded:', newPhoto);
-        } else {
-            newPhoto = photo;
-            console.log('ℹ️ Using existing image:', newPhoto);
-        }
-    } catch (error) {
-        console.error("❌ Error in storeImageData:", error);
-        newPhoto = photo || subcategoryImageFile;
-    }
-
-    return newPhoto;
 }
 
-//upload image with compression
-$("#subcategory_image").resizeImg({
-    callback: function(base64str) {
-        try {
-            var val = $('#subcategory_image').val().toLowerCase();
-            var ext = val.split('.')[1];
-            var filename = $('#subcategory_image').val().replace(/C:\\fakepath\\/i, '')
-            var timestamp = Number(new Date());
-            var filename = filename.split('.')[0] + "_" + timestamp + '.' + ext;
+function loadReviewAttributes(selectedAttributes) {
+    $.ajax({
+        url: '/api/review-attributes',
+        type: 'GET',
+        success: function(reviewAttributes) {
+            const html = reviewAttributes.map(function(attr) {
+                const checked = selectedAttributes.includes(attr.id) ? 'checked' : '';
+                return '<div class="form-check width-100">' +
+                    '<input type="checkbox" id="review_attribute_' + attr.id + '" value="' + attr.id + '" ' + checked + '>' +
+                    '<label class="col-3 control-label" for="review_attribute_' + attr.id + '">' + attr.title + '</label>' +
+                '</div>';
+            }).join('');
 
-            photo = base64str;
-            fileName = filename;
-
-            $(".subcategory_image").empty();
-            $(".subcategory_image").append('<img class="rounded" style="width:50px" src="' + photo + '" alt="image">');
-            $("#subcategory_image").val('');
-
-            console.log('✅ Image processed and displayed successfully');
-        } catch (error) {
-            console.error('❌ Error in image compression callback:', error);
+            $('#review_attributes').html(html);
+            jQuery("#data-table_processing").hide();
+        },
+        error: function(xhr) {
+            jQuery("#data-table_processing").hide();
+            console.error('Error loading review attributes:', xhr);
         }
-    },
-    error: function(error) {
-        console.error('❌ Image compression error:', error);
-        alert('Error processing image: ' + error.message);
-    }
-});
+    });
+}
+
+function registerEvents() {
+    $('#subcategory_image').on('change', function(event) {
+        const file = event.target.files[0];
+        if (!file) {
+            return;
+        }
+
+        selectedFile = file;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            renderImagePreview(e.target.result);
+        };
+        reader.readAsDataURL(file);
+    });
+
+    $(".edit-setting-btn").on('click', function () {
+        $(".error_top").hide().empty();
+
+        const title = $(".subcategory-name").val().trim();
+        if (!title) {
+            $(".error_top").show().html("<p>Please enter a sub-category name</p>");
+            window.scrollTo(0, 0);
+            return;
+        }
+
+        const description = $(".subcategory_description").val();
+        const item_publish = $("#item_publish").is(":checked");
+        const show_in_homepage = $("#show_in_homepage").is(":checked");
+        const subcategory_order = parseInt($("#subcategory_order").val(), 10) || 1;
+
+        const review_attributes = [];
+        $('#review_attributes input:checked').each(function () {
+            review_attributes.push($(this).val());
+        });
+
+        const formData = new FormData();
+        formData.append('_token', '{{ csrf_token() }}');
+        formData.append('title', title);
+        formData.append('description', description || '');
+        formData.append('subcategory_order', subcategory_order);
+        formData.append('publish', item_publish ? 1 : 0);
+        formData.append('show_in_homepage', show_in_homepage ? 1 : 0);
+
+        if (selectedFile) {
+            formData.append('photo_file', selectedFile);
+        } else if (existingPhoto) {
+            formData.append('existing_photo', existingPhoto);
+        }
+
+        review_attributes.forEach(function(attrId) {
+            formData.append('review_attributes[]', attrId);
+        });
+
+        jQuery("#data-table_processing").show();
+
+        $.ajax({
+            url: '/api/mart-subcategories/' + id + '/update',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function () {
+                jQuery("#data-table_processing").hide();
+                const redirectUrl = categoryId
+                    ? '{{ url("mart-categories") }}/' + categoryId + '/subcategories'
+                    : '{{ url("mart-categories") }}';
+                window.location.href = redirectUrl;
+            },
+            error: function(xhr) {
+                jQuery("#data-table_processing").hide();
+                const message = xhr.responseJSON && xhr.responseJSON.error
+                    ? xhr.responseJSON.error
+                    : (xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Error updating sub-category');
+                $(".error_top").show().html("<p>" + message + "</p>");
+                window.scrollTo(0, 0);
+            }
+        });
+    });
+}
+
+function renderImagePreview(url) {
+    const src = url ? url : placeholderImage;
+    $('.subcategory_image').html('<img class="rounded" style="width:50px" src="' + src + '" alt="image">');
+}
 </script>
 @endsection

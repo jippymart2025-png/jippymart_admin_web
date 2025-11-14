@@ -114,6 +114,8 @@
             fd.append('show_in_homepage', show_in_homepage ? 1 : 0);
             review_attributes.forEach(function(v){ fd.append('review_attributes[]', v); });
             if($('#category_image')[0].files[0]){ fd.append('photo', $('#category_image')[0].files[0]); }
+            console.log('💾 Creating category:', { title: title });
+
             $.ajax({
                 url: '{{ route('categories.store') }}',
                 method: 'POST',
@@ -121,12 +123,23 @@
                 data: fd,
                 processData: false,
                 contentType: false
-            }).done(function(){ window.location.href='{{ route('categories') }}'; })
-              .fail(function(xhr){
+            })
+            .done(function(response){
+                console.log('✅ Category created successfully:', response);
+
+                // Log activity
+                if (typeof logActivity === 'function') {
+                    logActivity('categories', 'created', 'Created category: ' + title);
+                }
+
+                window.location.href='{{ route('categories') }}';
+            })
+            .fail(function(xhr){
+                console.error('❌ Create failed:', xhr);
                 var msg = 'Failed to save';
                 if(xhr.responseJSON && xhr.responseJSON.message){ msg = xhr.responseJSON.message; }
                 $(".error_top").show().html('<p>'+msg+'</p>');
-              });
+            });
         });
     });
 </script>

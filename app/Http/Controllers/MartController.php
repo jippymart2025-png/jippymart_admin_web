@@ -183,13 +183,22 @@ class MartController extends Controller
             ->orderBy('name', 'asc')
             ->get(['id','name']);
 
+        // Load mart vendors only (vType='mart' and role='vendor')
         $vendors = \Illuminate\Support\Facades\DB::table('users')
-            ->select('id', 'firstName', 'lastName', 'vendorID', 'role')
+            ->select('id', 'firstName', 'lastName', 'vendorID', 'role', 'vType')
             ->where('role', '=', 'vendor')
+            ->where('vType', '=', 'mart')
+            ->whereIn('active', ['true', '1', 1, true])
             ->orderBy('firstName')
             ->get();
 
-        return view('mart.create', compact('zones', 'vendors'));
+        // Load mart categories
+        $categories = \Illuminate\Support\Facades\DB::table('mart_categories')
+            ->where('publish', 1)
+            ->orderBy('title', 'asc')
+            ->get(['id', 'title']);
+
+        return view('mart.create', compact('zones', 'vendors', 'categories'));
     }
 
     public function edit($id)
@@ -351,6 +360,67 @@ class MartController extends Controller
             'createdAt' => $createdAt,
             'vType' => 'mart',
         ];
+    }
+
+    /**
+     * Get published mart categories for dropdown (API endpoint)
+     */
+    public function getCategories()
+    {
+        try {
+            $categories = DB::table('mart_categories')
+                ->where('publish', 1)
+                ->orderBy('title', 'asc')
+                ->get(['id', 'title'])
+                ->toArray();
+
+            return response()->json([
+                'success' => true,
+                'data' => $categories
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching mart categories: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get mart vendors (users with vType='mart' and role='vendor') for API
+     */
+    public function getMartVendors()
+    {
+        try {
+            $vendors = DB::table('users')
+                ->where('role', 'vendor')
+                ->where('vType', 'mart')
+                ->whereIn('active', ['true', '1', 1, true])
+                ->orderBy('firstName', 'asc')
+                ->get(['id', 'firstName', 'lastName', 'vendorID'])
+                ->map(function($vendor) {
+                    return [
+                        'id' => $vendor->id,
+                        'name' => trim(($vendor->firstName ?? '') . ' ' . ($vendor->lastName ?? '')),
+                        'firstName' => $vendor->firstName ?? '',
+                        'lastName' => $vendor->lastName ?? '',
+                        'vendorID' => $vendor->vendorID ?? null
+                    ];
+                })
+                ->toArray();
+
+            return response()->json([
+                'success' => true,
+                'data' => $vendors
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching mart vendors: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }
 

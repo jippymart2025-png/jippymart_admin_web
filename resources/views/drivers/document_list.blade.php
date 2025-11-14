@@ -38,16 +38,19 @@
                                                 <span aria-hidden="true">&times;</span>
                                             </button>
                                         </div>
-                                        <div class="modal-body">
+                                        <div class="modal-body text-center">
+                                            <div id="image-loading" class="text-muted" style="display:none;">
+                                                <i class="fa fa-spinner fa-spin"></i> Loading image...
+                                            </div>
                                             <div class="form-group">
-                                                <embed id="docImage"
-                                                       src=""
-                                                       frameBorder="0"
-                                                       scrolling="auto"
-                                                       height="100%"
-                                                       width="100%"
-                                                       style="height: 540px;"
-                                                ></embed>
+                                                <img id="docImage"
+                                                     src=""
+                                                     style="max-width: 100%; max-height: 600px; height: auto; display:none;"
+                                                     alt="Document Image"
+                                                />
+                                            </div>
+                                            <div id="image-error" class="alert alert-danger" style="display:none;">
+                                                Failed to load image. Please check if the file exists.
                                             </div>
                                             <div class="modal-footer">
                                                 <button type="button" class="btn btn-secondary"
@@ -64,199 +67,201 @@
         </div>
     </div>
 @endsection
-@section('scripts')z
+@section('scripts')
 <script>
     var id = "<?php echo $id;?>";
-    var database = firebase.firestore();
-    var allDriver = database.collection('users').where('role','==','driver');
-    var ref = database.collection('users').where("id", "==", id);
-    var docsRef = database.collection('documents').where('enable', '==', true).where('type','==','driver');
-    var docref = database.collection('documents_verify').doc(id);
-    var back_photo = '';
-    var front_photo = '';
-    var backFileName = '';
-    var frontFileName = '';
-    var backFileOld = '';
-    var frontFileOld = '';
     var fcmToken = "";
-    $(document).ready(async function () {
+
+    $(document).ready(function () {
         jQuery("#data-table_processing").show();
+
+        // Modal for viewing images
         $('#exampleModal').on('show.bs.modal', function (event) {
             var button = $(event.relatedTarget);
             var img = button.data('image');
             var modal = $(this);
-            modal.find('#docImage').attr('src', img);
+
+            console.log('🖼️ Opening image modal with URL:', img);
+
+            // Reset modal state
+            modal.find('#image-loading').show();
+            modal.find('#docImage').hide();
+            modal.find('#image-error').hide();
+
+            // Create new image object to preload
+            var imageObj = new Image();
+
+            imageObj.onload = function() {
+                console.log('✅ Image loaded successfully');
+                modal.find('#image-loading').hide();
+                modal.find('#docImage').attr('src', img).show();
+            };
+
+            imageObj.onerror = function() {
+                console.error('❌ Failed to load image:', img);
+                modal.find('#image-loading').hide();
+                modal.find('#image-error').show();
+                modal.find('#image-error').html('Failed to load image.<br>URL: ' + img + '<br>Please check if the file exists at this location.');
+            };
+
+            // Start loading image
+            imageObj.src = img;
         });
-        ref.get().then(async function (snapshots) {
-            var vendor = snapshots.docs[0].data();
-            if (vendor.hasOwnProperty('fcmToken') && vendor.fcmToken != "" && vendor.fcmToken != null) {
-                fcmToken = vendor.fcmToken;
-            }
-            $(".vendor-name").text(vendor.firstName+' '+vendor.lastName+ "'s" + " {{trans('lang.driver_document_details')}}")
-        });
-        var html = '';
-        var count = 0;
-        await docsRef.get().then(async function (docSnapshot) {
-            html += '<table id="taxTable" class="display nowrap table table-hover table-striped table-bordered table table-striped" cellspacing="0" width="100%">';
-            html += "<thead>";
-            html += '<tr>';
-            html += '<th>Name</th>';
-            html += '<th>Status</th>';
-            html += '<th>Action</th>';
-            html += '</tr>';
-            html += '</thead>';
-            html += '<tbody>';
-            html += '</tbody>';
-            html += '</table>';
-            if (docSnapshot.docs.length) {
-                var documents = docSnapshot.docs;
-                documents.forEach((ele) => {
-                    var doc = ele.data();
-                    var docRefs = database.collection('documents_verify').doc(id);
-                    docRefs.get().then(async function (docrefSnapshot) {
-                        var docRef = docrefSnapshot.data() && docrefSnapshot.data().documents ? docrefSnapshot.data().documents.filter(docId => docId.documentId == doc.id)[0] : [];
-                        var trhtml = '';
-                        trhtml += '<tr>';
-                        if (docRef && docRef.hasOwnProperty('backImage') && docRef.hasOwnProperty('frontImage') ) {
-                            if (docRef.backImage != '' && docRef.frontImage != '' && docRef.backImage!=null && docRef.frontImage != null  && doc.backSide && doc.frontSide  ) {
-                                                            trhtml += '<td>' + doc.title + '&nbsp;&nbsp;<a href="#" class="badge badge-info" data-toggle="modal" data-target="#exampleModal" data-image="' + docRef.frontImage + '" data-id="front" class="open-image">{{trans('lang.view_front_image')}}</a>&nbsp;<a href="#" class="badge badge-info" data-toggle="modal" data-target="#exampleModal"  data-image="' + docRef.backImage + '" data-id="back" class="open-image">{{trans('lang.view_back_image')}}</a></td>';
-                            } else if (docRef.backImage != '' && docRef.backImage != null  && doc.backSide) {
-                                trhtml += '<td>' + doc.title + '&nbsp;<a href="#" data-toggle="modal" class="badge badge-info" data-target="#exampleModal" data-id="back" data-image="' + docRef.backImage + '" class="open-image">{{trans('lang.view_back_image')}}</a></td>';
-                            } else if (docRef.frontImage != '' && docRef.frontImage != null && doc.frontSide ) {
-                                trhtml += '<td>' + doc.title + '&nbsp;<a href="#" data-toggle="modal" class="badge badge-info" data-target="#exampleModal" data-id="front" class="open-image" data-image="' + docRef.frontImage + '">{{trans('lang.view_front_image')}}</a></td>';
-                            } else {
-                                trhtml += '<td>' + doc.title + '</td>';
+
+        // Load driver document data from SQL
+        $.ajax({
+            url: '{{ route("api.drivers.document.data", ":id") }}'.replace(':id', id),
+            method: 'GET',
+            success: function(response) {
+                console.log('✅ Driver document data loaded:', response);
+
+                if (response.success && response.driver && response.documents) {
+                    var driver = response.driver;
+                    var documents = response.documents;
+                    var verification = response.verification || [];
+
+                    fcmToken = driver.fcmToken || '';
+
+                    // Set driver name in header
+                    $(".vendor-name").text(driver.firstName + ' ' + driver.lastName + "'s {{trans('lang.driver_document_details')}}");
+
+                    // Build table HTML
+                    var html = '';
+                    html += '<table id="taxTable" class="display nowrap table table-hover table-striped table-bordered" cellspacing="0" width="100%">';
+                    html += '<thead>';
+                    html += '<tr>';
+                    html += '<th>Name</th>';
+                    html += '<th>Status</th>';
+                    html += '<th>Action</th>';
+                    html += '</tr>';
+                    html += '</thead>';
+                    html += '<tbody>';
+
+                    // Loop through documents
+                    documents.forEach(function(doc) {
+                        // Find verification status for this document
+                        var docVerification = verification.find(v => v.documentId == doc.id);
+
+                        var trhtml = '<tr>';
+
+                        // Document name with view links
+                        trhtml += '<td>' + doc.title;
+                        if (docVerification) {
+                            console.log('📄 Document verification data:', docVerification);
+                            if (docVerification.frontImage && docVerification.frontImage.trim() !== '' && doc.frontSide) {
+                                var frontImgUrl = docVerification.frontImage;
+                                console.log('🖼️ Front image URL:', frontImgUrl);
+                                trhtml += '&nbsp;<a href="#" class="badge badge-info view-image-btn" data-toggle="modal" data-target="#exampleModal" data-image="' + frontImgUrl + '">{{trans('lang.view_front_image')}}</a>';
                             }
-                        } else {
-                            trhtml += '<td>' + doc.title + '</td>';
-                        }
-                        var status = docRef  && docRef.status == "approved" ? 'approved' : ((docRef  && docRef.status == "rejected") ? "rejected" : ((docRef && docRef.status == "uploaded") ? 'uploaded' : 'pending'));
-                        var display_status = '';
-                        if (status == "approved") {
-                            display_status = '<span class="badge badge-success py-2 px-3">' + status + '</span>';
-                        } else if (status == "rejected") {
-                            display_status = '<span class="badge badge-danger py-2 px-3">' + status + '</span>';
-                        } else if (status == "uploaded") {
-                            display_status = '<span class="badge badge-primary py-2 px-3">' + status + '</span>';
-                        } else if (status == "pending") {
-                            display_status = '<span class="badge badge-warning py-2 px-3">' + status + '</span>';
-                        }
-                        trhtml += '<td>' + display_status + '</td>';
-                        trhtml += '<td class="action-btn">';
-                        trhtml += '<a href="' + (`/drivers/document/upload/` + id.trim() + `/` + doc.id.trim()) + '" data-id="' + doc.id + '"><i class="mdi mdi-lead-pencil" title="Edit"></i></a>&nbsp;';
-                        if (status !== 'pending') {
-                            if (status == "rejected") {
-                                trhtml += '&nbsp;<a href="javascript:void(0);" class="btn btn-sm btn-success direct-click-btn verify-doc" id="approve-doc" data-title="' + doc.title + '"  data-id="' + doc.id + '">{{trans('lang.approve')}}</a>';
-                            } else if (status == "approved") {
-                                trhtml += '&nbsp;<a href="javascript:void(0);" class="btn btn-sm btn-danger direct-click-btn verify-doc" id="disapprove-doc" data-title="' + doc.title + '"  data-id="' + doc.id + '">{{trans('lang.reject')}}</a>';
-                            } else {
-                                trhtml += '&nbsp;<a href="javascript:void(0);" class="btn btn-sm btn-success direct-click-btn verify-doc" id="approve-doc" data-title="' + doc.title + '"  data-id="' + doc.id + '">{{trans('lang.approve')}}</a>&nbsp;<a href="javascript:void(0);" class="btn btn-sm btn-danger verify-doc" id="disapprove-doc" data-title="' + doc.title + '"  data-id="' + doc.id + '">{{trans('lang.reject')}}</a>';
+                            if (docVerification.backImage && docVerification.backImage.trim() !== '' && doc.backSide) {
+                                var backImgUrl = docVerification.backImage;
+                                console.log('🖼️ Back image URL:', backImgUrl);
+                                trhtml += '&nbsp;<a href="#" class="badge badge-info view-image-btn" data-toggle="modal" data-target="#exampleModal" data-image="' + backImgUrl + '">{{trans('lang.view_back_image')}}</a>';
                             }
                         }
                         trhtml += '</td>';
-                        trhtml += '</tr>';
-                        $("tbody").append(trhtml);
-                        count = count + 1;
-                        if (count == docSnapshot.docs.length) {
-                            $('#taxTable').DataTable({
-                                order: [[0, 'asc']],
-                                columnDefs: [
-                                    {orderable: false, targets: [1, 2]}
-                                ],
-                            });
+
+                        // Status badge
+                        var status = docVerification && docVerification.status ? docVerification.status : 'pending';
+                        var statusBadge = '';
+                        if (status == 'approved') {
+                            statusBadge = '<span class="badge badge-success py-2 px-3">approved</span>';
+                        } else if (status == 'rejected') {
+                            statusBadge = '<span class="badge badge-danger py-2 px-3">rejected</span>';
+                        } else if (status == 'uploaded') {
+                            statusBadge = '<span class="badge badge-primary py-2 px-3">uploaded</span>';
+                        } else {
+                            statusBadge = '<span class="badge badge-warning py-2 px-3">pending</span>';
                         }
-                    })
-                });
+                        trhtml += '<td>' + statusBadge + '</td>';
+
+                        // Actions
+                        trhtml += '<td class="action-btn">';
+                        trhtml += '<a href="/drivers/document/upload/' + id + '/' + doc.id + '"><i class="mdi mdi-lead-pencil" title="Edit"></i></a>';
+
+                        // Show approve/reject buttons based on status
+                        if (status !== 'pending') {
+                            if (status == 'rejected') {
+                                trhtml += '&nbsp;<a href="javascript:void(0);" class="btn btn-sm btn-success verify-doc" data-action="approved" data-title="' + doc.title + '" data-id="' + doc.id + '">{{trans('lang.approve')}}</a>';
+                            } else if (status == 'approved') {
+                                trhtml += '&nbsp;<a href="javascript:void(0);" class="btn btn-sm btn-danger verify-doc" data-action="rejected" data-title="' + doc.title + '" data-id="' + doc.id + '">{{trans('lang.reject')}}</a>';
+                            } else {
+                                trhtml += '&nbsp;<a href="javascript:void(0);" class="btn btn-sm btn-success verify-doc" data-action="approved" data-title="' + doc.title + '" data-id="' + doc.id + '">{{trans('lang.approve')}}</a>';
+                                trhtml += '&nbsp;<a href="javascript:void(0);" class="btn btn-sm btn-danger verify-doc" data-action="rejected" data-title="' + doc.title + '" data-id="' + doc.id + '">{{trans('lang.reject')}}</a>';
+                            }
+                        }
+
+                        trhtml += '</td>';
+                        trhtml += '</tr>';
+                        html += trhtml;
+                    });
+
+                    html += '</tbody>';
+                    html += '</table>';
+
+                    // Append table to DOM
+                    $(".doc-body").html(html);
+
+                    // Initialize DataTable
+                    $('#taxTable').DataTable({
+                        order: [[0, 'asc']],
+                        columnDefs: [
+                            {orderable: false, targets: [1, 2]}
+                        ]
+                    });
+
+                    jQuery("#data-table_processing").hide();
+                } else {
+                    console.error('❌ Failed to load driver document data');
+                    jQuery("#data-table_processing").hide();
+                    $(".doc-body").html('<p class="text-danger">Error loading driver documents. Please refresh the page.</p>');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('❌ Error loading driver document data:', error);
+                jQuery("#data-table_processing").hide();
+                $(".doc-body").html('<p class="text-danger">Error loading driver documents: ' + error + '</p>');
             }
-            $(".doc-body").append(html);
-            jQuery("#data-table_processing").hide();
         });
     });
-    $(document.body).on('click', '.redirecttopage', function () {
-        var url = $(this).attr('data-url');
-        window.location.href = url;
-    });
+
+    // Handle approve/reject button clicks
     $(document).on('click', '.verify-doc', function () {
         jQuery("#data-table_processing").show();
-        var status = $(this).attr('id') == "approve-doc" ? "approved" : "rejected";
+
+        var status = $(this).attr('data-action'); // 'approved' or 'rejected'
         var docId = $(this).attr('data-id');
         var docTitle = $(this).attr('data-title');
-        var docRefsTmp = database.collection('documents_verify').doc(id);
-        docRefsTmp.get().then(async function (docrefSnapshot) {
-            var keydataId = docrefSnapshot.data() && docrefSnapshot.data().documents ? docrefSnapshot.data().documents.findIndex((doc) => doc.documentId == docId) : 0;
-            database.collection('documents_verify').doc(id)
-                .get().then((doc) => {
-                var objects = doc.data().documents;
-                var objectToupdate = objects[keydataId];
-                objectToupdate.status = status;
-                objects[keydataId] = objectToupdate;
-                database.collection('documents_verify').doc(id).update({
-                    documents: objects
-                }).then(async function () {
-                    var enableDocIds = await getDocId();
-                    await ref.get().then( async function(snapshotsVendor){
-                        if (snapshotsVendor.docs.length > 0) {
-                            var verification = await vendorDocVerification(enableDocIds, snapshotsVendor);
-                            if(verification){
-                                if (status == "rejected") {
-                                    var sendNotificationStatus = await sendNotification(fcmToken, 'Rejected  your document', 'Admin is Rejected your ' + docTitle + ' . Please submit again.');
-                                    if (sendNotificationStatus) {
-                                        jQuery("#data-table_processing").hide();
-                                        window.location.reload();
-                                    }
-                                }else{
-                                    jQuery("#data-table_processing").hide();
-                                    window.location.reload();
-                                }
-                            }
-                        }else{
-                            jQuery("#data-table_processing").hide();
-                            window.location.reload();
-                        }
-                    })
-                    $('li').removeClass('active');
-                    $("#documents-tab").addClass('active');
-                    $("#documents-tab").click();
-                    $(".error_top").html("");
-                }).catch(function (error) {
-                    $(".error_top").show();
-                    $(".error_top").html("");
-                    $(".error_top").append("<p>" + error + "</p>");
-                });
-            })
+
+        console.log('Updating document status:', { driverId: id, docId: docId, status: status });
+
+        // Update via SQL API
+        $.ajax({
+            url: '{{ route("api.drivers.document.status", [":driverId", ":docId"]) }}'.replace(':driverId', id).replace(':docId', docId),
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+            data: {
+                status: status,
+                docTitle: docTitle
+            },
+            success: function(response) {
+                console.log('✅ Document status updated:', response);
+
+                // Log activity
+                if (typeof logActivity === 'function') {
+                    var action = status == 'approved' ? 'approved' : 'rejected';
+                    logActivity('drivers', action + '_document', action.charAt(0).toUpperCase() + action.slice(1) + ' document "' + docTitle + '" for driver ID: ' + id);
+                }
+
+                jQuery("#data-table_processing").hide();
+                window.location.reload();
+            },
+            error: function(xhr, status, error) {
+                console.error('❌ Error updating document status:', error);
+                jQuery("#data-table_processing").hide();
+                alert('Error updating document status: ' + (xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : error));
+            }
         });
     });
-    async function getDocId(){
-        var enableDocIds = [];
-        await database.collection('documents').where('enable', "==", true).where('type', '==', 'driver').get().then(async function (snapshots) {
-            await snapshots.forEach((doc) => {
-                enableDocIds.push(doc.data().id);
-            });
-        });
-        return enableDocIds;
-    }
-    async function vendorDocVerification(enableDocIds, snapshotsVendor){
-        var isCompleted = false;
-        await Promise.all(snapshotsVendor.docs.map(async (vendor) => {
-            await database.collection('documents_verify').doc(vendor.id).get().then( async function(docrefSnapshot){
-                if(docrefSnapshot.data() && docrefSnapshot.data().documents.length > 0){
-                    var vendorDocId = await docrefSnapshot.data().documents.filter((doc) => doc.status == 'approved').map((docData) => docData.documentId);
-                    if(vendorDocId.length >= enableDocIds.length){
-                        await database.collection('users').doc(vendor.id).update({'isDocumentVerify': true, isActive: true });
-                    }else{
-                        await enableDocIds.forEach(async(docId) => {
-                            if(!vendorDocId.includes(docId)){
-                                await database.collection('users').doc(vendor.id).update({'isDocumentVerify': false, isActive: false });
-                            }
-                        });
-                    }
-                }else{
-                    await database.collection('users').doc(vendor.id).update({'isDocumentVerify': false, isActive: false });
-                }
-            });
-            isCompleted = true;
-        }));
-        return isCompleted;
-    }
 </script>
 @endsection

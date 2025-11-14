@@ -100,7 +100,7 @@
                                             <input type="file" name="file" id="importFile" accept=".xls,.xlsx" class="form-control" required>
                                             <div class="form-text text-muted">
                                                 <i class="mdi mdi-information-outline mr-1"></i>
-                                                File should contain: name, price, description, vendorID/vendorName, categoryID/categoryName, disPrice, publish, nonveg, isAvailable, photo
+                                                File should contain: name, price, description, vendorID, categoryID, disPrice, publish, nonveg, isAvailable, photo
                                             </div>
                                         </div>
                                     </div>
@@ -119,29 +119,29 @@
             <div class="table-list">
                 <div class="row">
                     <div class="col-12">
-                        <?php if ($id != '') { ?>
+                        <?php if (!empty($restaurantId)) { ?>
                         <div class="menu-tab">
                             <ul>
                                 <li>
-                                    <a href="{{route('restaurants.view', $id)}}">{{trans('lang.tab_basic')}}</a>
+                                    <a href="{{route('restaurants.view', $restaurantId)}}">{{trans('lang.tab_basic')}}</a>
                                 </li>
                                 <li class="active">
-                                    <a href="{{route('restaurants.foods', $id)}}">{{trans('lang.tab_foods')}}</a>
+                                    <a href="{{route('restaurants.foods', $restaurantId)}}">{{trans('lang.tab_foods')}}</a>
                                 </li>
                                 <li>
-                                    <a href="{{route('restaurants.orders', $id)}}">{{trans('lang.tab_orders')}}</a>
+                                    <a href="{{route('restaurants.orders', $restaurantId)}}">{{trans('lang.tab_orders')}}</a>
                                 </li>
                                 <li>
-                                    <a href="{{route('restaurants.coupons', $id)}}">{{trans('lang.tab_promos')}}</a>
+                                    <a href="{{route('restaurants.coupons', $restaurantId)}}">{{trans('lang.tab_promos')}}</a>
                                 <li>
-                                    <a href="{{route('restaurants.payout', $id)}}">{{trans('lang.tab_payouts')}}</a>
+                                    <a href="{{route('restaurants.payout', $restaurantId)}}">{{trans('lang.tab_payouts')}}</a>
                                 </li>
                                 <li>
                                     <a
-                                        href="{{route('payoutRequests.restaurants.view', $id)}}">{{trans('lang.tab_payout_request')}}</a>
+                                        href="{{route('payoutRequests.restaurants.view', $restaurantId)}}">{{trans('lang.tab_payout_request')}}</a>
                                 </li>
                                 <li>
-                                    <a href="{{route('restaurants.booktable', $id)}}">{{trans('lang.dine_in_future')}}</a>
+                                    <a href="{{route('restaurants.booktable', $restaurantId)}}">{{trans('lang.dine_in_future')}}</a>
                                 </li>
                                 <li id="restaurant_wallet"></li>
                                 <li id="subscription_plan"></li>
@@ -156,9 +156,9 @@
                                 </div>
                                 <div class="card-header-right d-flex align-items-center">
                                     <div class="card-header-btn mr-3">
-                                        <?php if ($id != '') { ?>
+                                        <?php if (!empty($restaurantId)) { ?>
                                         <a class="btn-primary btn rounded-full"
-                                           href="{!! route('foods.create') !!}/{{$id}}"><i
+                                           href="{!! route('foods.create') !!}/{{$restaurantId}}"><i
                                                 class="mdi mdi-plus mr-2"></i>{{trans('lang.food_create')}}</a>
                                         <?php } else { ?>
                                         <a class="btn-primary btn rounded-full" href="{!! route('foods.create') !!}"><i
@@ -185,9 +185,9 @@
                                             <th>{{trans('lang.food_name')}}</th>
                                             <th>{{trans('lang.food_price')}}</th>
                                             <th>Discount Price</th>
-                                            <?php if ($id == '') { ?>
+                                            @if(empty($restaurantId))
                                             <th>{{trans('lang.food_restaurant_id')}}</th>
-                                            <?php } ?>
+                                            @endif
                                             <th>{{trans('lang.food_category_id')}}</th>
                                             <th>{{trans('lang.food_publish')}}</th>
                                             <th>Available</th>
@@ -203,9 +203,6 @@
             </div>
         </div>
     </div>
-
-
-
 @endsection
 @section('scripts')
     <script type="text/javascript">
@@ -216,7 +213,6 @@
                 categoryID=value;
             }
         }
-
         var currentCurrency='$';
         var currencyAtRight=false;
         var decimal_degits=0;
@@ -226,20 +222,50 @@
         if($.inArray('foods.delete',user_permissions)>=0) {
             checkDeletePermission=true;
         }
-        var restaurantID="{{$id}}";
+        var restaurantID="{{ $restaurantId ?? '' }}";
         var placeholderImage='{{ asset('images/placeholder.png') }}';
 
-        // Fetch currency from SQL
+        $.ajaxSetup({
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            }
+        });
+
+        function applyCurrencySettings(data) {
+            if (!data) {
+                return;
+            }
+            currentCurrency = data.symbol || data.currency_symbol || '$';
+            currencyAtRight = data.symbolAtRight ?? data.currencyAtRight ?? false;
+            decimal_degits = data.decimal_degits ?? 0;
+        }
+
+        function loadCurrencyFromSettingsFallback() {
+            $.ajax({
+                url: '{{ route("settings.get", "payment") }}',
+                type: 'GET',
+                async: false,
+                success: function(response) {
+                    if(response.success && response.data) {
+                        applyCurrencySettings(response.data);
+                    }
+                }
+            });
+        }
+
         $.ajax({
-            url: '{{ route("settings.get", "payment") }}',
+            url: '{{ route("api.currencies.active") }}',
             type: 'GET',
             async: false,
             success: function(response) {
                 if(response.success && response.data) {
-                    currentCurrency = response.data.currency_symbol || '$';
-                    currencyAtRight = response.data.currencyAtRight || false;
-                    decimal_degits = response.data.decimal_degits || 0;
+                    applyCurrencySettings(response.data);
+                } else {
+                    loadCurrencyFromSettingsFallback();
                 }
+            },
+            error: function() {
+                loadCurrencyFromSettingsFallback();
             }
         });
 
@@ -306,7 +332,8 @@
             jQuery("#data-table_processing").show();
 
             const table=$('#foodTable').DataTable({
-                pageLength: 10,
+                pageLength: 30,
+                lengthMenu: [[10,30, 50, 100], [10,30, 50, 100,]],
                 processing: false,
                 serverSide: true,
                 responsive: true,
@@ -370,7 +397,7 @@
                             return currencyAtRight ? price + ' ' + currentCurrency : currentCurrency + ' ' + price;
                         }
                     },
-                    @if($id == '')
+                    @if(empty($restaurantId))
                     {
                         data: 'restaurant_name',
                         render: function(data, type, row) {
@@ -407,10 +434,14 @@
                         orderable: false,
                         render: function(data, type, row) {
                             var route1 = '{{route("foods.edit", ":id")}}'.replace(':id', row.id);
-                            @if($id != '')
-                                route1 += '?eid={{$id}}';
+                            @if(!empty($restaurantId))
+                                route1 += '?eid={{$restaurantId}}';
                             @endif
-                            return '<span class="action-btn"><a href="'+route1+'"><i class="mdi mdi-pencil font-18"></i></a></span>';
+                            var actions = '<span class="action-btn"><a href="'+route1+'"><i class="mdi mdi-pencil font-18"></i></a></span>';
+                            @if(in_array('foods.delete', json_decode(@session('user_permissions'), true)))
+                                actions += '<span class="action-btn"><a href="javascript:void(0)" class="text-danger delete-food" data-id="'+row.id+'"><i class="mdi mdi-delete font-18"></i></a></span>';
+                            @endif
+                            return actions;
                         }
                     }
                 ],
@@ -492,10 +523,9 @@
 
                 // Delete via AJAX (you'll need to create a batch delete endpoint)
                 $.ajax({
-                    url: '{{ url("foods/delete-multiple") }}',
+                    url: '{{ route('foods.delete-multiple') }}',
                     type: 'POST',
                     data: {
-                        _token: '{{ csrf_token() }}',
                         ids: selectedIds
                     },
                     success: function(response) {
@@ -509,6 +539,24 @@
                     },
                     error: function() {
                         jQuery("#data-table_processing").hide();
+                        alert('{{trans("lang.error_deleting")}}');
+                    }
+                });
+            });
+
+            $(document).on('click', '.delete-food', function() {
+                var id = $(this).data('id');
+                if(!confirm("{{ trans('lang.delete_alert') }}")) {
+                    return;
+                }
+
+                $.ajax({
+                    url: '{{ url("foods") }}/' + id,
+                    type: 'DELETE',
+                    success: function(response) {
+                        table.ajax.reload();
+                    },
+                    error: function() {
                         alert('{{trans("lang.error_deleting")}}');
                     }
                 });

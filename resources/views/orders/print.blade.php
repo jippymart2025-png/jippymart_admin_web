@@ -291,18 +291,30 @@
                     $(".customerName").text(customerName.trim() || 'N/A');
                     $(".orderId").text(id);
 
-                    // Order date
+                    // Order date - Format like "Oct 1, 2025 11:27 PM"
                     if (order.createdAt) {
                         try {
                             var date = new Date(order.createdAt);
                             if (!isNaN(date.getTime())) {
-                                var dateStr = date.toDateString();
-                                var time = date.toLocaleTimeString('en-US');
-                                $(".orderDate").text(dateStr + " " + time);
+                                var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                var month = months[date.getMonth()];
+                                var day = date.getDate();
+                                var year = date.getFullYear();
+                                var hours = date.getHours();
+                                var minutes = date.getMinutes();
+                                var ampm = hours >= 12 ? 'PM' : 'AM';
+                                hours = hours % 12;
+                                hours = hours ? hours : 12;
+                                minutes = minutes < 10 ? '0' + minutes : minutes;
+
+                                var formatted = month + ' ' + day + ', ' + year + ' ' + hours + ':' + minutes + ' ' + ampm;
+                                $(".orderDate").text(formatted);
+                                console.log('📅 Formatted print date:', formatted);
                             } else {
                                 $(".orderDate").text(order.createdAt);
                             }
                         } catch(e) {
+                            console.error('Error formatting date:', e);
                             $(".orderDate").text(order.createdAt);
                         }
                     }

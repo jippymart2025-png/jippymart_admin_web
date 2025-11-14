@@ -35,32 +35,66 @@ class MediaController extends Controller
         $start = (int) $request->input('start', 0);
         $length = (int) $request->input('length', 10);
         $draw = (int) $request->input('draw', 1);
-        $search = strtolower((string) data_get($request->input('search'), 'value', ''));
 
+        // ✅ Fix: Get search value properly from DataTables request
+        $search = trim(strtolower((string) $request->input('search.value', '')));
+
+        // Base query for total count
+        $baseQ = DB::table('media');
+        $totalRecords = $baseQ->count();
+
+        // Query for filtered data
         $q = DB::table('media');
+
+        // ✅ Apply search filter (case-insensitive)
         if ($search !== '') {
-            $q->where(function($qq) use ($search){
-                $qq->where('name','like','%'.$search.'%')
-                   ->orWhere('slug','like','%'.$search.'%');
+            $q->where(function($qq) use ($search) {
+                $qq->whereRaw('LOWER(name) LIKE ?', ['%' . $search . '%'])
+                    ->orWhereRaw('LOWER(slug) LIKE ?', ['%' . $search . '%'])
+                    ->orWhereRaw('LOWER(image_name) LIKE ?', ['%' . $search . '%']);
             });
         }
-        $total = (clone $q)->count();
-        $rows = $q->orderBy('name','asc')->offset($start)->limit($length)->get();
 
+        // Filtered record count
+        $filteredRecords = (clone $q)->count();
+
+        // Apply sorting, pagination
+        $rows = $q->orderBy('name', 'asc')
+            ->offset($start)
+            ->limit($length)
+            ->get();
+
+        // Format data for DataTables
         $data = [];
         foreach ($rows as $r) {
             $editUrl = route('media.edit', $r->id);
             $checkbox = '<input type="checkbox" id="is_open_'.$r->id.'" name="record" class="is_open" dataId="'.$r->id.'"><label class="col-3 control-label" for="is_open_'.$r->id.'"></label>';
-            $img = $r->image_path ? '<img src="'.e($r->image_path).'" style="width:70px;height:70px;border-radius:5px;" onerror="this.onerror=null;this.src=\'' . asset('images/placeholder.png') . '\'">' : '';
-            $info = $img . '<a href="'.$editUrl.'">'.e($r->name ?: 'UNKNOWN').'</a>';
-            $slug = e($r->slug ?: '');
-            $actions = '<span class="action-btn"><a href="'.$editUrl.'" class="link-td"><i class="mdi mdi-lead-pencil" title="Edit"></i></a> '
-                     . '<a href="javascript:void(0)" class="delete-btn" data-id="'.$r->id.'"><i class="mdi mdi-delete" title="Delete"></i></a></span>';
-            $data[] = [ $checkbox, $info, $slug, $actions ];
-        }
-        return response()->json(['draw'=>$draw,'recordsTotal'=>$total,'recordsFiltered'=>$total,'data'=>$data]);
-    }
 
+            $img = $r->image_path
+                ? '<img src="'.e($r->image_path).'" style="width:70px;height:70px;border-radius:5px;" onerror="this.onerror=null;this.src=\'' . asset('images/placeholder.png') . '\'">'
+                : '<img src="' . asset('images/placeholder.png') . '" style="width:70px;height:70px;border-radius:5px;">';
+
+            $info = $img . ' <a href="'.$editUrl.'">'.e($r->name ?: 'UNKNOWN').'</a>';
+            $slug = e($r->slug ?: '');
+            $actions = '<span class="action-btn">'
+                . '<a href="'.$editUrl.'" class="link-td"><i class="mdi mdi-lead-pencil" title="Edit"></i></a> '
+                . '<a href="javascript:void(0)" class="delete-btn" data-id="'.$r->id.'"><i class="mdi mdi-delete" title="Delete"></i></a>'
+                . '</span>';
+
+            $data[] = [$checkbox, $info, $slug, $actions];
+        }
+
+        return response()->json([
+            'draw' => $draw,
+            'recordsTotal' => $totalRecords,
+            'recordsFiltered' => $filteredRecords,
+            'data' => $data,
+            'stats' => [
+                'total' => $totalRecords,
+                'filtered' => $filteredRecords
+            ]
+        ]);
+    }
     public function json($id)
     {
         $rec = DB::table('media')->where('id',$id)->first();
@@ -80,7 +114,7 @@ class MediaController extends Controller
         $slug = $request->input('slug') ?: Str::slug('media-'.$request->input('name'));
 
         $path = $request->file('image')->store('public/media');
-        $url = Storage::url($path);
+        $url = asset('storage/' . str_replace('public/', '', $path));
         $imageName = basename($path);
 
         MediaModel::create([
@@ -92,6 +126,9 @@ class MediaController extends Controller
             'created_at' => $now,
             'updated_at' => $now,
         ]);
+
+        // Log activity
+        \Log::info('✅ Media created:', ['id' => $id, 'name' => $request->input('name')]);
 
         return response()->json(['success'=>true,'id'=>$id]);
     }
@@ -112,28 +149,46 @@ class MediaController extends Controller
         ];
         if ($request->hasFile('image')) {
             $path = $request->file('image')->store('public/media');
-            $url = Storage::url($path);
+            $url = asset('storage/' . str_replace('public/', '', $path));
             $imageName = basename($path);
             $data['image_name'] = $imageName;
             $data['image_path'] = $url;
         }
         $rec->update($data);
+
+        // Log activity
+        \Log::info('✅ Media updated:', ['id' => $id, 'name' => $request->input('name')]);
+
         return response()->json(['success'=>true]);
     }
 
     public function destroy($id)
     {
         $rec = MediaModel::find($id);
-        if(!$rec) return response()->json(['success'=>false],404);
+        if(!$rec) {
+            \Log::error('❌ Media not found for deletion:', ['id' => $id]);
+            return response()->json(['success'=>false, 'message'=>'Media not found'], 404);
+        }
+
+        $name = $rec->name;
         $rec->delete();
-        return response()->json(['success'=>true]);
+
+        // Log activity
+        \Log::info('✅ Media deleted:', ['id' => $id, 'name' => $name]);
+
+        return response()->json(['success'=>true, 'message'=>'Media deleted successfully']);
     }
 
     public function bulkDelete(Request $request)
     {
         $ids = (array) $request->input('ids', []);
         if (empty($ids)) return response()->json(['success'=>false,'message'=>'No ids'],400);
-        MediaModel::whereIn('id',$ids)->delete();
-        return response()->json(['success'=>true]);
+
+        $count = MediaModel::whereIn('id',$ids)->delete();
+
+        // Log activity
+        \Log::info('✅ Media bulk deleted:', ['count' => $count, 'ids' => $ids]);
+
+        return response()->json(['success'=>true, 'message'=>$count.' media items deleted successfully', 'count'=>$count]);
     }
 }

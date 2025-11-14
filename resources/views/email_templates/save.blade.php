@@ -87,11 +87,19 @@
                 });
                 $(document).ready(function () {
                     if (requestId != '') {
+                        console.log('🔄 Loading email template data for ID:', requestId);
                         jQuery("#data-table_processing").show();
+
                         $.get('{{ route('email-templates.json', ['id'=>':id']) }}'.replace(':id', id), function (data) {
+                            console.log('✅ Email template data loaded:', data);
+
                             $("#subject").val(data.subject || '');
                             $('#message').summernote("code", data.message || '');
-                            if (data.isSendToAdmin) { $("#is_send_to_admin").prop('checked', true); }
+
+                            if (data.isSendToAdmin || data.isSendToAdmin == 1 || data.isSendToAdmin == '1') {
+                                $("#is_send_to_admin").prop('checked', true);
+                            }
+
                             var type = '';
                             if (data.type == "new_order_placed") {
                                 type = "{{trans('lang.new_order_placed')}}";
@@ -103,9 +111,20 @@
                                 type = "{{trans('lang.payout_request_status')}}";
                             } else if (data.type == "wallet_topup") {
                                 type = "{{trans('lang.wallet_topup')}}";
+                            } else {
+                                type = data.type || '';
                             }
                             $('#type').val(type);
-                        }).always(function(){ jQuery("#data-table_processing").hide(); });
+
+                            console.log('📝 Form populated:', { subject: data.subject, type: type });
+                        })
+                        .fail(function(xhr, status, error) {
+                            console.error('❌ Failed to load email template:', xhr);
+                            $(".error_top").show().html('<p>Failed to load template data ('+xhr.status+'): '+error+'</p>');
+                        })
+                        .always(function(){
+                            jQuery("#data-table_processing").hide();
+                        });
                     }
                 });
                 $(".edit-setting-btn").click(async function () {
@@ -114,6 +133,9 @@
                     var subject = $("#subject").val();
                     var message = $('#message').summernote('code');
                     var isSendToAdmin = $("#is_send_to_admin").is(":checked");
+
+                    console.log('💾 Saving email template:', { subject: subject, isSendToAdmin: isSendToAdmin });
+
                     if (subject == "") {
                         $(".error_top").show();
                         $(".error_top").html("");
@@ -131,9 +153,33 @@
                         fd.append('subject', subject);
                         fd.append('message', message);
                         fd.append('isSendToAdmin', isSendToAdmin ? 1 : 0);
-                        $.ajax({ url: '{{ url('email-templates') }}' + '/' + id, method: 'POST', data: fd, processData: false, contentType: false, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-                            .done(function(){ window.location.href = '{{ route('email-templates.index') }}'; })
-                            .fail(function(xhr){ $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>'); window.scrollTo(0,0); });
+
+                        jQuery("#data-table_processing").show();
+
+                        $.ajax({
+                            url: '{{ route('email-templates.update', ['id'=>':id']) }}'.replace(':id', id),
+                            method: 'POST',
+                            data: fd,
+                            processData: false,
+                            contentType: false,
+                            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                        })
+                        .done(function(response){
+                            console.log('✅ Email template updated:', response);
+
+                            // Log activity
+                            if (typeof logActivity === 'function') {
+                                logActivity('email_templates', 'updated', 'Updated email template: ' + subject);
+                            }
+
+                            window.location.href = '{{ route('email-templates.index') }}';
+                        })
+                        .fail(function(xhr){
+                            console.error('❌ Update failed:', xhr);
+                            jQuery("#data-table_processing").hide();
+                            $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>');
+                            window.scrollTo(0,0);
+                        });
                     }
                 });
             </script>

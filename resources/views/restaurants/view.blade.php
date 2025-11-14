@@ -661,6 +661,51 @@
     var commisionModel=false;
     var AdminCommission='';
     var subscriptionModel=false;
+    var subscriptionPlans = [];
+    var currentRestaurant = null;
+
+    function parseIsoDate(value) {
+        if (!value) {
+            return null;
+        }
+        if (typeof value === 'string') {
+            var cleaned = value.replace(/"/g, '');
+            var parsed = new Date(cleaned);
+            if (!isNaN(parsed.getTime())) {
+                return parsed;
+            }
+        } else if (typeof value === 'object' && value !== null) {
+            if (value.seconds !== undefined) {
+                return new Date(value.seconds * 1000);
+            }
+        }
+        return null;
+    }
+
+    function normalizePlan(plan) {
+        var clone = Object.assign({}, plan);
+        if (typeof clone.plan_points === 'string') {
+            try {
+                clone.plan_points = JSON.parse(clone.plan_points);
+            } catch (e) {
+                clone.plan_points = [];
+            }
+        } else if (!Array.isArray(clone.plan_points)) {
+            clone.plan_points = Array.isArray(clone.planPoints) ? clone.planPoints : (clone.planPoints ? [clone.planPoints] : []);
+        }
+
+        if (typeof clone.features === 'string') {
+            try {
+                clone.features = JSON.parse(clone.features);
+            } catch (e) {
+                clone.features = {};
+            }
+        } else if (!clone.features || typeof clone.features !== 'object') {
+            clone.features = {};
+        }
+
+        return clone;
+    }
 
     // Load placeholder image from SQL
     placeholderImage = '{{ asset('images/placeholder.png') }}';
@@ -854,6 +899,7 @@
                 jQuery("#data-table_processing").hide();
                 if(response.success && response.data) {
                     var restaurant = response.data;
+                currentRestaurant = restaurant;
                 vendorAuthor=restaurant.author;
                 $(".restaurant_name").text(restaurant.title);
                 var rating=0;
@@ -929,36 +975,60 @@
                         $(".vendor_avtive").text("Open").removeClass("red").addClass("green");
                     }
                 }
-                if(restaurant.hasOwnProperty('subscriptionExpiryDate')&&restaurant.hasOwnProperty('subscriptionPlanId')&&restaurant.subscriptionPlanId!=''&&restaurant.subscriptionPlanId!=null) {
-                    $(".update-limit-div").show();
-                    $(".plan_name").html(restaurant.subscription_plan.name);
-                    $(".plan_type").html(restaurant.subscription_plan.type);
-                    if(restaurant.subscriptionExpiryDate!=null&&restaurant.subscriptionExpiryDate!='') {
-                        date=restaurant.subscriptionExpiryDate.toDate().toDateString();
-                        time=restaurant.subscriptionExpiryDate.toDate().toLocaleTimeString('en-US');
-                        $(".plan_expire_at").html(date+' '+time);
-                        $(".plan_expire_date").html(date);
-                    } else {
-                        $(".plan_expire_at").html("{{trans('lang.unlimited')}}");
-                        $(".plan_expire_date").html("{{trans('lang.unlimited')}}");
+                if(restaurant.hasOwnProperty('subscriptionPlanId') && restaurant.subscriptionPlanId !== '' && restaurant.subscriptionPlanId !== null) {
+                    var activePlan = restaurant.subscription_plan;
+                    if (typeof activePlan === 'string') {
+                        try {
+                            activePlan = JSON.parse(activePlan);
+                        } catch (e) {
+                            activePlan = null;
+                        }
                     }
-                    var number_of_days=restaurant.subscription_plan.expiryDay=="-1"? 'Unlimited':restaurant.subscription_plan.expiryDay+" Days";
-                    $(".number_of_days").html(number_of_days);
-                    if(currencyAtRight) {
-                        $(".plan_price").html(parseFloat(restaurant.subscription_plan.price).toFixed(decimal_degits)+currentCurrency);
-                    } else {
-                        $(".plan_price").html(currentCurrency+parseFloat(restaurant.subscription_plan.price).toFixed(decimal_degits));
-                    }
-                    $('.order_limit').html((restaurant.subscription_plan.orderLimit=='-1')? "{{trans('lang.unlimited')}}":restaurant.subscription_plan.orderLimit);
-                    $('.item_limit').html((restaurant.subscription_plan.itemLimit=='-1')? "{{trans('lang.unlimited')}}":restaurant.subscription_plan.itemLimit);
-                    if(restaurant.subscription_plan.hasOwnProperty('features')) {
+                    if (activePlan && typeof activePlan === 'object') {
+                        $(".update-limit-div").show();
+                        $(".plan_name").html(activePlan.name || 'N/A');
+                        $(".plan_type").html(activePlan.type || 'N/A');
+
+                        var expiryDateObject = parseIsoDate(restaurant.subscriptionExpiryDate);
+                        if (expiryDateObject) {
+                            var formattedDate = expiryDateObject.toDateString();
+                            var formattedTime = expiryDateObject.toLocaleTimeString('en-US');
+                            $(".plan_expire_at").html(formattedDate + ' ' + formattedTime);
+                            $(".plan_expire_date").html(formattedDate);
+                        } else {
+                            $(".plan_expire_at").html("{{trans('lang.unlimited')}}");
+                            $(".plan_expire_date").html("{{trans('lang.unlimited')}}");
+                        }
+
+                        var number_of_days = (activePlan.expiryDay == "-1" || activePlan.expiryDay === -1) ? 'Unlimited' : (activePlan.expiryDay + " Days");
+                        $(".number_of_days").html(number_of_days);
+
+                        if (currencyAtRight) {
+                            $(".plan_price").html(parseFloat(activePlan.price || 0).toFixed(decimal_degits) + currentCurrency);
+                        } else {
+                            $(".plan_price").html(currentCurrency + parseFloat(activePlan.price || 0).toFixed(decimal_degits));
+                        }
+
+                        var orderLimitDisplay = (activePlan.orderLimit == '-1' || activePlan.orderLimit === -1) ? "{{trans('lang.unlimited')}}" : activePlan.orderLimit;
+                        var itemLimitDisplay = (activePlan.itemLimit == '-1' || activePlan.itemLimit === -1) ? "{{trans('lang.unlimited')}}" : activePlan.itemLimit;
+                        $('.order_limit').html(orderLimitDisplay);
+                        $('.item_limit').html(itemLimitDisplay);
+
+                    if(activePlan.hasOwnProperty('features')) {
+                        if (typeof activePlan.features === 'string') {
+                            try {
+                                activePlan.features = JSON.parse(activePlan.features);
+                            } catch (e) {
+                                activePlan.features = {};
+                            }
+                        }
                         const translations={
                             chatingOption: "{{ trans('lang.chat') }}",
                             dineInOption: "{{ trans('lang.dine_in') }}",
                             generateQrCode: "{{ trans('lang.generate_qr_code') }}",
                             mobileAppAccess: "{{ trans('lang.mobile_app') }}"
                         };
-                        var features=restaurant.subscription_plan.features;
+                        var features=activePlan.features;
                         var html=`<ul class="pricing-card-list text-dark-2">
                                             ${features.chat? `<li>${translations.chatingOption}</li>`:''}
                                             ${features.dineIn? `<li>${translations.dineInOption}</li>`:''}
@@ -966,6 +1036,17 @@
                                             ${features.restaurantMobileApp? `<li>${translations.mobileAppAccess}</li>`:''}
                                     </ul>`;
                         $('.plan_features').html(html);
+                        }
+                    } else {
+                        $(".plan_name").html('No Active Plan');
+                        $(".plan_type").html('N/A');
+                        $(".plan_expire_at").html('N/A');
+                        $(".plan_expire_date").html('N/A');
+                        $(".number_of_days").html('N/A');
+                        $(".plan_price").html('N/A');
+                        $(".order_limit").html('N/A');
+                        $(".item_limit").html('N/A');
+                        $(".plan_features").html('N/A');
                     }
                 } else {
                     $(".plan_name").html('No Active Plan');
@@ -1243,34 +1324,6 @@
             });
         })
     })
-    var storageRef=firebase.storage().ref('images');
-    function handleFileSelect(evt) {
-        var f=evt.target.files[0];
-        var reader=new FileReader();
-        reader.onload=(function(theFile) {
-            return function(e) {
-                var filePayload=e.target.result;
-                var val=f.name;
-                var ext=val.split('.')[1];
-                var docName=val.split('fakepath')[1];
-                var filename=(f.name).replace(/C:\\fakepath\\/i,'')
-                var timestamp=Number(new Date());
-                var uploadTask=storageRef.child(filename).put(theFile);
-                uploadTask.on('state_changed',function(snapshot) {
-                    var progress=(snapshot.bytesTransferred/snapshot.totalBytes)*100;
-                    console.log('Upload is '+progress+'% done');
-                    jQuery("#uploding_image").text("Image is uploading...");
-                },function(error) {
-                },function() {
-                    uploadTask.snapshot.ref.getDownloadURL().then(function(downloadURL) {
-                        jQuery("#uploding_image").text("Upload is completed");
-                        photo=downloadURL;
-                    });
-                });
-            };
-        })(f);
-        reader.readAsDataURL(f);
-    }
     async function getStoreNameFunction(vendorId) {
         var vendorName = '';
         return $.ajax({
@@ -1307,141 +1360,151 @@
     $("#checkoutSubscriptionModal").on('hide.bs.modal',function() {
         $("#plan-details").html('');
     });
-    async function getSubscriptionPlan() {
-        var activeSubscriptionId='';
-        var snapshots=await database.collection('subscription_history').where('user_id','==',vendorAuthor).orderBy('createdAt','desc').get();
-        if(snapshots.docs.length>0) {
-            var data=snapshots.docs[0].data();
-            activeSubscriptionId=data.subscription_plan.id;
-        }
-        database.collection('subscription_plans').where('isEnable','==',true).get().then(async function(snapshots) {
-            let plans=[];
-            snapshots.docs.map(doc => {
-                let data=doc.data();
-                plans.push({
-                    ...data
-                }); // Include document ID if needed
-            });
-            plans.sort((a,b) => a.place-b.place);
-            var html='';
-            plans.map(async (data) => {
-                var activeClass=(data.id==activeSubscriptionId)? '<span class="badge badge-success">{{trans("lang.active")}}</span>':'';
-                if(data.id=="J0RwvxCWhZzQQD7Kc2Ll") {
-                    if(commisionModel) {
-                        commissionData=data;
-                        planId=data.id;
-                        html+=`<div class="col-md-3 mb-3 pricing-card pricing-card-commission">
-                                    <div class="pricing-card-inner">
-                                        <div class="pricing-card-top">
-                                            <div class="d-flex align-items-center pb-4">
-                                                <span class="pricing-card-icon mr-4"><img src="${data.image}"></span>
-                                            </div>
-                                            <div class="pricing-card-price">
-                                                <h3 class="text-dark-2">${data.name} ${activeClass}</h3>
-                                                <span class="price-day">${AdminCommission} {{ trans('lang.commision_per_order') }}</span>
-                                            </div>
+    function renderSubscriptionPlans(plans, activeSubscriptionId) {
+        var html = '';
+        plans.forEach(function(plan) {
+            var normalizedPlan = normalizePlan(plan);
+            var activeBadge = (normalizedPlan.id == activeSubscriptionId) ? '<span class="badge badge-success">{{trans("lang.active")}}</span>' : '';
+            if (normalizedPlan.id === "J0RwvxCWhZzQQD7Kc2Ll") {
+                if (commisionModel) {
+                    var planPoints = Array.isArray(normalizedPlan.plan_points) ? normalizedPlan.plan_points : [];
+                    html += `<div class="col-md-3 mb-3 pricing-card pricing-card-commission">
+                                <div class="pricing-card-inner">
+                                    <div class="pricing-card-top">
+                                        <div class="d-flex align-items-center pb-4">
+                                            <span class="pricing-card-icon mr-4"><img src="${normalizedPlan.image || ''}"></span>
                                         </div>
-                                        <div class="pricing-card-content pt-3 mt-3 border-top">
-                                            <ul class="pricing-card-list text-dark-2">`;
-                        html+=`<li><span class="mdi mdi-check"></span>{{trans('lang.pay_commission_of')}} ${AdminCommission} {{trans('lang.on_each_order')}} </li>`
-                        data.plan_points.map(async (list) => {
-                            html+=`<li><span class="mdi mdi-check"></span>${list}</li>`
-                        });
-                        html+=`<li><span class="mdi mdi-check"></span>{{ trans('lang.unlimited') }} {{ trans('lang.orders') }}</li>`
-                        html+=`<li><span class="mdi mdi-check"></span>{{ trans('lang.unlimited') }} {{ trans('lang.products') }}</li>`
-                        html+=`</ul>
-                                        </div>`;
-                        var buttonText=(activeClass=='')?
-                                    "{{ trans('lang.select_plan') }}":
-                                    "{{ trans('lang.renew_plan') }}";
-
-                        html+=`<div class="pricing-card-btm">
-                                            <a href="javascript:void(0)" onClick="chooseSubscriptionPlan('${data.id}')" class="btn rounded-full active-btn btn-primary">${buttonText}</a>
-                                        </div>`;
-
-                        html+=`</div>
-                        </div>`;
-                    }
-                } else {
-                    if(subscriptionModel) {
-                        const translations={
-                            chatingOption: "{{ trans('lang.chating_option') }}",
-                            dineInOption: "{{ trans('lang.dinein_option') }}",
-                            generateQrCode: "{{ trans('lang.generate_qr_code') }}",
-                            mobileAppAccess: "{{ trans('lang.mobile_app_access') }}"
-                        };
-                        var features=data.features;
-                        var buttonText=(activeClass=='')?
-                                    "{{ trans('lang.select_plan') }}":
-                                    "{{ trans('lang.renew_plan') }}";
-
-                        html+=`<div class="col-md-3 mt-2 pricing-card pricing-card-subscription ${data.name}">
+                                        <div class="pricing-card-price">
+                                            <h3 class="text-dark-2">${normalizedPlan.name || ''} ${activeBadge}</h3>
+                                            <span class="price-day">${AdminCommission} {{ trans('lang.commision_per_order') }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="pricing-card-content pt-3 mt-3 border-top">
+                                        <ul class="pricing-card-list text-dark-2">
+                                            <li><span class="mdi mdi-check"></span>{{trans('lang.pay_commission_of')}} ${AdminCommission} {{trans('lang.on_each_order')}} </li>
+                                            ${planPoints.map(point => `<li><span class="mdi mdi-check"></span>${point}</li>`).join('')}
+                                            <li><span class="mdi mdi-check"></span>{{ trans('lang.unlimited') }} {{ trans('lang.orders') }}</li>
+                                            <li><span class="mdi mdi-check"></span>{{ trans('lang.unlimited') }} {{ trans('lang.products') }}</li>
+                                        </ul>
+                                    </div>
+                                    <div class="pricing-card-btm">
+                                        <a href="javascript:void(0)" onClick="chooseSubscriptionPlan('${normalizedPlan.id}')" class="btn rounded-full active-btn btn-primary">${activeBadge ? "{{ trans('lang.renew_plan') }}" : "{{ trans('lang.select_plan') }}"}</a>
+                                    </div>
+                                </div>
+                            </div>`;
+                }
+            } else if (subscriptionModel) {
+                var features = normalizedPlan.features || {};
+                var translations = {
+                    chatingOption: "{{ trans('lang.chating_option') }}",
+                    dineInOption: "{{ trans('lang.dinein_option') }}",
+                    generateQrCode: "{{ trans('lang.generate_qr_code') }}",
+                    mobileAppAccess: "{{ trans('lang.mobile_app_access') }}"
+                };
+                var priceText = currencyAtRight ? parseFloat(normalizedPlan.price || 0).toFixed(decimal_degits) + currentCurrency : currentCurrency + parseFloat(normalizedPlan.price || 0).toFixed(decimal_degits);
+                var expiryLabel = (normalizedPlan.expiryDay == -1 || normalizedPlan.expiryDay == "-1") ? "{{ trans('lang.unlimited') }}" : normalizedPlan.expiryDay + " Days";
+                html += `<div class="col-md-3 mt-2 pricing-card pricing-card-subscription ${normalizedPlan.name || ''}">
                             <div class="pricing-card-inner">
                                 <div class="pricing-card-top">
-                                <div class="d-flex align-items-center pb-4">
-                                    <span class="pricing-card-icon mr-4"><img src="${data.image}"></span>
-                                    <h2 class="text-dark-2">${data.name} ${activeClass}</h2>
-                                </div>
-                                <p class="text-muted">${data.description}</p>
-                                <div class="pricing-card-price">
-                                    <h3 class="text-dark-2">${currencyAtRight? parseFloat(data.price).toFixed(decimal_degits)+currentCurrency:currentCurrency+parseFloat(data.price).toFixed(decimal_degits)}</h3>
-                                    <span class="price-day">${data.expiryDay==-1? "{{ trans('lang.unlimited') }}":data.expiryDay} Days</span>
-                                </div>
+                                    <div class="d-flex align-items-center pb-4">
+                                        <span class="pricing-card-icon mr-4"><img src="${normalizedPlan.image || ''}"></span>
+                                        <h2 class="text-dark-2">${normalizedPlan.name || ''} ${activeBadge}</h2>
+                                    </div>
+                                    <p class="text-muted">${normalizedPlan.description || ''}</p>
+                                    <div class="pricing-card-price">
+                                        <h3 class="text-dark-2">${priceText}</h3>
+                                        <span class="price-day">${expiryLabel}</span>
+                                    </div>
                                 </div>
                                 <div class="pricing-card-content pt-3 mt-3 border-top">
-                                <ul class="pricing-card-list text-dark-2">
-                                    ${features.chat? `<li><span class="mdi mdi-check"></span>${translations.chatingOption}</li>`:`<li><span class="mdi mdi-close"></span>${translations.chatingOption}</li>`}
-                                    ${features.dineIn? `<li><span class="mdi mdi-check"></span>${translations.dineInOption}</li>`:`<li><span class="mdi mdi-close"></span>${translations.dineInOption}</li>`}
-                                    ${features.qrCodeGenerate? `<li><span class="mdi mdi-check"></span>${translations.generateQrCode}</li>`:`<li><span class="mdi mdi-close"></span>${translations.generateQrCode}</li>`}
-                                    ${features.restaurantMobileApp? `<li><span class="mdi mdi-check"></span>${translations.mobileAppAccess}</li>`:`<li><span class="mdi mdi-close"></span>${translations.mobileAppAccess}</li>`}
-                                    <li><span class="mdi mdi-check"></span>${data.orderLimit==-1? "{{ trans('lang.unlimited') }}":data.orderLimit} {{ trans('lang.orders') }}</li>
-                                    <li><span class="mdi mdi-check"></span>${data.itemLimit==-1? "{{ trans('lang.unlimited') }}":data.itemLimit} {{ trans('lang.products') }}</li>
-                                </ul>
-                                </div>`;
-
-                            html+=`<div class="pricing-card-btm">
-                                        <a href="javascript:void(0)" onClick="chooseSubscriptionPlan('${data.id}')" class="btn rounded-full">${buttonText}</a>
-                                    </div>`;
-
-                        html+=`</div>
+                                    <ul class="pricing-card-list text-dark-2">
+                                        ${(features.chat ? `<li><span class="mdi mdi-check"></span>${translations.chatingOption}</li>` : `<li><span class="mdi mdi-close"></span>${translations.chatingOption}</li>`)}
+                                        ${(features.dineIn ? `<li><span class="mdi mdi-check"></span>${translations.dineInOption}</li>` : `<li><span class="mdi mdi-close"></span>${translations.dineInOption}</li>`)}
+                                        ${(features.qrCodeGenerate ? `<li><span class="mdi mdi-check"></span>${translations.generateQrCode}</li>` : `<li><span class="mdi mdi-close"></span>${translations.generateQrCode}</li>`)}
+                                        ${(features.restaurantMobileApp ? `<li><span class="mdi mdi-check"></span>${translations.mobileAppAccess}</li>` : `<li><span class="mdi mdi-close"></span>${translations.mobileAppAccess}</li>`)}
+                                        <li><span class="mdi mdi-check"></span>${(normalizedPlan.orderLimit == -1 || normalizedPlan.orderLimit == '-1') ? "{{ trans('lang.unlimited') }}" : normalizedPlan.orderLimit} {{ trans('lang.orders') }}</li>
+                                        <li><span class="mdi mdi-check"></span>${(normalizedPlan.itemLimit == -1 || normalizedPlan.itemLimit == '-1') ? "{{ trans('lang.unlimited') }}" : normalizedPlan.itemLimit} {{ trans('lang.products') }}</li>
+                                    </ul>
+                                </div>
+                                <div class="pricing-card-btm">
+                                    <a href="javascript:void(0)" onClick="chooseSubscriptionPlan('${normalizedPlan.id}')" class="btn rounded-full">${activeBadge ? "{{ trans('lang.renew_plan') }}" : "{{ trans('lang.select_plan') }}"}</a>
+                                </div>
+                            </div>
                         </div>`;
-                    }
+            }
+        });
+        if (html === '') {
+            html = '<div class="col-12"><p class="mb-0">{{ trans('lang.no_record_found') }}</p></div>';
+        }
+        $('#default-plan').html(html);
+    }
+
+    function getSubscriptionPlan() {
+        var activeSubscriptionId = '';
+        if (currentRestaurant && currentRestaurant.subscriptionPlanId) {
+            activeSubscriptionId = currentRestaurant.subscriptionPlanId;
+        }
+        $('#default-plan').html('<div class="col-12"><p class="mb-0">{{ trans('lang.loading') }}...</p></div>');
+        $.ajax({
+            url: '{{ route("api.subscription-plans") }}',
+            method: 'GET',
+            success: function(response) {
+                if (response.success && Array.isArray(response.data)) {
+                    subscriptionPlans = response.data.map(normalizePlan);
+                    subscriptionPlans.sort(function(a, b) {
+                        return (a.place || 0) - (b.place || 0);
+                    });
+                    renderSubscriptionPlans(subscriptionPlans, activeSubscriptionId);
+                } else {
+                    $('#default-plan').html('<div class="col-12"><p class="mb-0 text-danger">{{ trans('lang.no_record_found') }}</p></div>');
                 }
-            });
-            $('#default-plan').append(html);
+            },
+            error: function() {
+                $('#default-plan').html('<div class="col-12"><p class="mb-0 text-danger">{{ trans('lang.no_record_found') }}</p></div>');
+            }
         });
     }
-    async function showPlanDetail(planId) {
+
+    function showPlanDetail(planId) {
         $("#plan_id").val(planId);
-        var activePlan='';
-        var snapshots=await database.collection('subscription_history').where('user_id','==',vendorAuthor).orderBy('createdAt','desc').get();
-        if(snapshots.docs.length>0) {
-            var data=snapshots.docs[0].data();
-            activePlan=data.subscription_plan;
+        var selectedPlan = subscriptionPlans.find(function(plan) { return plan.id === planId; });
+        if (!selectedPlan) {
+            $("#plan-details").html('<div class="col-12"><p class="mb-0">{{ trans('lang.no_record_found') }}</p></div>');
+            return;
         }
-        var choosedPlan='';
-        var snapshot=await database.collection('subscription_plans').doc(planId).get();
-        if(snapshot.exists) {
-            choosedPlan=snapshot.data();
+        selectedPlan = normalizePlan(selectedPlan);
+
+        var activePlan = currentRestaurant && currentRestaurant.subscription_plan ? currentRestaurant.subscription_plan : null;
+        if (typeof activePlan === 'string') {
+            try {
+                activePlan = JSON.parse(activePlan);
+            } catch (e) {
+                activePlan = null;
+            }
         }
-        let html='';
-        let choosedPlan_price=currencyAtRight? parseFloat(choosedPlan.price).toFixed(decimal_degits)+currentCurrency
-            :currentCurrency+parseFloat(choosedPlan.price).toFixed(decimal_degits);
-        if(activePlan) {
-            let activePlan_price=currencyAtRight? parseFloat(activePlan.price).toFixed(decimal_degits)+currentCurrency
-                :currentCurrency+parseFloat(activePlan.price).toFixed(decimal_degits);
-            html+=`
+        if (activePlan) {
+            activePlan = normalizePlan(activePlan);
+        }
+
+        var selectedPrice = currencyAtRight ? parseFloat(selectedPlan.price || 0).toFixed(decimal_degits) + currentCurrency : currentCurrency + parseFloat(selectedPlan.price || 0).toFixed(decimal_degits);
+        var selectedExpiry = (selectedPlan.expiryDay == -1 || selectedPlan.expiryDay == '-1') ? "{{ trans('lang.unlimited') }}" : selectedPlan.expiryDay + " {{ trans('lang.days') }}";
+
+        var html = '';
+        if (activePlan) {
+            var activePrice = currencyAtRight ? parseFloat(activePlan.price || 0).toFixed(decimal_degits) + currentCurrency : currentCurrency + parseFloat(activePlan.price || 0).toFixed(decimal_degits);
+            var activeExpiry = (activePlan.expiryDay == -1 || activePlan.expiryDay == '-1') ? "{{ trans('lang.unlimited') }}" : activePlan.expiryDay + " {{ trans('lang.days') }}";
+            html += `
             <div class="col-md-8">
                 <div class="subscription-card-left">
                     <div class="row align-items-center">
                         <div class="col-md-5">
                             <div class="subscription-card text-center">
                                 <div class="d-flex align-items-center pb-3 justify-content-center">
-                                    <span class="pricing-card-icon mr-4"><img src="${activePlan.image}"></span>
-                                    <h2 class="text-dark-2 mb-0 font-weight-semibold">${activePlan.id=="J0RwvxCWhZzQQD7Kc2Ll"? "{{ trans('lang.commission') }}":activePlan.name}</h2>
+                                    <span class="pricing-card-icon mr-4"><img src="${activePlan.image || ''}"></span>
+                                    <h2 class="text-dark-2 mb-0 font-weight-semibold">${activePlan.id=="J0RwvxCWhZzQQD7Kc2Ll"? "{{ trans('lang.commission') }}":(activePlan.name || '')}</h2>
                                 </div>
-                                <h3 class="text-dark-2">${activePlan.id=="J0RwvxCWhZzQQD7Kc2Ll"? AdminCommission+" {{ trans('lang.base_plan') }}":activePlan_price}</h3>
-                                <p class="text-center">${activePlan.id=="J0RwvxCWhZzQQD7Kc2Ll"? "Free":activePlan.expiryDay==-1? "{{ trans('lang.unlimited') }}":activePlan.expiryDay+" Days"}</p>
+                                <h3 class="text-dark-2">${activePlan.id=="J0RwvxCWhZzQQD7Kc2Ll"? AdminCommission+" {{ trans('lang.base_plan') }}":activePrice}</h3>
+                                <p class="text-center">${activePlan.id=="J0RwvxCWhZzQQD7Kc2Ll"? "Free":activeExpiry}</p>
                             </div>
                         </div>
                         <div class="col-md-2 text-center">
@@ -1450,12 +1513,12 @@
                         <div class="col-md-5">
                             <div class="subscription-card text-center">
                                 <div class="d-flex align-items-center pb-3 justify-content-center">
-                                    <span class="pricing-card-icon mr-4"><img src="${choosedPlan.image}"></span>
-                                    <h2 class="text-dark-2 mb-0 font-weight-semibold">${choosedPlan.name}
+                                    <span class="pricing-card-icon mr-4"><img src="${selectedPlan.image || ''}"></span>
+                                    <h2 class="text-dark-2 mb-0 font-weight-semibold">${selectedPlan.name || ''}
                                     </h2>
                                 </div>
-                                <h3 class="text-dark-2">${choosedPlan_price}</h3>
-                                <p class="text-center">${choosedPlan.expiryDay=="-1"? "{{ trans('lang.unlimited') }}":choosedPlan.expiryDay+" {{ trans('lang.days') }}"}</p>
+                                <h3 class="text-dark-2">${selectedPrice}</h3>
+                                <p class="text-center">${selectedExpiry}</p>
                             </div>
                         </div>
                     </div>
@@ -1466,12 +1529,12 @@
                     <div
                         class="d-flex justify-content-between align-items-center py-3 px-3 text-dark-2">
                         <span class="font-weight-medium">{{ trans('lang.validity') }}</span>
-                        <span class="font-weight-semibold">${choosedPlan.expiryDay=="-1"? "{{ trans('lang.unlimited') }}":choosedPlan.expiryDay+" {{ trans('lang.days') }}"}</span>
+                        <span class="font-weight-semibold">${selectedExpiry}</span>
                     </div>
                     <div
                         class="d-flex justify-content-between align-items-center py-3 px-3 text-dark-2">
                         <span class="font-weight-medium">{{ trans('lang.price') }}</span>
-                        <span class="font-weight-semibold">${choosedPlan_price}</span>
+                        <span class="font-weight-semibold">${selectedPrice}</span>
                     </div>
                     <div
                         class="d-flex justify-content-between align-items-center py-3 px-3 text-dark-2">
@@ -1488,12 +1551,12 @@
                         <div class="col-md-12">
                             <div class="subscription-card text-center">
                                 <div class="d-flex align-items-center pb-3 justify-content-center">
-                                    <span class="pricing-card-icon mr-4"><img src="${choosedPlan.image}"></span>
-                                    <h2 class="text-dark-2 mb-0 font-weight-semibold">${choosedPlan.name}
+                                    <span class="pricing-card-icon mr-4"><img src="${selectedPlan.image || ''}"></span>
+                                    <h2 class="text-dark-2 mb-0 font-weight-semibold">${selectedPlan.name || ''}
                                     </h2>
                                 </div>
-                                <h3 class="text-dark-2">${choosedPlan_price}</h3>
-                                <p class="text-center">${choosedPlan.id=="J0RwvxCWhZzQQD7Kc2Ll"? "Free":choosedPlan.expiryDay=="-1"? "{{ trans('lang.unlimited') }}":choosedPlan.expiryDay+" {{ trans('lang.days') }}"}</p>
+                                <h3 class="text-dark-2">${selectedPrice}</h3>
+                                <p class="text-center">${selectedPlan.id=="J0RwvxCWhZzQQD7Kc2Ll"? "Free":selectedExpiry}</p>
                             </div>
                         </div>
                     </div>
@@ -1504,12 +1567,12 @@
                     <div
                         class="d-flex justify-content-between align-items-center py-3 px-3 text-dark-2">
                         <span class="font-weight-medium">{{ trans('lang.validity') }}</span>
-                        <span class="font-weight-semibold">${choosedPlan.id=="J0RwvxCWhZzQQD7Kc2Ll"? "Unlimited":choosedPlan.expiryDay=="-1"? "{{ trans('lang.unlimited') }}":choosedPlan.expiryDay+" {{ trans('lang.days') }}"}</span>
+                        <span class="font-weight-semibold">${selectedPlan.id=="J0RwvxCWhZzQQD7Kc2Ll"? "Unlimited":selectedExpiry}</span>
                     </div>
                     <div
                         class="d-flex justify-content-between align-items-center py-3 px-3 text-dark-2">
                         <span class="font-weight-medium">{{ trans('lang.price') }}</span>
-                        <span class="font-weight-semibold">${choosedPlan_price}</span>
+                        <span class="font-weight-semibold">${selectedPrice}</span>
                     </div>
                     <div
                         class="d-flex justify-content-between align-items-center py-3 px-3 text-dark-2">
@@ -1526,46 +1589,39 @@
         $("#checkoutSubscriptionModal").modal('show');
         showPlanDetail(planId);
     }
-    async function finalCheckout() {
-        let planId=$("#plan_id").val();
-        if(planId!=undefined&&planId!=''&&planId!=null) {
-            var userId=vendorAuthor;
-            var vendorId=id;
-            var id_order=database.collection('tmp').doc().id;
-            var snapshot=await database.collection('subscription_plans').doc(planId).get();
-            if(snapshot.exists) {
-                var planData=snapshot.data();
-                var createdAt=firebase.firestore.FieldValue.serverTimestamp();
-                if(planData.expiryDay=="-1") {
-                    var expiryDay=null
-                } else {
-                    var currentDate=new Date();
-                    currentDate.setDate(currentDate.getDate()+parseInt(planData.expiryDay));
-                    var expiryDay=firebase.firestore.Timestamp.fromDate(currentDate);
-                }
-                database.collection('users').doc(userId).update({
-                    'subscription_plan': planData,
-                    'subscriptionPlanId': planId,
-                    'subscriptionExpiryDate': expiryDay
-                })
-                database.collection('vendors').doc(vendorId).update({
-                    'subscription_plan': planData,
-                    'subscriptionPlanId': planId,
-                    'subscriptionExpiryDate': expiryDay,
-                    'subscriptionTotalOrders':planData.orderLimit
-                });
-                database.collection('subscription_history').doc(id_order).set({
-                    'id': id_order,
-                    'user_id': userId,
-                    'expiry_date': expiryDay,
-                    'createdAt': createdAt,
-                    'subscription_plan': planData,
-                    'payment_type': "Manual Pay"
-                }).then(async function(snapshot) {
-                    window.location.reload();
-                })
-            }
+    function finalCheckout() {
+        let planId = $("#plan_id").val();
+        if (!planId) {
+            return;
         }
+        $("#checkoutSubscriptionModal").modal('hide');
+        jQuery("#data-table_processing").show();
+        $.ajax({
+            url: "{{ url('restaurants') }}/" + id + "/subscription",
+            method: "POST",
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            data: {
+                plan_id: planId
+            },
+            success: function(response) {
+                jQuery("#data-table_processing").hide();
+                if (response.success) {
+                    window.location.reload();
+                } else {
+                    alert(response.message || 'Unable to assign subscription.');
+                }
+            },
+            error: function(xhr) {
+                jQuery("#data-table_processing").hide();
+                var message = 'Unable to assign subscription.';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    message = xhr.responseJSON.message;
+                }
+                alert(message);
+            }
+        });
     }
     $('input[name="set_item_limit"]').on('change',function() {
 
@@ -1583,30 +1639,57 @@
         }
     });
      $("#updateLimitModal").on('shown.bs.modal',function() {
-            database.collection('users').where('id','==',vendorAuthor).get().then(async function(snapshot){
-                var data=snapshot.docs[0].data();
-                if(data.subscription_plan.itemLimit!='-1') {
-                    $("#limited_item").prop('checked',true);
-                    $('.item-limit-div').removeClass('d-none');
-                    $('#item_limit').val(data.subscription_plan.itemLimit);
-                } else {
-                    $("#unlimited_item").prop('checked',true);
+        $(".item_limit_err").html("");
+        $(".order_limit_err").html("");
+        if (currentRestaurant && currentRestaurant.subscription_plan) {
+            var planLimits = currentRestaurant.subscription_plan;
+            if (typeof planLimits === 'string') {
+                try {
+                    planLimits = JSON.parse(planLimits);
+                } catch (e) {
+                    planLimits = {};
                 }
-                if(data.subscription_plan.orderLimit!='-1') {
-                    $("#limited_order").prop('checked',true);
-                    $('.order-limit-div').removeClass('d-none');
-                    $('#order_limit').val(data.subscription_plan.orderLimit);
-                } else {
-                    $("#unlimited_order").prop('checked',true);
-                }
-            })
+            }
+            var itemLimit = (planLimits && planLimits.itemLimit !== undefined) ? planLimits.itemLimit : '-1';
+            var orderLimit = (planLimits && planLimits.orderLimit !== undefined) ? planLimits.orderLimit : '-1';
+
+            if (itemLimit != '-1') {
+                $("#limited_item").prop('checked', true);
+                $('.item-limit-div').removeClass('d-none');
+                $('#item_limit').val(itemLimit);
+            } else {
+                $("#unlimited_item").prop('checked', true);
+                $('.item-limit-div').addClass('d-none');
+                $('#item_limit').val('');
+            }
+
+            if (orderLimit != '-1') {
+                $("#limited_order").prop('checked', true);
+                $('.order-limit-div').removeClass('d-none');
+                $('#order_limit').val(orderLimit);
+            } else {
+                $("#unlimited_order").prop('checked', true);
+                $('.order-limit-div').addClass('d-none');
+                $('#order_limit').val('');
+            }
+        } else {
+            $("#unlimited_item").prop('checked', true);
+            $("#unlimited_order").prop('checked', true);
+            $('.item-limit-div').addClass('d-none');
+            $('.order-limit-div').addClass('d-none');
+            $('#item_limit').val('');
+            $('#order_limit').val('');
+        }
      })
-    $('.update-plan-limit').click(async function() {
+    $('.update-plan-limit').click(function() {
 
         var set_item_limit=$('input[name="set_item_limit"]:checked').val();
         var item_limit=(set_item_limit=='limited')? $('#item_limit').val():'-1';
         var set_order_limit=$('input[name="set_order_limit"]:checked').val();
         var order_limit=(set_order_limit=='limited')? $('#order_limit').val():'-1';
+
+        $(".item_limit_err").html("");
+        $(".order_limit_err").html("");
 
         if(set_item_limit=='limited'&&$('#item_limit').val()=='') {
             $(".item_limit_err").html("<p>{{ trans('lang.enter_item_limit') }}</p>");
@@ -1615,17 +1698,30 @@
             $(".order_limit_err").html("<p>{{ trans('lang.enter_order_limit') }}</p>");
             return false;
         } else {
-            await database.collection('users').doc(vendorAuthor).update({
-                'subscription_plan.orderLimit': order_limit,
-                'subscription_plan.itemLimit': item_limit,
-            }).then(async function(result) {
-                await database.collection('vendors').doc("{{$id}}").update({
-                    'subscription_plan.orderLimit': order_limit,
-                    'subscription_plan.itemLimit': item_limit,
-                    'subscriptionTotalOrders':order_limit
-                }).then(async function(result){
-                    window.location.reload();
-                })
+            $.ajax({
+                url: "{{ url('restaurants') }}/" + id + "/subscription-limits",
+                method: "POST",
+                headers: {
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                data: {
+                    order_limit: order_limit,
+                    item_limit: item_limit
+                },
+                success: function(response) {
+                    if (response.success) {
+                        window.location.reload();
+                    } else {
+                        $(".order_limit_err").html(`<p>${response.message || 'Unable to update limits.'}</p>`);
+                    }
+                },
+                error: function(xhr) {
+                    var message = 'Unable to update limits.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        message = xhr.responseJSON.message;
+                    }
+                    $(".order_limit_err").html(`<p>${message}</p>`);
+                }
             });
         }
     })

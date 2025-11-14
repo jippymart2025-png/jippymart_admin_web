@@ -45,9 +45,15 @@ class CouponController extends Controller
         $vendorId = (string) $request->input('vendorId','');
         $filterType = (string) $request->input('couponType','');
 
+        // Base query for total
+        $baseQ = DB::table('coupons');
+        $totalRecords = $baseQ->count();
+
+        // Filtered query
         $q = DB::table('coupons as c')
             ->leftJoin('vendors as v','v.id','=','c.resturant_id')
             ->select('c.*','v.title as vendorTitle','v.vType as vendorType');
+
         if ($vendorId !== '') {
             $q->where(function($qq) use ($vendorId){
                 $qq->where('c.resturant_id',$vendorId)->orWhere('c.resturant_id','ALL');
@@ -60,10 +66,13 @@ class CouponController extends Controller
             $q->where(function($qq) use ($search){
                 $qq->where('c.code','like','%'.$search.'%')
                    ->orWhere('c.description','like','%'.$search.'%')
-                   ->orWhere('v.title','like','%'.$search.'%');
+                   ->orWhere('v.title','like','%'.$search.'%')
+                   ->orWhere('c.cType','like','%'.$search.'%')
+                   ->orWhere('c.discount','like','%'.$search.'%');
             });
         }
-        $total = (clone $q)->count();
+
+        $filteredRecords = (clone $q)->count();
         $rows = $q->orderBy('c.expiresAt','desc')->offset($start)->limit($length)->get();
 
         $canDelete = in_array('coupons.delete', json_decode(@session('user_permissions'), true) ?: []);
@@ -93,7 +102,18 @@ class CouponController extends Controller
             } else {
                 $restaurant = e($r->vendorTitle ?: '');
             }
-            $expires = e($r->expiresAt ?: '');
+
+            // Format date like: Oct 19, 2025 11:27 PM
+            $expires = '';
+            if ($r->expiresAt) {
+                try {
+                    $date = new \DateTime($r->expiresAt);
+                    $expires = $date->format('M j, Y g:i A');
+                } catch (\Exception $e) {
+                    $expires = e($r->expiresAt);
+                }
+            }
+
             $expired = strtotime($r->expiresAt ?? '') !== false ? (time() > strtotime($r->expiresAt)) : false;
             $toggle = $r->isEnabled ? '<label class="switch"><input type="checkbox" '.($expired?'disabled ':'').'checked data-id="'.$r->id.'" class="toggle-enable"><span class="slider round"></span></label>'
                                     : '<label class="switch"><input type="checkbox" '.($expired?'disabled ':'').'data-id="'.$r->id.'" class="toggle-enable"><span class="slider round"></span></label>';
@@ -110,7 +130,16 @@ class CouponController extends Controller
                 $data[] = [ $code, $discountText, $itemValue, $usageLimit, $privacy, $ctype, $restaurant, $expires, $toggle, $desc, $actionsHtml ];
             }
         }
-        return response()->json(['draw'=>$draw,'recordsTotal'=>$total,'recordsFiltered'=>$total,'data'=>$data]);
+        return response()->json([
+            'draw' => $draw,
+            'recordsTotal' => $totalRecords,
+            'recordsFiltered' => $filteredRecords,
+            'data' => $data,
+            'stats' => [
+                'total' => $totalRecords,
+                'filtered' => $filteredRecords
+            ]
+        ]);
     }
 
     public function json($id)
@@ -122,6 +151,8 @@ class CouponController extends Controller
 
     public function store(Request $request)
     {
+        \Log::info('📥 Coupon store request:', $request->all());
+
         $request->validate([
             'code'=>'required|string|max:255|unique:coupons,code',
             'discount'=>'required|numeric',
@@ -133,15 +164,18 @@ class CouponController extends Controller
             'usageLimit'=>'nullable|integer|min:0',
             'image'=>'nullable|image',
         ]);
+
         $id = (string) Str::uuid();
         $imageUrl = null;
         if ($request->hasFile('image')) {
-            $imageUrl = Storage::url($request->file('image')->store('public/uploads/coupons'));
+            $path = $request->file('image')->store('uploads/coupons', 'public');
+            $imageUrl = $path;
         }
+
         Coupon::create([
             'id'=>$id,
             'code'=>$request->input('code'),
-            'description'=>$request->input('description'),
+            'description'=>$request->input('description',''),
             'discount'=>$request->input('discount'),
             'expiresAt'=>$request->input('expiresAt'),
             'discountType'=>$request->input('discountType'),
@@ -155,12 +189,19 @@ class CouponController extends Controller
             'isPublic'=>$request->boolean('isPublic')?1:0,
             'isEnabled'=>$request->boolean('isEnabled')?1:0,
         ]);
+
+        // Log activity
+        \Log::info('✅ Coupon created:', ['id' => $id, 'code' => $request->input('code')]);
+
         return response()->json(['success'=>true,'id'=>$id]);
     }
 
     public function update(Request $request, $id)
     {
+        \Log::info('📥 Coupon update request:', ['id' => $id, 'data' => $request->all()]);
+
         $c = Coupon::findOrFail($id);
+
         $request->validate([
             'code'=>'required|string|max:255|unique:coupons,code,'.$c->id.',id',
             'discount'=>'required|numeric',
@@ -172,13 +213,16 @@ class CouponController extends Controller
             'usageLimit'=>'nullable|integer|min:0',
             'image'=>'nullable|image',
         ]);
+
         $imageUrl = $c->image;
         if ($request->hasFile('image')) {
-            $imageUrl = Storage::url($request->file('image')->store('public/uploads/coupons'));
+            $path = $request->file('image')->store('uploads/coupons', 'public');
+            $imageUrl = $path;
         }
+
         $c->update([
             'code'=>$request->input('code'),
-            'description'=>$request->input('description'),
+            'description'=>$request->input('description',''),
             'discount'=>$request->input('discount'),
             'expiresAt'=>$request->input('expiresAt'),
             'discountType'=>$request->input('discountType'),
@@ -190,31 +234,55 @@ class CouponController extends Controller
             'isPublic'=>$request->boolean('isPublic')?1:0,
             'isEnabled'=>$request->boolean('isEnabled')?1:0,
         ]);
+
+        // Log activity
+        \Log::info('✅ Coupon updated:', ['id' => $id, 'code' => $request->input('code')]);
+
         return response()->json(['success'=>true]);
     }
 
     public function toggle($id, Request $request)
     {
         $c = Coupon::findOrFail($id);
-        $c->isEnabled = $request->boolean('isEnabled') ? 1 : 0;
+        $newStatus = $request->boolean('isEnabled') ? 1 : 0;
+        $c->isEnabled = $newStatus;
         $c->save();
+
+        // Log activity
+        $action = $newStatus ? 'enabled' : 'disabled';
+        \Log::info("✅ Coupon $action:", ['id' => $id, 'code' => $c->code, 'status' => $newStatus]);
+
         return response()->json(['success'=>true,'id'=>$c->id,'isEnabled'=>(bool)$c->isEnabled]);
     }
 
     public function destroy($id)
     {
         $c = Coupon::find($id);
-        if(!$c) return response()->json(['success'=>false],404);
+        if(!$c) {
+            \Log::error('❌ Coupon not found for deletion:', ['id' => $id]);
+            return response()->json(['success'=>false, 'message'=>'Coupon not found'],404);
+        }
+
+        $code = $c->code;
         $c->delete();
-        return response()->json(['success'=>true]);
+
+        // Log activity
+        \Log::info('✅ Coupon deleted:', ['id' => $id, 'code' => $code]);
+
+        return response()->json(['success'=>true, 'message'=>'Coupon deleted successfully']);
     }
 
     public function bulkDelete(Request $request)
     {
         $ids = (array) $request->input('ids', []);
         if (empty($ids)) return response()->json(['success'=>false,'message'=>'No ids'],400);
-        Coupon::whereIn('id',$ids)->delete();
-        return response()->json(['success'=>true]);
+
+        $deleted = Coupon::whereIn('id',$ids)->delete();
+
+        // Log activity
+        \Log::info('✅ Coupons bulk deleted:', ['count' => $deleted, 'ids' => $ids]);
+
+        return response()->json(['success'=>true, 'deleted'=>$deleted]);
     }
 }
 

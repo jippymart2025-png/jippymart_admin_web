@@ -44,7 +44,7 @@
 {{--                        </div>--}}
                         <div class="select-box pl-3">
                             <select class="form-control zone_selector">
-                            <option value="" disabled selected>{{trans('lang.select_zone')}}</option>
+                            <option value="" selected>{{trans('lang.select_zone')}}</option>
                             </select>
                         </div>
                     </div>
@@ -185,9 +185,6 @@
             </div>
         </div>
     </div>
-
-
-
     @if(session('success'))
         <div class="alert alert-success">{!! session('success') !!}</div>
     @endif
@@ -222,13 +219,14 @@
                                     cellspacing="0" width="100%">
                                     <thead>
                                         <tr>
-                                            <?php if (in_array('restaurant.delete', json_decode(@session('user_permissions'), true))) { ?>
+                                            <?php if (in_array('restaurants.delete', json_decode(@session('user_permissions'), true))) { ?>
+                                            <?php if (in_array('restaurants.delete', json_decode(@session('user_permissions'), true))) { ?>
                                                 <th class="delete-all"><input type="checkbox" id="is_active"><label
                                                         class="col-3 control-label" for="is_active"><a id="deleteAll"
                                                             class="do_not_delete" href="javascript:void(0)"><i
                                                                 class="mdi mdi-delete"></i> {{trans('lang.all')}}</a></label>
                                                 </th>
-                                            <?php } ?>
+                                            <?php }}?>
                                             <th>{{trans('lang.restaurant_info')}}</th>
                                             <th>{{trans('lang.owner_info')}}</th>
                                             <th>Zone</th>
@@ -408,34 +406,47 @@
     var user_permissions = '<?php echo @session("user_permissions") ?>';
     user_permissions = Object.values(JSON.parse(user_permissions));
     var checkDeletePermission = false;
-    if ($.inArray('restaurant.delete', user_permissions) >= 0) {
+    if ($.inArray('restaurants.delete', user_permissions) >= 0) {
         checkDeletePermission = true;
     }
-    var userData = [];
-    var vendorData = [];
-    var vendorProducts = [];
+    var cloneSourceVendorId = null;
+    var zoneIdToName = {}; // Map zone IDs to names
+    var zonesLoaded = false;
 
-    // Load zones from SQL
-    $.ajax({
-        url: '{{ route("zone.data") }}',
-        method: 'GET',
-        success: function(response) {
-            console.log('Loading zones from SQL:', response.data.length);
-            if (response.data && response.data.length > 0) {
-                response.data.forEach(function(zone) {
-                    console.log('Zone found:', zone.name, 'ID:', zone.id);
-                    $('.zone_selector').append($("<option></option>")
-                        .attr("value", zone.id)
-                        .text(zone.name));
-                });
+    // Load zones from SQL and create mapping
+    var loadZonesPromise = new Promise(function(resolve){
+        console.log('🔄 Loading zones from SQL for restaurants...');
+        $.ajax({
+            url: '{{ route("zone.data") }}',
+            method: 'GET',
+            success: function(response) {
+                console.log('📊 Zones API response:', response);
+                if (response.data && response.data.length > 0) {
+                    response.data.forEach(function(zone) {
+                        console.log('Zone found:', zone.name, 'ID:', zone.id);
+                        // Store zone ID to name mapping
+                        zoneIdToName[zone.id] = zone.name;
+                        // Add zone to selector
+                        $('.zone_selector').append($("<option></option>")
+                            .attr("value", zone.id)
+                            .text(zone.name));
+                    });
+                    console.log('✅ Zones loaded from SQL (' + response.data.length + ' zones):', zoneIdToName);
+                } else {
+                    console.warn('⚠️ No zones found in database');
+                }
+                // Enable the zone selector after zones are loaded
+                $('.zone_selector').prop('disabled', false);
+                zonesLoaded = true;
+                resolve(zoneIdToName);
+            },
+            error: function(error) {
+                console.error('❌ Error loading zones from SQL:', error);
+                $('.zone_selector').prop('disabled', false);
+                zonesLoaded = true;
+                resolve(zoneIdToName);
             }
-            // Enable the zone selector after zones are loaded
-            $('.zone_selector').prop('disabled', false);
-        },
-        error: function(error) {
-            console.error('Error loading zones from SQL:', error);
-            $('.zone_selector').prop('disabled', false);
-        }
+        });
     });
 
     // Load vendor categories from SQL
@@ -526,6 +537,15 @@
                 $('.dt-button-background').hide();
             }
         });
+
+        // Wait for zones to load before initializing DataTable
+        loadZonesPromise.then(function() {
+            console.log('🚀 Zones loaded, initializing Restaurant DataTable with zone mapping:', zoneIdToName);
+            initializeRestaurantTable();
+        });
+    });
+
+    function initializeRestaurantTable() {
         var fieldConfig = {
             columns: [
                 { key: 'id', header: "{{trans('lang.id')}}" },
@@ -539,7 +559,8 @@
             fileName: "{{trans('lang.restaurant_table')}}",
         };
         const table = $('#storeTable').DataTable({
-            pageLength: 10,
+            pageLength: 30,
+            lengthMenu: [[10,30, 50, 100], [10,30, 50, 100,]],
             processing: false,
             serverSide: true,
             responsive: true,
@@ -573,22 +594,37 @@
                     success: async function(response) {
                         console.log('Restaurants loaded from SQL:', response.data.length);
 
-                        if (response.data.length === 0) {
-                            $('.rest_count').text('00');
-                            $('.rest_active_count').text('00');
-                            $('.rest_inactive_count').text('00');
-                            $('.new_joined_rest').text('00');
+                        const rawRecords = Array.isArray(response.data) ? response.data : [];
+
+                        if (rawRecords.length === 0) {
+                            // $('.rest_count').text('00');
+                            // $('.rest_active_count').text('00');
+                            // $('.rest_inactive_count').text('00');
+                            // $('.new_joined_rest').text('00');
+                            // ⭐ ALWAYS update counts after filters
+                            $('.rest_count').text(response.stats.total);
+                            $('.rest_active_count').text(response.stats.active);
+                            $('.rest_inactive_count').text(response.stats.inactive);
+                            $('.new_joined_rest').text(response.stats.new_joined);
+
                             $('#data-table_processing').hide();
                             callback({
                                 draw: data.draw,
-                                recordsTotal: 0,
-                                recordsFiltered: 0,
-                                data: []
+                                recordsTotal: response.recordsTotal || 0,
+                                recordsFiltered: response.recordsFiltered || 0,
+                                data: [],
+                                filteredData: []
                             });
                             return;
                         }
 
-                        // Update statistics from response
+                        // // Update statistics from response
+                        // $('.rest_count').text(response.stats.total);
+                        // $('.rest_active_count').text(response.stats.active);
+                        // $('.rest_inactive_count').text(response.stats.inactive);
+                        // $('.new_joined_rest').text(response.stats.new_joined);
+
+                        // ⭐ ALWAYS update counts here as well
                         $('.rest_count').text(response.stats.total);
                         $('.rest_active_count').text(response.stats.active);
                         $('.rest_inactive_count').text(response.stats.inactive);
@@ -596,9 +632,21 @@
 
                         // Build table rows
                         let records = [];
-                        for (let restaurant of response.data) {
+                        const exportableRecords = [];
+
+                        for (let restaurant of rawRecords) {
                             var rowData = await buildHTML(restaurant);
                             records.push(rowData);
+
+                            exportableRecords.push({
+                                id: restaurant.id || '',
+                                title: restaurant.title || '',
+                                authorName: restaurant.authorName || '',
+                                zoneName: restaurant.zone_name || restaurant.zoneName || (restaurant.zoneId ? (zoneIdToName[restaurant.zoneId] || '') : ''),
+                                phonenumber: restaurant.phonenumber || '',
+                                createdAt: restaurant.createdAtFormatted || restaurant.createdAt || '',
+                                location: restaurant.location || ''
+                            });
                         }
 
                         $('#data-table_processing').hide();
@@ -606,7 +654,8 @@
                             draw: data.draw,
                             recordsTotal: response.recordsTotal,
                             recordsFiltered: response.recordsFiltered,
-                            data: records
+                            data: records,
+                            filteredData: exportableRecords
                         });
                     },
                     error: function(error) {
@@ -620,7 +669,8 @@
                             draw: data.draw,
                             recordsTotal: 0,
                             recordsFiltered: 0,
-                            data: []
+                            data: [],
+                            filteredData: []
                         });
                     }
                 });
@@ -699,7 +749,7 @@
                 table.search('').draw();
             }
         }, 300));
-    });
+    } // Close initializeRestaurantTable()
     async function buildHTML(val) {
         var html = [];
         var id = val.id;
@@ -735,38 +785,74 @@
         }
         html.push(ownerInfo);
 
-        // Zone column
+        // Zone column - Display zone name based on zoneId from SQL
         var zoneInfo = '';
         if (val.hasOwnProperty('zoneId') && val.zoneId != null && val.zoneId != '') {
-            // We'll fetch the zone name asynchronously and update it
-            zoneInfo = '<span class="zone-name" data-zone-id="' + val.zoneId + '">Loading...</span>';
+            // Check if zone exists in mapping (loaded from SQL)
+            if (zoneIdToName[val.zoneId]) {
+                zoneInfo = '<span class="badge badge-info py-2 px-3">' + zoneIdToName[val.zoneId] + '</span>';
+                console.log('✅ Zone found for restaurant ' + val.title + ':', zoneIdToName[val.zoneId]);
+            } else {
+                // Zone ID exists but not found in zones table
+                zoneInfo = '<span class="badge badge-warning py-2 px-3" style="color: #666;">Zone Not Found (ID: ' + val.zoneId + ')</span>';
+                console.warn('⚠️ Zone ID "' + val.zoneId + '" not found in zones table for restaurant ' + val.title);
+            }
         } else {
-            zoneInfo = 'No Zone';
+            // No zone ID assigned
+            zoneInfo = '<span style="color: #999; font-style: italic;">null</span>';
+            console.log('ℹ️ No zone assigned for restaurant ' + val.title);
         }
         html.push(zoneInfo);
 
-        // Admin Commission column
-        var adminCommission = '';
-        if (val.adminCommission && val.adminCommission.fix_commission !== undefined) {
-            adminCommission = val.adminCommission.fix_commission;
-        } else if (val.admin_commission !== undefined) {
-            adminCommission = val.admin_commission;
-        } else {
-            adminCommission = '-';
+        // Admin Commission column - Display fix_commission from vendors.adminCommission
+        var adminCommissionDisplay = '';
+        var commissionValue = null;
+
+        // Parse adminCommission (might be JSON string or object)
+        if (val.adminCommission) {
+            var commission = val.adminCommission;
+
+            // If it's a string, try to parse it as JSON
+            if (typeof commission === 'string') {
+                try {
+                    commission = JSON.parse(commission);
+                } catch (e) {
+                    console.warn('Could not parse adminCommission for restaurant ' + val.title);
+                }
+            }
+
+            // Extract fix_commission value
+            if (commission && typeof commission === 'object' && commission.fix_commission !== undefined) {
+                commissionValue = commission.fix_commission;
+            }
         }
-        html.push(adminCommission);
+
+        // Display commission with styling like zones
+        if (commissionValue !== null && commissionValue !== '' && !isNaN(commissionValue)) {
+            var formattedCommission = parseFloat(commissionValue).toFixed(decimal_degits);
+            if (currencyAtRight) {
+                adminCommissionDisplay = '<span class="badge badge-success py-2 px-3">' + formattedCommission + ' ' + currentCurrency + '</span>';
+            } else {
+                adminCommissionDisplay = '<span class="badge badge-success py-2 px-3">' + currentCurrency + ' ' + formattedCommission + '</span>';
+            }
+            console.log('✅ Commission found for restaurant ' + val.title + ':', formattedCommission);
+        } else {
+            // No commission set
+            adminCommissionDisplay = '<span style="color: #999; font-style: italic;">-</span>';
+            console.log('ℹ️ No commission set for restaurant ' + val.title);
+        }
+        html.push(adminCommissionDisplay);
         var date = '';
         var time = '';
-        if (val.hasOwnProperty("createdAt")) {
-            try {
-                date = val.createdAt.toDate().toDateString();
-                time = val.createdAt.toDate().toLocaleTimeString('en-US');
-            } catch (err) {
+        var createdAtText = '';
+        if (val.hasOwnProperty('createdAtFormatted') && val.createdAtFormatted) {
+            createdAtText = val.createdAtFormatted;
+        } else if (val.hasOwnProperty('createdAt') && val.createdAt) {
+            createdAtText = val.createdAt;
+        } else if (val.hasOwnProperty('createdAtRaw') && val.createdAtRaw) {
+            createdAtText = val.createdAtRaw;
             }
-            html.push('<span class="dt-time">' + date + ' ' + time + '</span>');
-        } else {
-            html.push('');
-        }
+        html.push('<span class="dt-time">' + createdAtText + '</span>');
         var payoutRequests = '{{route("users.walletstransaction",":id")}}';
         payoutRequests = payoutRequests.replace(':id', val.author);
         html.push('<a href="' + payoutRequests + '">{{trans("lang.wallet_history")}}</a>');
@@ -792,465 +878,202 @@
         return html;
     }
 
-    // Function to fetch and update zone names
-    async function updateZoneNames() {
-        const zoneElements = document.querySelectorAll('.zone-name[data-zone-id]');
-        const zoneIds = Array.from(zoneElements).map(el => el.getAttribute('data-zone-id'));
-        const uniqueZoneIds = [...new Set(zoneIds)];
+    // Zone names are now loaded from SQL and displayed immediately via zoneIdToName mapping
+    // No need for async zone name fetching
 
-        if (uniqueZoneIds.length === 0) return;
 
-        try {
-            // Fetch all zones at once
-            const zonePromises = uniqueZoneIds.map(zoneId =>
-                database.collection('zone').doc(zoneId).get()
-            );
-
-            const zoneSnapshots = await Promise.all(zonePromises);
-            const zoneData = {};
-
-            zoneSnapshots.forEach((snapshot, index) => {
-                if (snapshot.exists) {
-                    const data = snapshot.data();
-                    zoneData[uniqueZoneIds[index]] = data.name || 'Unknown Zone';
-                } else {
-                    zoneData[uniqueZoneIds[index]] = 'Zone Not Found';
-                }
-            });
-
-            // Update all zone elements
-            zoneElements.forEach(element => {
-                const zoneId = element.getAttribute('data-zone-id');
-                if (zoneData[zoneId]) {
-                    element.textContent = zoneData[zoneId];
-                }
-            });
-        } catch (error) {
-            console.error('Error fetching zone names:', error);
-            // Update all elements to show error
-            zoneElements.forEach(element => {
-                element.textContent = 'Error loading zone';
-            });
-        }
-    }
-
-    async function vendorStatus(id) {
-        let status = true;
-        await database.collection('users').doc(id).get().then((snapshots) => {
-            let data = snapshots.data();
-            if (data) {
-                status = data.active;
-            }
-        });
-        return status;
-    }
-    /*async function getTotalProduct(id) {
-        let productSnapshots = await database.collection('vendor_products').where('vendorID', '==', id).get();
-        return productSnapshots.docs.length;
-    }
-    async function getTotalOrders(id) {
-        let productSnapshots = await database.collection('restaurant_orders').where('vendorID', '==', id).get();
-        return productSnapshots.docs.length;
-    }*/
-    async function getOrdersWithdrawAmount(id) {
-        var total_withdraws = 0;
-        await  database.collection('payouts').where('vendorID', '==', id).where('paymentStatus', '==', 'Success').get().then(async function (productSnapshots) {
-            if(productSnapshots && productSnapshots.docs && productSnapshots.docs.length > 0){
-                productSnapshots.docs.forEach(function (doc) {
-                    var order = doc.data();
-                    withdraws = parseFloat(order.amount).toFixed(decimal_degits);
-                    total_withdraws += parseFloat(withdraws);
-                });
-            }
-        });
-        return total_withdraws;
-    }
-    async function getOrdersTotalData(id) {
-        var order_total = 0;
-        var commission_total = 0;
-        await database.collection('restaurant_orders').where('status','==','restaurantorders Completed').where('vendorID', '==', id).get().then(async function (productSnapshots) {
-            if(productSnapshots && productSnapshots.docs && productSnapshots.docs.length > 0){
-                productSnapshots.docs.forEach(function (doc) {
-                    var order = doc.data();
-                    var buildOrderTotalData = buildOrderTotal(order);
-                    total = parseFloat(buildOrderTotalData.totalPrice).toFixed(decimal_degits);
-                    order_total += parseFloat(total);
-                    commission = parseFloat(buildOrderTotalData.adminCommission).toFixed(decimal_degits);
-                    commission_total += parseFloat(commission);
-                });
-            }
-        });
-        return {
-            adminCommission: commission_total,
-            totalPrice: order_total
-        };
-    }
-    function buildOrderTotal(snapshotsProducts) {
-        var total_price = 0;
-        var final_price = 0;
-        var adminCommission = snapshotsProducts.adminCommission;
-        var adminCommissionType = snapshotsProducts.adminCommissionType;
-        var discount = snapshotsProducts.discount;
-        var couponCode = snapshotsProducts.couponCode;
-        var extras = snapshotsProducts.extras;
-        var extras_price = snapshotsProducts.extras_price;
-        var rejectedByDrivers = snapshotsProducts.rejectedByDrivers;
-        var takeAway = snapshotsProducts.takeAway;
-        var tip_amount = snapshotsProducts.tip_amount;
-        var notes = snapshotsProducts.notes;
-        var tax_amount = snapshotsProducts.vendor.tax_amount;
-        var status = snapshotsProducts.status;
-        var products = snapshotsProducts.products;
-        deliveryCharge = snapshotsProducts.deliveryCharge;
-        var specialDiscount = snapshotsProducts.specialDiscount;
-        var intRegex = /^\d+$/;
-        var floatRegex = /^((\d+(\.\d *)?)|((\d*\.)?\d+))$/;
-        if (products) {
-            products.forEach((product) => {
-                var val = product;
-                if(val.discountPrice!=0 && val.discountPrice!="" && val.discountPrice!=null && !isNaN(val.discountPrice)){
-                    final_price = parseFloat(val.discountPrice);
-                }
-                else{
-                    final_price = parseFloat(val.price);
-                }
-                price_item = final_price.toFixed(decimal_degits);
-                totalProductPrice = parseFloat(price_item) * parseInt(val.quantity);
-                var extras_price = 0;
-                if (product.extras != undefined && product.extras != '' && product.extras.length > 0) {
-                    extras_price_item = (parseFloat(val.extras_price) * parseInt(val.quantity)).toFixed(decimal_degits);
-                    if (parseFloat(extras_price_item) != NaN && val.extras_price != undefined) {
-                        extras_price = extras_price_item;
-                    }
-                    totalProductPrice = parseFloat(extras_price) + parseFloat(totalProductPrice);
-                }
-                totalProductPrice = parseFloat(totalProductPrice).toFixed(decimal_degits);
-                total_price += parseFloat(totalProductPrice);
-            });
-        }
-        if (currencyAtRight) {
-            var sub_total = parseFloat(total_price).toFixed(decimal_degits) + "" + currentCurrency;
-        } else {
-            var sub_total = currentCurrency + "" + parseFloat(total_price).toFixed(decimal_degits);
-        }
-        if (intRegex.test(discount) || floatRegex.test(discount)) {
-            discount = parseFloat(discount).toFixed(decimal_degits);
-            total_price -= parseFloat(discount);
-        }
-        if (specialDiscount != undefined) {
-            special_discount = parseFloat(specialDiscount.special_discount).toFixed(2);
-            total_price -= parseFloat(special_discount);
-        }
-        var total_item_price = total_price;
-        var tax = 0;
-        taxlabel = '';
-        taxlabeltype = '';
-        if (snapshotsProducts.hasOwnProperty('taxSetting') && snapshotsProducts.taxSetting.length > 0) {
-            var total_tax_amount = 0;
-            for (var i = 0; i < snapshotsProducts.taxSetting.length; i++) {
-                var data = snapshotsProducts.taxSetting[i];
-                if (data.type && data.tax) {
-                    if (data.type == "percentage") {
-                        tax = (data.tax * total_price) / 100;
-                        var taxvalue = data.tax;
-                        taxlabeltype = "%";
-                    } else {
-                        tax = data.tax;
-                        taxlabeltype = "";
-                        if (currencyAtRight) {
-                            var taxvalue = parseFloat(data.tax).toFixed(decimal_degits) + "" + currentCurrency;
-                        } else {
-                            var taxvalue = currentCurrency + "" + parseFloat(data.tax).toFixed(decimal_degits);
-                        }
-                    }
-                    taxlabel = data.title;
-                }
-                total_tax_amount += parseFloat(tax);
-            }
-            total_price = parseFloat(total_price) + parseFloat(total_tax_amount);
-        }
-        if (intRegex.test(deliveryCharge) || floatRegex.test(deliveryCharge)) {
-            deliveryCharge = parseFloat(deliveryCharge).toFixed(decimal_degits);
-            total_price += parseFloat(deliveryCharge);
-        }
-        if (intRegex.test(tip_amount) || floatRegex.test(tip_amount)) {
-            tip_amount = parseFloat(tip_amount).toFixed(decimal_degits);
-            total_price += parseFloat(tip_amount);
-            total_price = parseFloat(total_price).toFixed(decimal_degits);
-        }
-        if (intRegex.test(adminCommission) || floatRegex.test(adminCommission)) {
-                if (adminCommissionType == "Percent") {
-                     adminCommission = parseFloat(parseFloat(total_item_price * adminCommission) / 100).toFixed(decimal_degits);
-                } else {
-                     adminCommission = parseFloat(adminCommission).toFixed(decimal_degits);
-                }
-        }
-        return {
-            adminCommission: adminCommission,
-            totalPrice: total_price
-        };
-    }
     $("#is_active").click(function () {
         $("#storeTable .is_open").prop('checked', $(this).prop('checked'));
     });
     $("#deleteAll").click(function () {
-        if ($('#storeTable .is_open:checked').length) {
-            if (confirm("{{trans('lang.selected_delete_alert')}}")) {
-                jQuery("#data-table_processing").show();
-                $('#storeTable .is_open:checked').each(function () {
-                    var dataId = $(this).attr('dataId');
-                    var author = $(this).attr('author');
-                    database.collection('users').doc(author).update({ 'vendorID': "" }).then(function (result) {
-                        deleteDocumentWithImage('vendors', dataId, "photo", ['restaurantMenuPhotos', 'photos'])
-                        .then(() => {
-                            return deleteStoreData(dataId);
-                        })
-                        .then(() => {
-                            window.location.reload();
-                        })
-                        .catch((error) => {
-                            console.error('Error deleting document or store data:', error);
-                        });
-                    });
-                });
-            }
-        } else {
+        var selectedIds = $('#storeTable .is_open:checked').map(function () {
+            return $(this).attr('dataId');
+        }).get();
+
+        if (selectedIds.length === 0) {
             alert("{{trans('lang.select_delete_alert')}}");
+            return;
         }
+
+        if (!confirm("{{trans('lang.selected_delete_alert')}}")) {
+            return;
+        }
+
+                jQuery("#data-table_processing").show();
+
+        $.ajax({
+            url: "{{ route('restaurants.bulk-delete') }}",
+            method: "POST",
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            data: {
+                ids: selectedIds
+            },
+            success: function (response) {
+                jQuery("#data-table_processing").hide();
+                if (response.success) {
+                    $('#storeTable').DataTable().ajax.reload(null, false);
+        } else {
+                    alert(response.message || 'Unable to delete restaurants.');
+                }
+            },
+            error: function (xhr) {
+                jQuery("#data-table_processing").hide();
+                console.error('Error deleting restaurants:', xhr);
+                alert('Error deleting restaurants.');
+        }
+        });
     });
     $(document.body).on('click', '.redirecttopage', function () {
         var url = $(this).attr('data-url');
         window.location.href = url;
     });
     $(document).on("click", "a[name='vendor-delete']", function (e) {
+        e.preventDefault();
         var id = this.id;
+        if (!confirm("{{trans('lang.selected_delete_alert')}}")) {
+            return;
+        }
         jQuery("#data-table_processing").show();
-        var author = $(this).attr('author');
-        if (confirm("{{trans('lang.selected_delete_alert')}}")) {
-            deleteDocumentWithImage('vendors', id, "photo", ['restaurantMenuPhotos', 'photos'])
-            .then(() => {
-                return deleteStoreData(id);
-            })
-            .then(() => {
-                window.location.reload();
-            })
-            .catch((error) => {
-                console.error('Error deleting document with image or store data:', error);
-            });
-        }
+
+        $.ajax({
+            url: "{{ url('restaurants') }}/" + id,
+            method: "DELETE",
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            success: function (response) {
+                jQuery("#data-table_processing").hide();
+                if (response.success) {
+                    $('#storeTable').DataTable().ajax.reload(null, false);
+                } else {
+                    alert(response.message || 'Unable to delete restaurant.');
+                }
+            },
+            error: function (xhr) {
+                jQuery("#data-table_processing").hide();
+                console.error('Error deleting restaurant:', xhr);
+                alert('Error deleting restaurant.');
+            }
+        });
     });
-    async function deleteStoreData(storeId) {
-        await database.collection('users').where('vendorID', '==', storeId).get().then(async function (userssanpshots) {
-            if (userssanpshots.docs.length > 0) {
-                var item_data = userssanpshots.docs[0].data();
-                await database.collection('wallet').where('user_id', '==', item_data.id).get().then(async function (snapshotsItem) {
-                    if (snapshotsItem.docs.length > 0) {
-                        snapshotsItem.docs.forEach((temData) => {
-                            var item_data = temData.data();
-                            database.collection('wallet').doc(item_data.id).delete().then(function () { });
-                        });
-                    }
-                });
-                database.collection('settings').doc("Version").get().then(function (snapshot) {
-                    var settingData = snapshot.data();
-                    if (settingData && settingData.storeUrl){
-                        var siteurl = settingData.storeUrl + "/api/delete-user";
-                        var dataObject = { "uuid": item_data.id };
-                        jQuery.ajax({
-                            url: siteurl,
-                            method: 'POST',
-                            contentType: "application/json; charset=utf-8",
-                            data: JSON.stringify(dataObject),
-                            success: function (data) {
-                                console.log('Delete user from sql success:', data);
-                            },
-                            error: function (error) {
-                                console.log('Delete user from sql error:', error.responseJSON.message);
-                            }
-                        });
-                    }
-                });
-                var projectId = '<?php echo env('FIREBASE_PROJECT_ID') ?>';
-                var dataObject = { "data": { "uid": item_data.id } };
-                jQuery.ajax({
-                    url: 'https://us-central1-' + projectId + '.cloudfunctions.net/deleteUser',
-                    method: 'POST',
-                    contentType: "application/json; charset=utf-8",
-                    data: JSON.stringify(dataObject),
-                    success:async function (data) {
-                        console.log('Delete user success:', data.result);
-                        await deleteDocumentWithImage('users',item_data.id,'profilePictureURL');
-                    },
-                    error: function (xhr, status, error) {
-                        var responseText = JSON.parse(xhr.responseText);
-                        console.log('Delete user error:', responseText.error);
-                    }
-                });
-            }
-        });
-        await database.collection('vendor_products').where('vendorID', '==', storeId).get().then(async function (snapshots) {
-            if (snapshots.docs.length > 0) {
-                for (const listval of snapshots.docs) {
-                    await deleteDocumentWithImage('vendor_products', listval.id, 'photo', 'photos');
-                }
-            }
-        });
-        await database.collection('foods_review').where('VendorId', '==', storeId).get().then(async function (snapshotsItem) {
-            if (snapshotsItem.docs.length > 0) {
-                for (const temData of snapshotsItem.docs) {
-                    await deleteDocumentWithImage('items_review', temData.id, '', 'photos');
-                }
-            }
-        });
-        // 🧠 Smart Coupon Deletion - Preserves Global Coupons
-        console.log(`🔍 Starting smart coupon deletion for restaurant: ${storeId}`);
-        const couponDeletionResult = await smartDeleteCouponsForVendor(storeId);
-        console.log(`📊 Coupon deletion completed: ${couponDeletionResult.deleted} deleted, ${couponDeletionResult.preserved} preserved`);
-        await database.collection('favorite_restaurant').where('restaurant_id', '==', storeId).get().then(async function (snapshotsItem) {
-            if (snapshotsItem.docs.length > 0) {
-                snapshotsItem.docs.forEach((temData) => {
-                    var item_data = temData.data();
-                    database.collection('favorite_restaurant').doc(item_data.restaurant_id).delete().then(function () {
-                    });
-                });
-            }
-        })
-        await database.collection('payouts').where('vendorID', '==', storeId).get().then(async function (snapshotsItem) {
-            if (snapshotsItem.docs.length > 0) {
-                snapshotsItem.docs.forEach((temData) => {
-                    var item_data = temData.data();
-                    database.collection('payouts').doc(item_data.id).delete().then(function () {
-                    });
-                });
-            }
-        });
-        await database.collection('booked_table').where('vendorID', '==', storeId).get().then(async function (snapshotsItem) {
-            if (snapshotsItem.docs.length > 0) {
-                snapshotsItem.docs.forEach((temData) => {
-                    var item_data = temData.data();
-                    database.collection('booked_table').doc(item_data.id).delete().then(function () {
-                    });
-                });
-            }
-        });
-        await database.collection('story').where('vendorID', '==', storeId).get().then(async function (snapshotsItem) {
-            if (snapshotsItem.docs.length > 0) {
-                for (const temData of snapshotsItem.docs) {
-                    await deleteDocumentWithImage('story', temData.id,'videoThumbnail','videoUrl');
-                }
-            }
-        });
-        await database.collection('favorite_item').where('store_id', '==', storeId).get().then(async function (snapshotsItem) {
-            if (snapshotsItem.docs.length > 0) {
-                snapshotsItem.docs.forEach((temData) => {
-                    var item_data = temData.data();
-                    database.collection('favorite_item').where('store_id', '==', storeId).delete().then(function () {
-                    });
-                });
-            }
-        })
-    }
-    $(document).on("click", "a[name='vendor-clone']", async function (e) {
-        var id = $(this).attr('vendor_id');
-        var author = $(this).attr('author');
-        await database.collection('users').doc(author).get().then(async function (snapshotsusers) {
-            userData = snapshotsusers.data();
-        });
-        await database.collection('vendors').doc(id).get().then(async function (snapshotsvendors) {
-            vendorData = snapshotsvendors.data();
-        });
-        await database.collection('vendor_products').where('vendorID', '==', id).get().then(async function (snapshotsproducts) {
-            vendorProducts = [];
-            snapshotsproducts.docs.forEach(async (product) => {
-                vendorProducts.push(product.data());
-            });
-        });
-        if (userData && vendorData) {
-            jQuery("#create_vendor").modal('show');
-            jQuery("#vendor_title_lable").text(vendorData.title);
+    $(document).on("click", "a[name='vendor-clone']", function (e) {
+        e.preventDefault();
+        cloneSourceVendorId = $(this).attr('vendor_id');
+        $(".error_top").hide().html("");
+        $("#user_name").val('');
+        $("#user_last_name").val('');
+        $("#user_email").val('');
+        $("#user_password").val('');
+        $("#vendor_title").val('');
+        if (!cloneSourceVendorId) {
+            alert('Unable to load restaurant details.');
+            return;
         }
-    });
-    $(document).on("click", ".save-form-btn", async function (e) {
-        var vendor_id = database.collection("tmp").doc().id;
-        if (userData && vendorData) {
-            var vendor_title = jQuery("#vendor_title").val();
-            var userFirstName = jQuery("#user_name").val();
-            var userLastName = jQuery("#user_last_name").val();
-            var email = jQuery("#user_email").val();
-            var password = jQuery("#user_password").val();
-            if (userFirstName == '') {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.user_name_required')}}</p>");
-                window.scrollTo(0, 0);
-            } else if (userLastName == '') {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.user_last_name_required')}}</p>");
-                window.scrollTo(0, 0);
-            } else if (vendor_title == '') {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.vendor_title_required')}}</p>");
-                window.scrollTo(0, 0);
-            } else if (email == '') {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.user_email_required')}}</p>");
-                window.scrollTo(0, 0);
-            } else if (password == '') {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.enter_owners_password_error')}}</p>");
-                window.scrollTo(0, 0);
-            } else {
-                jQuery("#data-table_processing2").show();
-                firebase.auth().createUserWithEmailAndPassword(email, password).then(async function (firebaseUser) {
-                    var user_id = firebaseUser.user.uid;
-                    userData.email = email;
-                    userData.firstName = userFirstName;
-                    userData.lastName = userLastName;
-                    userData.id = user_id;
-                    userData.vendorID = vendor_id;
-                    userData.createdAt = createdAt;
-                    userData.wallet_amount = 0;
-                    vendorData.author = user_id;
-                    vendorData.authorName = userFirstName + ' ' + userLastName;
-                    vendorData.title = vendor_title;
-                    vendorData.id = vendor_id;
-                    coordinates = new firebase.firestore.GeoPoint(vendorData.latitude, vendorData.longitude);
-                    vendorData.coordinates = coordinates;
-                    vendorData.createdAt = createdAt;
-                    await database.collection('users').doc(user_id).set(userData).then(async function (result) {
-                        await geoFirestore.collection('vendors').doc(vendor_id).set(vendorData).then(async function (result) {
-                            var count = 0;
-                            await vendorProducts.forEach(async (product) => {
-                                var product_id = await database.collection("tmp").doc().id;
-                                product.id = product_id;
-                                product.vendorID = vendor_id;
-                                await database.collection('vendor_products').doc(product_id).set(product).then(function (result) {
-                                    count++;
-                                    if (count == vendorProducts.length) {
-                                        jQuery("#data-table_processing2").hide();
-                                        alert('Successfully created.');
-                                        jQuery("#create_vendor").modal('hide');
-                                        location.reload();
-                                    }
-                                });
-                            });
-                        });
-                    })
-                }).catch(function (error) {
-                    $(".error_top").show();
-                    jQuery("#data-table_processing2").hide();
-                    $(".error_top").html("");
-                    $(".error_top").append("<p>" + error + "</p>");
-                });
+        jQuery("#data-table_processing").show();
+        $.ajax({
+            url: "{{ url('restaurants') }}/" + cloneSourceVendorId + "/clone-data",
+            method: "GET",
+            success: function (response) {
+                jQuery("#data-table_processing").hide();
+                if (response.success && response.data) {
+                    var vendorInfo = response.data.vendor || {};
+                    var ownerInfo = response.data.owner || {};
+                    $("#vendor_title_lable").text(vendorInfo.title || '');
+                    $("#vendor_title").val(vendorInfo.title || '');
+                    $("#user_name").val(ownerInfo.firstName || '');
+                    $("#user_last_name").val(ownerInfo.lastName || '');
+                    $("#create_vendor").modal('show');
+                } else {
+                    alert(response.message || 'Unable to load restaurant details.');
+                }
+            },
+            error: function (xhr) {
+                jQuery("#data-table_processing").hide();
+                console.error('Error loading clone data:', xhr);
+                alert('Error loading restaurant details.');
             }
-        }
+        });
     });
 
-         // Global Restaurant Status Toggle Functionality - SIMPLIFIED VERSION
+    $(document).on("click", ".save-form-btn", function () {
+        if (!cloneSourceVendorId) {
+            alert('Unable to determine restaurant to clone.');
+            return;
+        }
+        $(".error_top").hide().html("");
+        var vendor_title = $("#vendor_title").val();
+        var userFirstName = $("#user_name").val();
+        var userLastName = $("#user_last_name").val();
+        var email = $("#user_email").val();
+        var password = $("#user_password").val();
+
+        if (userFirstName === '') {
+            $(".error_top").show().html("<p>{{trans('lang.user_name_required')}}</p>");
+            window.scrollTo(0, 0);
+            return;
+        }
+        if (userLastName === '') {
+            $(".error_top").show().html("<p>{{trans('lang.user_last_name_required')}}</p>");
+            window.scrollTo(0, 0);
+            return;
+        }
+        if (vendor_title === '') {
+            $(".error_top").show().html("<p>{{trans('lang.vendor_title_required')}}</p>");
+            window.scrollTo(0, 0);
+            return;
+        }
+        if (email === '') {
+            $(".error_top").show().html("<p>{{trans('lang.user_email_required')}}</p>");
+            window.scrollTo(0, 0);
+            return;
+        }
+        if (password === '') {
+            $(".error_top").show().html("<p>{{trans('lang.enter_owners_password_error')}}</p>");
+            window.scrollTo(0, 0);
+            return;
+        }
+
+        jQuery("#data-table_processing").show();
+        $.ajax({
+            url: "{{ route('restaurants.clone') }}",
+            method: "POST",
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            data: {
+                source_vendor_id: cloneSourceVendorId,
+                vendor_title: vendor_title,
+                first_name: userFirstName,
+                last_name: userLastName,
+                email: email,
+                password: password
+            },
+            success: function (response) {
+                jQuery("#data-table_processing").hide();
+                if (response.success) {
+                    alert(response.message || 'Successfully created.');
+                    $("#create_vendor").modal('hide');
+                    $('#storeTable').DataTable().ajax.reload(null, false);
+                } else {
+                    $(".error_top").show().html(`<p>${response.message || 'Unable to clone restaurant.'}</p>`);
+                    window.scrollTo(0, 0);
+                }
+            },
+            error: function (xhr) {
+                jQuery("#data-table_processing").hide();
+                var message = 'Error cloning restaurant.';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    message = xhr.responseJSON.message;
+                }
+                $(".error_top").show().html(`<p>${message}</p>`);
+                window.scrollTo(0, 0);
+            }
+        });
+    });
+
+    // Global Restaurant Status Toggle Functionality - MySQL version
      $(document).ready(function() {
          // Update status text when toggle changes
          $('#global_restaurant_status').change(function() {
@@ -1258,73 +1081,52 @@
              $('.status-text').text(isChecked ? 'All Open' : 'All Closed');
          });
 
-         // Apply global status to all restaurants - SIMPLIFIED
-         $('#apply_global_status').click(async function() {
+        // Apply global status via backend
+        $('#apply_global_status').click(function() {
              var isOpen = $('#global_restaurant_status').is(':checked');
              var statusText = isOpen ? 'open' : 'closed';
+            var selectedZone = window.selectedZone || $('.zone_selector').val() || '';
+            var scopeMessage = selectedZone ? 'the selected zone' : 'ALL zones';
 
-             if (!confirm(`Are you sure you want to set ALL restaurants to ${statusText}? This action cannot be undone.`)) {
+            if (!confirm(`Are you sure you want to set all restaurants in ${scopeMessage} to ${statusText}?`)) {
                  return;
              }
 
-             // Show loading state
              var $btn = $(this);
              var originalText = $btn.html();
              $btn.html('<i class="mdi mdi-loading mdi-spin mr-1"></i>Updating...').prop('disabled', true);
 
-             try {
-                 // Get all restaurant IDs from the current filtered data
-                 var table = $('#storeTable').DataTable();
-                 var filteredData = table.ajax.json().filteredData || [];
-
-                 if (filteredData.length === 0) {
-                     alert('No restaurants found to update. Please check your filters.');
-                     return;
-                 }
-
-                 // Update all restaurants in batches - SIMPLIFIED
-                 const batchSize = 100; // Reduced batch size to prevent resource overload
-                 const restaurantIds = filteredData.map(restaurant => restaurant.id);
-
-                 let updatedCount = 0;
-                 let totalCount = restaurantIds.length;
-
-                 // Process in smaller batches with delays to prevent resource exhaustion
-                 for (let i = 0; i < restaurantIds.length; i += batchSize) {
-                     const batch = restaurantIds.slice(i, i + batchSize);
-                     const batchRef = database.batch();
-
-                     batch.forEach(restaurantId => {
-                         const restaurantRef = database.collection('vendors').doc(restaurantId);
-                         batchRef.update(restaurantRef, { isOpen: isOpen });
-                     });
-
-                     await batchRef.commit();
-                     updatedCount += batch.length;
-
-                     // Update progress
-                     $btn.html(`<i class="mdi mdi-loading mdi-spin mr-1"></i>Updated ${updatedCount}/${totalCount}...`);
-
-                     // Add delay between batches to prevent resource overload
-                     if (i + batchSize < restaurantIds.length) {
-                         await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
-                     }
-                 }
-
-                 // Show success message
-                 $btn.html('<i class="mdi mdi-check mr-1"></i>Success!').removeClass('btn-primary').addClass('btn-success');
-
-                 // Reload the table to reflect changes
-                 setTimeout(() => {
-                     table.ajax.reload();
-                     $btn.html(originalText).prop('disabled', false).removeClass('btn-success').addClass('btn-primary');
-                 }, 2000);
-
-             } catch (error) {
-                 console.error('Error updating restaurants:', error);
-                 alert('Error updating restaurants: ' + error.message);
+            $.ajax({
+                url: '{{ route("restaurants.global-status") }}',
+                method: 'POST',
+                data: {
+                    _token: '{{ csrf_token() }}',
+                    is_open: isOpen ? 1 : 0,
+                    zone_id: selectedZone
+                },
+                success: function(response) {
+                    if (response.success) {
+                        var updated = response.updated || 0;
+                        var successMessage = `${updated} restaurant${updated === 1 ? '' : 's'} updated successfully.`;
+                        showNotification('success', successMessage);
+                    } else {
+                        showNotification('error', response.message || 'Unable to update restaurants.');
+                    }
+                },
+                error: function(xhr) {
+                    var message = 'Unable to update restaurants.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        message = xhr.responseJSON.message;
+                    }
+                    showNotification('error', message);
+                },
+                complete: function() {
                  $btn.html(originalText).prop('disabled', false);
+                    if ($.fn.dataTable.isDataTable('#storeTable')) {
+                        $('#storeTable').DataTable().ajax.reload(null, false);
+                    }
              }
+            });
          });
 
          // Simple styling for the status text
@@ -1443,9 +1245,7 @@
                  </button>
              </div>
          `);
-
          $('body').append(notification);
-
          // Auto-dismiss after 5 seconds
          setTimeout(() => {
              notification.alert('close');

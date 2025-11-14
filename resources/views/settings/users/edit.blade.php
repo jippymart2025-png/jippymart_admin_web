@@ -152,52 +152,40 @@ foreach ($countries as $keycountry => $valuecountry) {
 @section('scripts')
 <script>
     var id = "<?php echo $id; ?>";
-    var database = firebase.firestore();
-    var ref = database.collection('users').where("id", "==", id);
+    var apiBase = '{{ url('/api') }}';
     var currentCurrency = '';
     var provider  = '';
     var currencyAtRight = false;
     var decimal_degits = 0;
     var photo = "";
-    var storageRef = firebase.storage().ref('images');
-    var storage = firebase.storage();
     var fileName = "";
     var userImageFile = '';
+    var userData = null;
     var placeholderImage = '{{ asset('images/placeholder.png') }}';
-    var refData = ref.get().then(async function(snapshots) {
-        var userData = snapshots.docs[0].data();
-        provider = userData.provider;
-        if(!userData.hasOwnProperty("provider")){
-            $(".provider_type").show();
-        }
-        else if(userData.hasOwnProperty("provider") && provider == "email"){
-            $(".provider_type").show();
-        }
-        else
-        {
-            $(".provider_type").hide();
-        }
-    });
-    var refCurrency = database.collection('currencies').where('isActive', '==', true);
-    var append_list = '';
-    refCurrency.get().then(async function(snapshots) {
-        var currencyData = snapshots.docs[0].data();
-        currentCurrency = currencyData.symbol;
-        currencyAtRight = currencyData.symbolAtRight;
-        if (currencyData.decimal_degits) {
-            decimal_degits = currencyData.decimal_degits;
-        }
-    });
+
+    // Use default currency settings (can be loaded from settings if needed)
+    currentCurrency = '$';
+    currencyAtRight = false;
+    decimal_degits = 2;
     $("#send_mail").click(function() {
         if ($("#reset_password").is(":checked")) {
             var email = $(".user_email").val();
-            firebase.auth().sendPasswordResetEmail(email)
-                .then((res) => {
+            // For SQL-based system, we'll need to implement password reset via Laravel
+            $.ajax({
+                url: '{{ route("password.email") }}',
+                method: 'POST',
+                data: {
+                    _token: '{{ csrf_token() }}',
+                    email: email
+                },
+                success: function(response) {
                     alert('{{trans("lang.mail_sent")}}');
-                })
-                .catch((error) => {
+                },
+                error: function(xhr, status, error) {
                     console.log('Error password reset: ', error);
-                });
+                    alert('Error sending password reset email');
+                }
+            });
         } else {
             alert('{{trans("lang.mail_send_error")}}');
         }
@@ -210,56 +198,93 @@ foreach ($countries as $keycountry => $valuecountry) {
             placeholder: "Select Country",
             allowClear: true
         });
-        ref.get().then(async function(snapshots) {
-            var user = snapshots.docs[0].data();
-            $(".user_first_name").val(user.firstName);
-            $(".user_last_name").val(user.lastName);
-            if(user.email != ""){
-                $(".user_email").val(shortEmail(user.email));
-            }
-            else{
-                $(".user_email").val("");
-            }
-            $("#country_selector").val(user.countryCode.replace('+', '')).trigger('change');
-            if(user.phoneNumber != ""){
-                $(".user_phone").val(shortEditNumber(user.phoneNumber));
-            }
-            else{
-                $(".user_phone").val("");
-            }
-            if (user.profilePictureURL != '' && user.profilePictureURL != null) {
-                photo = user.profilePictureURL;
-                userImageFile = user.profilePictureURL;
-                $(".user_image").append('<img onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" class="rounded" style="width:50px" src="' + photo + '" alt="image">');
-            } else {
-                $(".user_image").append('<img class="rounded" style="width:50px" src="' + placeholderImage + '" alt="image">');
-            }
-            if (user.active) {
-                $(".user_active").prop('checked', true);
-            }
-            if (currencyAtRight) {
-                var wallet_amount = parseFloat(user.wallet_amount).toFixed(decimal_degits) + currentCurrency;
-            } else {
-                var wallet_amount = currentCurrency + parseFloat(user.wallet_amount).toFixed(decimal_degits);
-            }
-            if (wallet_amount != undefined) {
-                $("#wallet_amount").text(wallet_amount);
-            }
-            if (isNaN(user.wallet_amount)) {
-                if (currencyAtRight) {
-                    var wallet_amount = parseFloat(0).toFixed(decimal_degits) + currentCurrency;
+
+        // Load user data from SQL API
+        $.ajax({
+            url: apiBase + '/app-users/' + id,
+            method: 'GET',
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+            success: function(response) {
+                console.log('User data loaded:', response);
+                if (response.status && response.data) {
+                    var user = response.data;
+                    userData = user;
+                    provider = user.provider || 'email';
+
+                    // Show/hide provider-specific fields
+                    if (!user.provider || user.provider == "email") {
+                        $(".provider_type").show();
+                    } else {
+                        $(".provider_type").hide();
+                    }
+
+                    // Populate form fields
+                    $(".user_first_name").val(user.firstName || '');
+                    $(".user_last_name").val(user.lastName || '');
+
+                    if(user.email != "" && user.email != null){
+                        $(".user_email").val(user.email);
+                    } else {
+                        $(".user_email").val("");
+                    }
+
+                    // Set country code
+                    if (user.countryCode) {
+                        var countryCodeValue = user.countryCode.replace('+', '');
+                        $("#country_selector").val(countryCodeValue).trigger('change');
+                    }
+
+                    // Set phone number
+                    if(user.phoneNumber != "" && user.phoneNumber != null){
+                        $(".user_phone").val(user.phoneNumber);
+                    } else {
+                        $(".user_phone").val("");
+                    }
+
+                    // Set profile picture
+                    if (user.profilePictureURL != '' && user.profilePictureURL != null) {
+                        photo = user.profilePictureURL;
+                        userImageFile = user.profilePictureURL;
+                        $(".user_image").append('<img onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" class="rounded" style="width:50px" src="' + photo + '" alt="image">');
+                    } else {
+                        $(".user_image").append('<img class="rounded" style="width:50px" src="' + placeholderImage + '" alt="image">');
+                    }
+
+                    // Set active checkbox
+                    if (user.active || user.isActive) {
+                        $(".user_active").prop('checked', true);
+                    }
+
+                    // Display wallet amount
+                    var walletAmount = parseFloat(user.wallet_amount || 0);
+                    if (isNaN(walletAmount)) {
+                        walletAmount = 0;
+                    }
+                    var wallet_amount_display;
+                    if (currencyAtRight) {
+                        wallet_amount_display = walletAmount.toFixed(decimal_degits) + currentCurrency;
+                    } else {
+                        wallet_amount_display = currentCurrency + walletAmount.toFixed(decimal_degits);
+                    }
+                    $("#wallet_amount").text(wallet_amount_display);
+
+                    // Display total orders
+                    $("#total_orders").text(user.totalOrders || 0);
+
+                    jQuery("#data-table_processing").hide();
                 } else {
-                    var wallet_amount = currentCurrency + parseFloat(0).toFixed(decimal_degits);
+                    jQuery("#data-table_processing").hide();
+                    alert('User not found');
+                    window.location.href = '{{ route("users") }}';
                 }
-                $("#wallet_amount").text(wallet_amount);
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading user:', error);
+                jQuery("#data-table_processing").hide();
+                alert('Error loading user data');
+                window.location.href = '{{ route("users") }}';
             }
-            var orderRef = database.collection('restaurant_orders').where("authorID", "==", id);
-            orderRef.get().then(async function(snapshotsorder) {
-                var orders = snapshotsorder.size;
-                $("#total_orders").text(orders);
-            });
-            jQuery("#data-table_processing").hide();
-        })
+        });
         $(".edit-form-btn").click(function() {
             var userFirstName = $(".user_first_name").val();
             var userLastName = $(".user_last_name").val();
@@ -267,8 +292,8 @@ foreach ($countries as $keycountry => $valuecountry) {
             var countryCode = '+' + jQuery("#country_selector").val();
             var userPhone = $(".user_phone").val();
             var active = $(".user_active").is(":checked");
-            var password = $(".user_password").val();
             var user_name = userFirstName + " " + userLastName;
+
             if (userFirstName == '') {
                 $(".error_top").show();
                 $(".error_top").html("");
@@ -286,76 +311,70 @@ foreach ($countries as $keycountry => $valuecountry) {
                 window.scrollTo(0, 0);
             } else {
                 jQuery("#data-table_processing").show();
-                storeImageData().then(IMG => {
-                    database.collection('users').doc(id).update({
-                        'firstName': userFirstName,
-                        'lastName': userLastName,
-                        'email': email,
-                        'countryCode': countryCode,
-                        'phoneNumber': userPhone,
-                        'isActive': active,
-                        'profilePictureURL': IMG,
-                        'role': 'customer',
-                        'active': active
-                    }).then(async function(result) {
-                        console.log('✅ User updated successfully, now logging activity...');
-                        try {
-                            if (typeof logActivity === 'function') {
-                                console.log('🔍 Calling logActivity for user update...');
-                                await logActivity('users', 'updated', 'Updated user: ' + userFirstName + ' ' + userLastName);
-                                console.log('✅ Activity logging completed successfully');
-                            } else {
-                                console.error('❌ logActivity function is not available');
-                            }
-                        } catch (error) {
-                            console.error('❌ Error calling logActivity:', error);
-                        }
-                        jQuery("#data-table_processing").hide();
-                        window.location.href = '{{ route("users")}}';
-                    });
-                }).catch(err => {
-                    jQuery("#data-table_processing").hide();
-                    $(".error_top").show();
-                    $(".error_top").html("");
-                    $(".error_top").append("<p>" + err + "</p>");
-                    window.scrollTo(0, 0);
-                });
-            }
-        })
-    })
-    async function storeImageData() {
-        var newPhoto = '';
-        try {
-            if (userImageFile != "" && photo != userImageFile) {
-                var userOldImageUrlRef = await storage.refFromURL(userImageFile);
-                imageBucket = userOldImageUrlRef.bucket;
-                var envBucket = "<?php echo env('FIREBASE_STORAGE_BUCKET'); ?>";
-                if (imageBucket == envBucket) {
-                    await userOldImageUrlRef.delete().then(() => {
-                        console.log("Old file deleted!")
-                    }).catch((error) => {
-                        console.log("ERR File delete ===", error);
-                    });
-                } else {
-                    console.log('Bucket not matched');
+
+                // Prepare data for API
+                var updateData = {
+                    firstName: userFirstName,
+                    lastName: userLastName,
+                    countryCode: countryCode,
+                    phoneNumber: userPhone,
+                    active: active
+                };
+
+                // Add photo if changed
+                if (photo && photo !== userImageFile) {
+                    updateData.photo = photo;
+                    updateData.fileName = fileName;
                 }
-            }
-            if (photo != userImageFile) {
-                photo = photo.replace(/^data:image\/[a-z]+;base64,/, "")
-                var uploadTask = await storageRef.child(fileName).putString(photo, 'base64', {
-                    contentType: 'image/jpg'
+
+                // Update user via SQL API
+                $.ajax({
+                    url: apiBase + '/app-users/' + id,
+                    method: 'PUT',
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Content-Type': 'application/json'
+                    },
+                    data: JSON.stringify(updateData),
+                    success: function(response) {
+                        console.log('✅ User updated successfully:', response);
+
+                        // Log activity
+                        if (typeof logActivity === 'function') {
+                            logActivity('users', 'updated', 'Updated user: ' + userFirstName + ' ' + userLastName)
+                                .then(() => {
+                                    console.log('✅ Activity logged successfully');
+                                })
+                                .catch(err => {
+                                    console.error('❌ Error logging activity:', err);
+                                })
+                                .finally(() => {
+                                    jQuery("#data-table_processing").hide();
+                                    window.location.href = '{{ route("users")}}';
+                                });
+                        } else {
+                            jQuery("#data-table_processing").hide();
+                            window.location.href = '{{ route("users")}}';
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('❌ Error updating user:', error);
+                        jQuery("#data-table_processing").hide();
+                        $(".error_top").show();
+                        $(".error_top").html("");
+
+                        var errorMessage = 'Error updating user';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            errorMessage = xhr.responseJSON.message;
+                        }
+
+                        $(".error_top").append("<p>" + errorMessage + "</p>");
+                        window.scrollTo(0, 0);
+                    }
                 });
-                var downloadURL = await uploadTask.ref.getDownloadURL();
-                newPhoto = downloadURL;
-                photo = downloadURL;
-            } else {
-                newPhoto = photo;
             }
-        } catch (error) {
-            console.log("ERR ===", error);
-        }
-        return newPhoto;
-    }
+        });
+    });
     function formatState(state) {
             if (!state.id) {
                 return state.text;

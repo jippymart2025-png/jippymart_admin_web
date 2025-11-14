@@ -158,7 +158,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                 <button type="button" class="btn btn-primary  save-form-btn"><i class="fa fa-save"></i>
                     {{trans('lang.save')}}
                 </button>
-                <a href="{!! route('restaurants') !!}" class="btn btn-default"><i
+                <a href="{!! route('vendors') !!}" class="btn btn-default"><i
                         class="fa fa-undo"></i>{{trans('lang.cancel')}}</a>
             </div>
 
@@ -181,7 +181,7 @@ foreach ($countries as $keycountry => $valuecountry) {
     // Load subscription plans from SQL
     $(document).ready(async function() {
         jQuery("#data-table_processing").show();
-        
+
         // Set default vendor type to restaurant
         $("#vendor_type").val('restaurant');
 
@@ -191,7 +191,7 @@ foreach ($countries as $keycountry => $valuecountry) {
             placeholder: "Select Country",
             allowClear: true
         });
-        
+
         // Load subscription plans via AJAX
         $.ajax({
             url: '{{ route("vendors.subscription-plans") }}',
@@ -223,7 +223,7 @@ foreach ($countries as $keycountry => $valuecountry) {
         var country_code=$("#country_selector").val();
         var userPhone=$(".user_phone").val();
         var vendorType=$("#vendor_type").val();
-        
+
         // Set default vendor type to 'restaurant' if empty or not selected
         if(!vendorType || vendorType=='' || vendorType==null || vendorType==undefined || vendorType=='') {
             vendorType='restaurant';
@@ -269,20 +269,20 @@ foreach ($countries as $keycountry => $valuecountry) {
             window.scrollTo(0,0);
         } else {
             jQuery("#data-table_processing").show();
-            
+
             // Get subscription plan data if selected
             var subscriptionData = null;
             if(subscriptionPlanId && subscriptionPlanId != '') {
                 // You might want to fetch the subscription plan details via AJAX here
                 // For now, we'll pass just the ID
             }
-            
+
             // Upload image first if exists
             var profilePictureURL = '';
             if(ownerphoto != '') {
                 profilePictureURL = await uploadImage(ownerphoto, ownerFileName);
             }
-            
+
             // Create vendor via AJAX
             $.ajax({
                 url: '{{ route("vendors.create.post") }}',
@@ -298,7 +298,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                     countryCode: '+' + country_code,
                     phoneNumber: userPhone,
                     vType: vendorType,
-                    active: restaurant_active,
+                    active: restaurant_active ? 1 : 0,
                     profilePictureURL: profilePictureURL,
                     subscriptionPlanId: subscriptionPlanId
                 },
@@ -325,7 +325,7 @@ foreach ($countries as $keycountry => $valuecountry) {
             });
         }
     })
-    
+
     async function uploadImage(imageData, fileName) {
         // In a real implementation, you would upload the image to your storage
         // For now, we'll return the data URL (base64)

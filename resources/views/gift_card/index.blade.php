@@ -76,6 +76,61 @@
     </div>
 </div>
 @endsection
+@section('style')
+<style>
+/* Toggle switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+}
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+input:checked + .slider {
+    background-color: #2196F3;
+}
+input:focus + .slider {
+    box-shadow: 0 0 1px #2196F3;
+}
+input:checked + .slider:before {
+    -webkit-transform: translateX(26px);
+    -ms-transform: translateX(26px);
+    transform: translateX(26px);
+}
+.slider.round {
+    border-radius: 34px;
+}
+.slider.round:before {
+    border-radius: 50%;
+}
+</style>
+@endsection
 @section('scripts')
 <script type="text/javascript">
     var user_permissions = '<?php echo @session("user_permissions")?>';
@@ -83,16 +138,35 @@
     var checkDeletePermission = ($.inArray('gift-card.delete', user_permissions) >= 0);
 
     $(document).ready(function(){
+        console.log('📡 Initializing Gift Cards DataTable...');
+
         const table = $('#giftCardTable').DataTable({
-            pageLength: 10,
+            pageLength: 30,
+            lengthMenu: [[10, 25, 30, 50, 100, -1], [10, 25, 30, 50, 100, "All"]],
             processing: true,
             serverSide: true,
             responsive: true,
             ajax: function (data, callback) {
-                const params = { start: data.start, length: data.length, draw: data.draw, search: data.search.value };
+                const params = { start: data.start, length: data.length, draw: data.draw,
+                    search: { value: data.search.value }
+                };
+                console.log('📡 Fetching gift cards:', params);
+
                 $.get('{{ route('gift-card.data') }}', params, function(json){
-                    $('.gift_count').text(json.recordsTotal || 0);
+                    console.log('📥 Gift cards response:', json);
+
+                    // Update count display
+                    if (json.stats && json.stats.total) {
+                        $('.gift_count').text(json.stats.total);
+                        console.log('📊 Total gift cards:', json.stats.total);
+                    } else {
+                        $('.gift_count').text(json.recordsTotal || 0);
+                    }
+
                     callback(json);
+                })
+                .fail(function(xhr){
+                    console.error('❌ Error loading gift cards:', xhr);
                 });
             },
             order: (checkDeletePermission) ? [1, 'asc'] : [0,'asc'],
@@ -105,20 +179,61 @@
             var id = $(this).data('id');
             var isEnable = $(this).is(':checked');
             var $cb = $(this);
+            var giftName = $cb.closest('tr').find('a').text().trim() || 'Unknown';
+            var action = isEnable ? 'enabled' : 'disabled';
+
+            console.log('🔄 Toggle gift card status:', { id: id, name: giftName, status: isEnable });
+
             $cb.prop('disabled', true);
             $.post({ url: '{{ url('gift-card') }}' + '/' + id + '/toggle', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }, data: { isEnable: isEnable } })
-                .done(function(resp){ $cb.prop('checked', !!resp.isEnable); })
-                .fail(function(xhr){ $cb.prop('checked', !isEnable); alert('Failed to update ('+xhr.status+'): '+xhr.statusText); })
+                .done(function(resp){
+                    console.log('✅ Gift card status toggled:', resp);
+                    $cb.prop('checked', !!resp.isEnable);
+
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        logActivity('gift_cards', action, action.charAt(0).toUpperCase() + action.slice(1) + ' gift card: ' + giftName);
+                    }
+                })
+                .fail(function(xhr){
+                    console.error('❌ Toggle failed:', xhr);
+                    $cb.prop('checked', !isEnable);
+                    alert('Failed to update ('+xhr.status+'): '+xhr.statusText);
+                })
                 .always(function(){ $cb.prop('disabled', false); });
         });
 
         // Single delete
         $('#giftCardTable').on('click', '.delete-gift', function(){
             var id = $(this).data('id');
+            var giftName = $(this).closest('tr').find('a').text().trim() || 'Unknown';
+
+            console.log('🗑️ Delete gift card clicked:', { id: id, name: giftName });
+
             if(!confirm("{{trans('lang.selected_delete_alert')}}")) return;
+
+            jQuery("#data-table_processing").show();
+
             $.post({ url: '{{ url('gift-card') }}' + '/' + id + '/delete', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-                .done(function(){ $('#giftCardTable').DataTable().ajax.reload(null,false); })
-                .fail(function(xhr){ alert('Failed to delete ('+xhr.status+'): '+xhr.statusText); });
+                .done(function(response){
+                    console.log('✅ Gift card deleted successfully:', response);
+
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        logActivity('gift_cards', 'deleted', 'Deleted gift card: ' + giftName);
+                    }
+
+                    $('#giftCardTable').DataTable().ajax.reload(null,false);
+
+                    if (typeof toastr !== 'undefined') {
+                        toastr.success(response.message || 'Gift card deleted successfully');
+                    }
+                })
+                .fail(function(xhr){
+                    console.error('❌ Delete failed:', xhr);
+                    alert('Failed to delete ('+xhr.status+'): '+xhr.statusText);
+                })
+                .always(function(){ jQuery("#data-table_processing").hide(); });
         });
 
         // Select all
@@ -130,11 +245,36 @@
         $(document).on('click','#deleteAll', function(){
             var ids = [];
             $('#giftCardTable .is_open:checked').each(function(){ ids.push($(this).attr('dataId')); });
+
             if(ids.length===0){ alert("{{trans('lang.select_delete_alert')}}"); return; }
+
+            var selectedCount = ids.length;
+            console.log('🗑️ Bulk delete gift cards requested:', { count: selectedCount });
+
             if(!confirm("{{trans('lang.selected_delete_alert')}}")) return;
+
+            jQuery("#data-table_processing").show();
+
             $.post({ url: '{{ route('gift-card.bulkDelete') }}', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }, data: { ids: ids } })
-                .done(function(){ $('#giftCardTable').DataTable().ajax.reload(null,false); })
-                .fail(function(xhr){ alert('Failed to delete ('+xhr.status+'): '+xhr.statusText); });
+                .done(function(response){
+                    console.log('✅ Bulk delete completed:', response);
+
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        logActivity('gift_cards', 'bulk_deleted', 'Bulk deleted ' + (response.deleted || selectedCount) + ' gift cards');
+                    }
+
+                    $('#giftCardTable').DataTable().ajax.reload(null,false);
+
+                    if (typeof toastr !== 'undefined') {
+                        toastr.success('Deleted ' + (response.deleted || selectedCount) + ' gift cards');
+                    }
+                })
+                .fail(function(xhr){
+                    console.error('❌ Bulk delete failed:', xhr);
+                    alert('Failed to delete ('+xhr.status+'): '+xhr.statusText);
+                })
+                .always(function(){ jQuery("#data-table_processing").hide(); });
         });
     });
 </script>

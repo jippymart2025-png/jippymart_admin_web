@@ -63,7 +63,7 @@
                 </div>
             </div>
             <div class="card-body">
-                <form action="{{ route('categories.import') }}" method="POST" enctype="multipart/form-data">
+                <form id="importForm" action="{{ route('categories.import') }}" method="POST" enctype="multipart/form-data">
                     @csrf
                     <div class="row">
                         <div class="col-md-8">
@@ -74,10 +74,13 @@
                                     <i class="mdi mdi-information-outline mr-1"></i>
                                     File should contain: title, description, photo, publish, show_in_homepage, restaurant_id, review_attributes
                                 </div>
+                                <div class="form-text text-info mt-2">
+                                    <strong>Boolean Values:</strong> Use "true", "1", or "yes" for publish/show_in_homepage fields
+                                </div>
                             </div>
                         </div>
                         <div class="col-md-4 d-flex align-items-end">
-                            <button type="submit" class="btn btn-primary rounded-full">
+                            <button type="submit" class="btn btn-primary rounded-full" id="importBtn">
                                 <i class="mdi mdi-upload mr-2"></i>Import Categories
                             </button>
                         </div>
@@ -134,12 +137,26 @@
     var checkDeletePermission = ($.inArray('category.delete', user_permissions) >= 0);
     $(document).ready(function () {
         const table = $('#categoriesTable').DataTable({
-            pageLength: 10,
+            pageLength: 30,
+            lengthMenu: [[10, 25, 30, 50, 100, -1], [10, 25, 30, 50, 100, "All"]],
             processing: true,
             serverSide: true,
             responsive: true,
             ajax: {
-                url: '{{ route("categories.data") }}'
+                url: '{{ route("categories.data") }}',
+                dataSrc: function(json) {
+                    console.log('📥 Categories response:', json);
+
+                    // Update count display
+                    if (json.stats && json.stats.total) {
+                        $('.category_count').text(json.stats.total);
+                        console.log('📊 Total categories:', json.stats.total);
+                    } else if (json.recordsTotal) {
+                        $('.category_count').text(json.recordsTotal);
+                    }
+
+                    return json.data;
+                }
             },
             order: (checkDeletePermission) ? [1, 'asc'] : [0,'asc'],
             columnDefs: [
@@ -151,25 +168,47 @@
                 processing: ""
             }
         });
-        $('#categoriesTable').on('xhr.dt', function(e, settings, json){
-            if(json && typeof json.recordsTotal !== 'undefined'){
-                $('.category_count').text(json.recordsTotal);
-            }
-        });
         table.columns.adjust().draw();
 
         $(document).on('click', '.delete-btn', function(e){
-            if(!confirm("{{trans('lang.selected_delete_alert')}}")){
-                e.preventDefault();
+            e.preventDefault();
+            var deleteUrl = $(this).attr('href');
+            var categoryName = $(this).closest('tr').find('a').text().trim();
+
+            console.log('🗑️ Delete category clicked:', { url: deleteUrl, name: categoryName });
+
+            if(confirm("{{trans('lang.selected_delete_alert')}}")){
+                // Log activity
+                if (typeof logActivity === 'function') {
+                    logActivity('categories', 'deleted', 'Deleted category: ' + categoryName);
+                }
+                window.location.href = deleteUrl;
             }
         });
+
         $(document).on('change', '.toggle-publish', function(){
             var id = $(this).data('id');
             var publish = $(this).is(':checked');
+            var categoryName = $(this).closest('tr').find('a').text().trim();
+            var action = publish ? 'published' : 'unpublished';
+
             $.post({
                 url: '{{ url('/categories') }}' + '/' + id + '/toggle',
                 headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
-                data: { publish: publish }
+                data: { publish: publish },
+                success: function(response) {
+                    console.log('✅ Category publish toggled:', response);
+
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        logActivity('categories', action, action.charAt(0).toUpperCase() + action.slice(1) + ' category: ' + categoryName);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('❌ Error toggling publish:', error);
+                    // Revert checkbox on error
+                    $(this).prop('checked', !publish);
+                }
             });
         });
 
@@ -178,15 +217,40 @@
         });
         $("#deleteAll").click(function () {
             if ($('#categoriesTable .is_open:checked').length) {
+                var selectedCount = $('#categoriesTable .is_open:checked').length;
+
+                console.log('🗑️ Bulk delete categories requested:', { count: selectedCount });
+
                 if (confirm("{{trans('lang.selected_delete_alert')}}")) {
-                    $('#categoriesTable .is_open:checked').each(function(){
+                    // Log activity for bulk delete
+                    if (typeof logActivity === 'function') {
+                        logActivity('categories', 'bulk_deleted', 'Bulk deleted ' + selectedCount + ' categories');
+                    }
+
+                    var deleteUrl = '{{ url('/categories/delete') }}';
+                    $('#categoriesTable .is_open:checked').first().each(function(){
                         var dataId = $(this).attr('dataId');
-                        window.location.href = '{{ url('/categories/delete') }}' + '/' + dataId;
+                        window.location.href = deleteUrl + '/' + dataId;
                     });
                 }
             } else {
                 alert("{{trans('lang.select_delete_alert')}}");
             }
+        });
+
+        // Import form submission
+        $('#importForm').on('submit', function(e) {
+            var fileInput = $('#importFile')[0];
+            if (!fileInput.files || !fileInput.files[0]) {
+                e.preventDefault();
+                alert('Please select an Excel file to import');
+                return false;
+            }
+
+            var fileName = fileInput.files[0].name;
+            console.log('📁 Submitting import form with file:', fileName);
+
+            $('#importBtn').prop('disabled', true).html('<i class="fa fa-spinner fa-spin mr-2"></i>Importing...');
         });
     });
 </script>

@@ -114,9 +114,32 @@
                 return false;
             }
 
-            $.post({ url: '{{ route('menu-periods.store') }}', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }, data: { label: label, from: from, to: to } })
-                .done(function(){ window.location.href = '{{ route("menu-periods")}}'; })
-                .fail(function(xhr){ alert('Failed to save ('+xhr.status+'): '+xhr.statusText); });
+            var publish = $("#menu_period_publish").is(":checked");
+
+            console.log('💾 Creating menu period:', { label: label, from: from, to: to, publish: publish });
+
+            jQuery("#data-table_processing").show();
+
+            $.post({
+                url: '{{ route('menu-periods.store') }}',
+                headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                data: { label: label, from: from, to: to, publish: publish ? 1 : 0 }
+            })
+            .done(function(response){
+                console.log('✅ Menu period created successfully:', response);
+
+                // Log activity
+                if (typeof logActivity === 'function') {
+                    logActivity('menu_periods', 'created', 'Created menu period: ' + label);
+                }
+
+                window.location.href = '{{ route("menu-periods")}}';
+            })
+            .fail(function(xhr){
+                console.error('❌ Create failed:', xhr);
+                jQuery("#data-table_processing").hide();
+                alert('Failed to save ('+xhr.status+'): '+xhr.statusText);
+            });
         });
     });
 </script>

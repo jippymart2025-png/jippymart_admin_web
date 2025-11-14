@@ -8,15 +8,16 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
+use App\Services\ActivityLogger;
 
 class MartCategoryController extends Controller
-{   
+{
 
     public function __construct()
     {
         $this->middleware('auth');
     }
-    
+
     public function index()
     {
         return view("martCategories.index");
@@ -24,12 +25,24 @@ class MartCategoryController extends Controller
 
     public function edit($id)
     {
-        return view('martCategories.edit')->with('id', $id);
+        $category = MartCategory::findOrFail($id);
+        $reviewAttributes = DB::table('review_attributes')->orderBy('title')->get();
+        $selectedAttributes = collect(json_decode($category->review_attributes ?? '[]', true))->map(fn($item) => (string) $item)->all();
+
+        return view('martCategories.edit', [
+            'category' => $category,
+            'reviewAttributes' => $reviewAttributes,
+            'selectedAttributes' => $selectedAttributes,
+        ]);
     }
 
     public function create()
     {
-        return view('martCategories.create');
+        $reviewAttributes = DB::table('review_attributes')->orderBy('title')->get();
+
+        return view('martCategories.create', [
+            'reviewAttributes' => $reviewAttributes,
+        ]);
     }
 
     /**
@@ -39,51 +52,51 @@ class MartCategoryController extends Controller
     {
         \Log::info('=== Mart Categories getData called ===');
         \Log::info('Request params:', $request->all());
-        
+
         $start = $request->input('start', 0);
         $length = $request->input('length', 10);
         $searchValue = strtolower($request->input('search.value', ''));
         $orderColumnIndex = $request->input('order.0.column', 1);
         $orderDirection = $request->input('order.0.dir', 'asc');
-        
+
         \Log::info("Parsed - start: $start, length: $length, search: $searchValue");
-        
+
         $user_permissions = json_decode(session('user_permissions') ?? '[]', true);
         $checkDeletePermission = is_array($user_permissions) && in_array('mart-categories.delete', $user_permissions);
-        
-        $orderableColumns = $checkDeletePermission 
-            ? ['', 'title', 'section', 'subcategories_count', 'totalProducts', '', ''] 
+
+        $orderableColumns = $checkDeletePermission
+            ? ['', 'title', 'section', 'subcategories_count', 'totalProducts', '', '']
             : ['title', 'section', 'subcategories_count', 'totalProducts', '', ''];
-        
+
         $orderByField = $orderableColumns[$orderColumnIndex] ?? 'title';
-        
+
         // Build query
         $query = MartCategory::query();
-        
+
         // Apply search filter
-        if (!empty($searchValue) && strlen($searchValue) >= 3) {
+        if ($searchValue !== '') {
             $query->where(function($q) use ($searchValue) {
                 $q->where('title', 'like', "%{$searchValue}%")
                   ->orWhere('section', 'like', "%{$searchValue}%")
                   ->orWhere('subcategories_count', 'like', "%{$searchValue}%");
             });
         }
-        
+
         // Get total count
         $totalRecords = $query->count();
-        
+
         \Log::info("Total records found: $totalRecords");
-        
+
         // Apply ordering
         if (!empty($orderByField) && $orderByField !== '') {
             $query->orderBy($orderByField, $orderDirection);
         }
-        
+
         // Apply pagination
         $categories = $query->skip($start)->take($length)->get();
-        
+
         \Log::info("Categories retrieved: " . $categories->count());
-        
+
         // Get subcategory counts and mart items counts
         $records = [];
         foreach ($categories as $category) {
@@ -91,7 +104,7 @@ class MartCategoryController extends Controller
             $totalProducts = DB::table('mart_items')
                 ->where('categoryID', $category->id)
                 ->count();
-            
+
             $records[] = [
                 'id' => $category->id,
                 'title' => $category->title,
@@ -107,9 +120,9 @@ class MartCategoryController extends Controller
                 'review_attributes' => $category->review_attributes ? json_decode($category->review_attributes, true) : []
             ];
         }
-        
+
         \Log::info("Returning " . count($records) . " records");
-        
+
         return response()->json([
             'draw' => intval($request->input('draw')),
             'recordsTotal' => $totalRecords,
@@ -124,11 +137,11 @@ class MartCategoryController extends Controller
     public function getCategory($id)
     {
         $category = MartCategory::find($id);
-        
+
         if (!$category) {
             return response()->json(['error' => 'Category not found'], 404);
         }
-        
+
         return response()->json([
             'id' => $category->id,
             'title' => $category->title,
@@ -149,114 +162,123 @@ class MartCategoryController extends Controller
     /**
      * Store new mart category
      */
-    public function store(Request $request)
+    public function store(Request $request, ActivityLogger $logger)
     {
-        $request->validate([
+        $validated = $request->validate([
             'title' => 'required|string|max:255',
-            'photo' => 'nullable|string',
             'description' => 'nullable|string',
-            'section' => 'nullable|string',
-            'category_order' => 'nullable|integer',
-            'publish' => 'nullable|in:0,1,true,false',
-            'show_in_homepage' => 'nullable|in:0,1,true,false',
-            'review_attributes' => 'nullable|array'
+            'section' => 'nullable|string|max:255',
+            'category_order' => 'nullable|integer|min:1',
+            'photo' => 'nullable|image|max:2048',
+            'photo_url' => 'nullable|url',
+            'publish' => 'nullable|boolean',
+            'show_in_homepage' => 'nullable|boolean',
+            'review_attributes' => 'array',
+            'review_attributes.*' => 'string',
         ]);
 
-        // Check if already 5 categories with show_in_homepage
-        if ($request->input('show_in_homepage')) {
+        if ($request->boolean('show_in_homepage')) {
             $count = MartCategory::where('show_in_homepage', true)->count();
             if ($count >= 5) {
-                return response()->json(['error' => 'Already 5 mart categories are active for show in homepage'], 400);
+                return $this->storeResponse($request, false, 'Already 5 mart categories are active for show in homepage');
             }
         }
 
-        $id = uniqid();
-        
+        $photoPath = $this->handlePhotoUpload($request);
+
         $category = MartCategory::create([
-            'id' => $id,
-            'title' => $request->input('title'),
-            'description' => $request->input('description', ''),
-            'photo' => $request->input('photo', ''),
-            'section' => $request->input('section', 'General'),
-            'category_order' => $request->input('category_order', 1),
-            'section_order' => $request->input('category_order', 1),
-            'publish' => filter_var($request->input('publish', false), FILTER_VALIDATE_BOOLEAN),
-            'show_in_homepage' => filter_var($request->input('show_in_homepage', false), FILTER_VALIDATE_BOOLEAN),
+            'id' => Str::uuid()->toString(),
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? '',
+            'photo' => $photoPath,
+            'section' => $validated['section'] ?? 'General',
+            'category_order' => $validated['category_order'] ?? 1,
+            'section_order' => $validated['category_order'] ?? 1,
+            'publish' => $request->boolean('publish'),
+            'show_in_homepage' => $request->boolean('show_in_homepage'),
             'review_attributes' => json_encode($request->input('review_attributes', [])),
             'has_subcategories' => false,
             'subcategories_count' => 0,
-            'mart_id' => ''
+            'mart_id' => '',
+            'created_at' => now()->toIso8601String(),
+            'updated_at' => now()->toIso8601String(),
         ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Mart category created successfully',
-            'id' => $category->id
-        ]);
+        $logger->log(auth()->user(), 'mart_categories', 'created', 'Created mart category: ' . $category->title, $request);
+
+        return $this->storeResponse($request, true, 'Mart category created successfully', $category->id);
     }
 
     /**
      * Update existing mart category
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, $id, ActivityLogger $logger)
     {
-        $request->validate([
+        $category = MartCategory::findOrFail($id);
+
+        $validated = $request->validate([
             'title' => 'required|string|max:255',
-            'photo' => 'nullable|string',
             'description' => 'nullable|string',
-            'section' => 'nullable|string',
-            'category_order' => 'nullable|integer',
-            'publish' => 'nullable|in:0,1,true,false',
-            'show_in_homepage' => 'nullable|in:0,1,true,false',
-            'review_attributes' => 'nullable|array'
+            'section' => 'nullable|string|max:255',
+            'category_order' => 'nullable|integer|min:1',
+            'photo' => 'nullable|image|max:2048',
+            'photo_url' => 'nullable|url',
+            'publish' => 'nullable|boolean',
+            'show_in_homepage' => 'nullable|boolean',
+            'review_attributes' => 'array',
+            'review_attributes.*' => 'string',
         ]);
 
-        $category = MartCategory::find($id);
-        
-        if (!$category) {
-            return response()->json(['error' => 'Category not found'], 404);
-        }
-
-        // Check if already 5 categories with show_in_homepage (excluding current)
-        if ($request->input('show_in_homepage')) {
-            $count = MartCategory::where('show_in_homepage', true)
-                ->where('id', '!=', $id)
-                ->count();
+        if ($request->boolean('show_in_homepage')) {
+            $count = MartCategory::where('show_in_homepage', true)->where('id', '!=', $id)->count();
             if ($count >= 5) {
-                return response()->json(['error' => 'Already 5 mart categories are active for show in homepage'], 400);
+                return $this->updateResponse($request, false, 'Already 5 mart categories are active for show in homepage');
             }
         }
 
-        $category->update([
-            'title' => $request->input('title'),
-            'description' => $request->input('description', ''),
-            'photo' => $request->input('photo', ''),
-            'section' => $request->input('section', 'General'),
-            'category_order' => $request->input('category_order', 1),
-            'section_order' => $request->input('category_order', 1),
-            'publish' => filter_var($request->input('publish', false), FILTER_VALIDATE_BOOLEAN),
-            'show_in_homepage' => filter_var($request->input('show_in_homepage', false), FILTER_VALIDATE_BOOLEAN),
-            'review_attributes' => json_encode($request->input('review_attributes', []))
+        if ($request->boolean('remove_photo')) {
+            $this->deleteImage($category->photo);
+            $category->photo = null;
+        }
+
+        $photoPath = $this->handlePhotoUpload($request, $category);
+
+        $category->fill([
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? '',
+            'photo' => $photoPath,
+            'section' => $validated['section'] ?? 'General',
+            'category_order' => $validated['category_order'] ?? 1,
+            'section_order' => $validated['category_order'] ?? 1,
+            'publish' => $request->boolean('publish'),
+            'show_in_homepage' => $request->boolean('show_in_homepage'),
+            'review_attributes' => json_encode($request->input('review_attributes', [])),
+            'updated_at' => now()->toIso8601String(),
         ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Mart category updated successfully'
-        ]);
+        $category->save();
+
+        $logger->log(auth()->user(), 'mart_categories', 'updated', 'Updated mart category: ' . $category->title, $request);
+
+        return $this->updateResponse($request, true, 'Mart category updated successfully');
     }
 
     /**
      * Delete mart category
      */
-    public function destroy($id)
+    public function destroy($id, ActivityLogger $logger, Request $request)
     {
         $category = MartCategory::find($id);
-        
+
         if (!$category) {
             return response()->json(['error' => 'Category not found'], 404);
         }
 
+        $this->deleteImage($category->photo);
+        $title = $category->title;
         $category->delete();
+
+        $logger->log(auth()->user(), 'mart_categories', 'deleted', 'Deleted mart category: ' . $title, $request);
 
         return response()->json([
             'success' => true,
@@ -267,15 +289,22 @@ class MartCategoryController extends Controller
     /**
      * Delete multiple categories
      */
-    public function bulkDelete(Request $request)
+    public function bulkDelete(Request $request, ActivityLogger $logger)
     {
         $ids = $request->input('ids', []);
-        
+
         if (empty($ids)) {
             return response()->json(['error' => 'No categories selected'], 400);
         }
 
+        $categories = MartCategory::whereIn('id', $ids)->get();
+        foreach ($categories as $category) {
+            $this->deleteImage($category->photo);
+        }
+
         MartCategory::whereIn('id', $ids)->delete();
+
+        $logger->log(auth()->user(), 'mart_categories', 'bulk_deleted', 'Bulk deleted mart categories: ' . implode(',', $ids), $request);
 
         return response()->json([
             'success' => true,
@@ -286,17 +315,21 @@ class MartCategoryController extends Controller
     /**
      * Toggle publish status
      */
-    public function togglePublish(Request $request, $id)
+    public function togglePublish(Request $request, $id, ActivityLogger $logger)
     {
         $category = MartCategory::find($id);
-        
+
         if (!$category) {
             return response()->json(['error' => 'Category not found'], 404);
         }
 
+        $publish = filter_var($request->input('publish', false), FILTER_VALIDATE_BOOLEAN);
+
         $category->update([
-            'publish' => filter_var($request->input('publish', false), FILTER_VALIDATE_BOOLEAN)
+            'publish' => $publish
         ]);
+
+        $logger->log(auth()->user(), 'mart_categories', $publish ? 'published' : 'unpublished', 'Updated publish status for mart category: ' . $category->title, $request);
 
         return response()->json([
             'success' => true,
@@ -318,20 +351,20 @@ class MartCategoryController extends Controller
         }
 
         $headers = array_map('trim', array_shift($rows));
-        
+
         $imported = 0;
         $errors = [];
-        
+
         foreach ($rows as $index => $row) {
             $data = array_combine($headers, $row);
             $rowNumber = $index + 2;
-            
+
             // Validate required fields
             if (empty($data['title'])) {
                 $errors[] = "Row $rowNumber: Title is required";
                 continue;
             }
-            
+
             // Process review attributes
             $reviewAttributes = [];
             if (!empty($data['review_attributes'])) {
@@ -340,7 +373,7 @@ class MartCategoryController extends Controller
                     $reviewAttributes[] = $input;
                 }
             }
-            
+
             // Create mart category
             MartCategory::create([
                 'id' => uniqid(),
@@ -358,19 +391,19 @@ class MartCategoryController extends Controller
                 'review_attributes' => json_encode($reviewAttributes),
                 'migratedBy' => 'bulk_import',
             ]);
-            
+
             $imported++;
         }
-        
+
         if ($imported === 0) {
             return back()->withErrors(['file' => 'No valid rows were found to import.']);
         }
-        
+
         $message = "Mart Categories imported successfully! ($imported rows)";
         if (!empty($errors)) {
             $message .= "\n\nWarnings:\n" . implode("\n", $errors);
         }
-        
+
         return back()->with('success', $message);
     }
 
@@ -388,7 +421,7 @@ class MartCategoryController extends Controller
         if (!file_exists($filePath)) {
             $this->generateTemplate($filePath);
         }
-        
+
         return response()->download($filePath, 'mart_categories_import_template.xlsx', [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Content-Disposition' => 'attachment; filename="mart_categories_import_template.xlsx"'
@@ -403,12 +436,12 @@ class MartCategoryController extends Controller
         try {
             // Create new spreadsheet
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-            
+
             // Remove default worksheet and create a new one
             $spreadsheet->removeSheetByIndex(0);
             $sheet = $spreadsheet->createSheet();
             $sheet->setTitle('Mart Categories Import');
-            
+
             // Set headers with proper formatting
             $headers = [
                 'A1' => 'title',
@@ -472,16 +505,16 @@ class MartCategoryController extends Controller
             $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
             $writer->setPreCalculateFormulas(false);
             $writer->setIncludeCharts(false);
-            
+
             // Ensure directory exists
             $dir = dirname($filePath);
             if (!is_dir($dir)) {
                 mkdir($dir, 0755, true);
             }
-            
+
             // Save the file
             $writer->save($filePath);
-            
+
             // Verify file was created
             if (!file_exists($filePath) || filesize($filePath) < 1000) {
                 throw new \Exception('Generated file is too small or corrupted');
@@ -494,5 +527,78 @@ class MartCategoryController extends Controller
             }
             throw new \Exception('Failed to generate template: ' . $e->getMessage());
         }
+    }
+
+    protected function handlePhotoUpload(Request $request, ?MartCategory $category = null): ?string
+    {
+        if ($request->hasFile('photo')) {
+            $path = $request->file('photo')->store('mart_categories', 'public');
+            return Storage::disk('public')->url($path);
+        }
+
+        if ($request->filled('photo_url')) {
+            return $request->input('photo_url');
+        }
+
+        return $category?->photo;
+    }
+
+    protected function deleteImage(?string $path): void
+    {
+        if (!$path) {
+            return;
+        }
+
+        $publicBase = Storage::disk('public')->url('');
+        if (Str::startsWith($path, $publicBase)) {
+            $relative = Str::after($path, $publicBase);
+            Storage::disk('public')->delete($relative);
+            return;
+        }
+
+        if (!Str::startsWith($path, ['http://', 'https://'])) {
+            Storage::disk('public')->delete($path);
+        }
+    }
+
+    protected function storeResponse(Request $request, bool $success, string $message, string $id = null)
+    {
+        if ($request->expectsJson() || $request->ajax()) {
+            if (!$success) {
+                return response()->json(['error' => $message], 400);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'id' => $id,
+            ]);
+        }
+
+        if (!$success) {
+            return redirect()->back()->withErrors(['error' => $message])->withInput();
+        }
+
+        return redirect()->route('mart-categories')->with('success', $message);
+    }
+
+    protected function updateResponse(Request $request, bool $success, string $message)
+    {
+        if ($request->expectsJson() || $request->ajax()) {
+            if (!$success) {
+                return response()->json(['error' => $message], 400);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+            ]);
+        }
+
+        if (!$success) {
+            return redirect()->back()->withErrors(['error' => $message])->withInput();
+        }
+
+        return redirect()->route('mart-categories')->with('success', $message);
     }
 }

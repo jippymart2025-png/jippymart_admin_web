@@ -78,11 +78,22 @@
     var id_menu_period = "{{ $id ?? '' }}";
     $(document).ready(function () {
         if (id_menu_period) {
+            console.log('🔄 Loading menu period data for ID:', id_menu_period);
+
             $.get('{{ url('/menu-periods/json') }}/' + id_menu_period, function(resp){
+                console.log('✅ Menu period data loaded:', resp);
+
                 $(".menu-period-label").val(resp.label || '');
                 $(".menu-period-from").val(resp.from || '');
                 $(".menu-period-to").val(resp.to || '');
-            }).fail(function(){
+
+                if (resp.publish || resp.publish == 1 || resp.publish == '1') {
+                    $("#menu_period_publish").prop('checked', true);
+                }
+
+                console.log('📝 Form populated with menu period data');
+            }).fail(function(xhr){
+                console.error('❌ Failed to load menu period data:', xhr);
                 $(".error_top").show().html('<p>Error loading menu period data</p>');
             });
         }
@@ -124,9 +135,32 @@
                 return false;
             }
 
-            $.post({ url: '{{ url('/menu-periods') }}' + '/' + id_menu_period, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }, data: { label: label, from: from, to: to } })
-                .done(function(){ window.location.href = '{{ route("menu-periods")}}'; })
-                .fail(function(xhr){ alert('Failed to save ('+xhr.status+'): '+xhr.statusText); });
+            var publish = $("#menu_period_publish").is(":checked");
+
+            console.log('💾 Updating menu period:', { id: id_menu_period, label: label, from: from, to: to, publish: publish });
+
+            jQuery("#data-table_processing").show();
+
+            $.post({
+                url: '{{ url('/menu-periods') }}' + '/' + id_menu_period,
+                headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                data: { label: label, from: from, to: to, publish: publish ? 1 : 0 }
+            })
+            .done(function(response){
+                console.log('✅ Menu period updated successfully:', response);
+
+                // Log activity
+                if (typeof logActivity === 'function') {
+                    logActivity('menu_periods', 'updated', 'Updated menu period: ' + label);
+                }
+
+                window.location.href = '{{ route("menu-periods")}}';
+            })
+            .fail(function(xhr){
+                console.error('❌ Update failed:', xhr);
+                jQuery("#data-table_processing").hide();
+                alert('Failed to save ('+xhr.status+'): '+xhr.statusText);
+            });
         });
     });
 </script>

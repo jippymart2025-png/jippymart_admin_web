@@ -156,7 +156,8 @@
         jQuery("#data-table_processing").show();
 
         const table = $('#categoriesTable').DataTable({
-            pageLength: 10,
+            pageLength: 30,
+            lengthMenu: [[10, 25, 30, 50, 100], [10, 25, 30, 50, 100]],
             processing: false,
             serverSide: true,
             responsive: true,

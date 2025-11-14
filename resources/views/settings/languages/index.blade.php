@@ -109,8 +109,8 @@
         $.get("{{ route('api.languages.settings') }}", async function(response) {
             html = '';
             if (response.success && response.list) {
-                languages = response.list;
-                html = await buildHTML(response.list);
+                languages = normalizeLanguages(response.list);
+                html = await buildHTML(languages);
                 if (html != '') {
                     append_list.innerHTML = html;
                 }
@@ -145,6 +145,18 @@
             jQuery("#data-table_processing").hide();
         });
     });
+    function toBoolean(value) {
+        return value === true || value === 1 || value === '1' || value === 'true';
+    }
+
+    function normalizeLanguages(list) {
+        return list.map(function(language) {
+            return Object.assign({}, language, {
+                isActive: toBoolean(language.isActive)
+            });
+        });
+    }
+
     function buildHTML(snapshots) {
         var html = '';
         var alldata = [];
@@ -175,7 +187,7 @@
                 html = html + '<td><a href="' + route1 + '"><img onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" src="' + image + '" class="rounded" style="width:50px" ></a></td>';
                 html = html + '<td><a href="' + route1 + '" class="redirecttopage">' + val.title + '</a></td>';
                 html = html + '<td>' + val.slug + '</td>';
-                if (val.isActive) {
+                if (toBoolean(val.isActive)) {
                     html = html + '<td><label class="switch"><input type="checkbox" checked id="' + val.slug + '" name="isSwitch"><span class="slider round"></span></label></td>';
                 } else {
                     html = html + '<td><label class="switch"><input type="checkbox" id="' + val.slug + '" name="isSwitch"><span class="slider round"></span></label></td>';
@@ -194,66 +206,55 @@
         var ischeck = $(this).is(':checked');
         var id = this.id;
         var language_key = '';
-        var error = 0;
         var languageTitle = '';
 
-        // Use already loaded languages array (no Firebase fetch needed)
         for (var key in languages) {
             if (languages[key]['slug'] == id) {
                 language_key = key;
                 languageTitle = languages[key]['title'];
-            }
-            if (languages[key]['isActive'] != true) {
-                error++;
+                break;
             }
         }
 
-        if (ischeck) {
-            languages[language_key]['isActive'] = true;
-            console.log('📤 Sending to SQL:', {list: languages});
-            $.ajax({
-                url: "{{ route('api.languages.update') }}",
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                },
-                data: {
-                    list: languages
-                },
-                success: function(result) {
-                    console.log('✅ Language enabled:', languageTitle, result);
-                },
-                error: function(xhr) {
-                    console.error('❌ Error enabling language:', xhr);
-                    alert('Error updating language status');
-                }
-            });
-        } else {
-            if (error > 0) {
+        if (language_key === '') {
+            console.error('Language toggle failed: language not found for slug', id);
+            return;
+        }
+
+        if (!ischeck) {
+            var activeCount = languages.filter(function(lang) {
+                return lang.isActive;
+            }).length;
+
+            if (activeCount <= 1) {
                 alert("{{trans('lang.lang_error')}}");
                 $("#" + id).prop('checked', true);
                 return false;
             }
-            languages[language_key]['isActive'] = false;
-            console.log('📤 Sending to SQL:', {list: languages});
-            $.ajax({
-                url: "{{ route('api.languages.update') }}",
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                },
-                data: {
-                    list: languages
-                },
-                success: function(result) {
-                    console.log('✅ Language disabled:', languageTitle, result);
-                },
-                error: function(xhr) {
-                    console.error('❌ Error disabling language:', xhr);
-                    alert('Error updating language status');
-                }
-            });
         }
+
+        languages[language_key]['isActive'] = ischeck;
+
+        console.log('📤 Sending to SQL:', {list: languages});
+        $.ajax({
+            url: "{{ route('api.languages.update') }}",
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+            },
+            data: {
+                list: languages
+            },
+            success: function(result) {
+                console.log('✅ Language status updated:', languageTitle, result);
+            },
+            error: function(xhr) {
+                console.error('❌ Error updating language status:', xhr);
+                alert('Error updating language status');
+                $("#" + id).prop('checked', !ischeck);
+                languages[language_key]['isActive'] = !ischeck;
+            }
+        });
     });
     $(document).on("click", "a[name='lang-delete']", function (e) {
         var id = this.id;
@@ -269,7 +270,9 @@
                 delete language['id'];
                 newlanguage.push(language);
             }else{
+                @if(config('filesystems.default') === 'firebase')
                 deleteImageFromBucket(language.image);
+                @endif
             }
         });
 
@@ -322,7 +325,9 @@
                         delete language['id'];
                         newlanguage.push(language);
                     }else{
+                        @if(config('filesystems.default') === 'firebase')
                         deleteImageFromBucket(language.image);
+                        @endif
                     }
                 });
 

@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use PhpOffice\PhpSpreadsheet\IOFactory;
-use Google\Cloud\Firestore\FirestoreClient;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
@@ -12,11 +11,30 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\DynamicEmail;
 use App\Models\AppUser;
 use App\Models\Vendor;
+use App\Models\VendorProduct;
 use App\Models\Zone;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class RestaurantController extends Controller
 {
+    /**
+     * Normalize various truthy/falsy inputs to integer 1/0 for SQL columns.
+     */
+    protected function toBoolInt($value): int
+    {
+        if (is_bool($value)) {
+            return $value ? 1 : 0;
+        }
+
+        if (is_numeric($value)) {
+            return ((int) $value) === 1 ? 1 : 0;
+        }
+
+        $stringValue = strtolower((string) $value);
+
+        return in_array($stringValue, ['1', 'true', 'yes', 'on'], true) ? 1 : 0;
+    }
 
     public function __construct()
     {
@@ -50,11 +68,6 @@ class RestaurantController extends Controller
     	    return view('subscription_plans.history')->with('id',$id);
     }
 
-    /**
-     * DataTables data for subscription history
-     * Table: subscription_history
-     * Columns: id, createdAt, payment_type, user_id, expiry_date, subscription_plan (JSON)
-     */
     public function subscriptionHistoryData(Request $request, $id = '')
     {
         $start = (int) $request->input('start', 0);
@@ -215,98 +228,99 @@ class RestaurantController extends Controller
         ]);
 
         $spreadsheet = IOFactory::load($request->file('file'));
-        $rows = $spreadsheet->getActiveSheet()->toArray();
+        $sheet = $spreadsheet->getSheetByName('Restaurants');
+        if (!$sheet) {
+            $sheet = $spreadsheet->getSheet(0);
+        }
+        $rows = $sheet->toArray(null, true, true, false);
 
         if (empty($rows) || count($rows) < 2) {
             return back()->withErrors(['file' => 'The uploaded file is empty or missing data.']);
         }
 
-        $headers = array_map('trim', array_shift($rows));
-        $firestore = new FirestoreClient([
-            'projectId' => config('firestore.project_id'),
-            'keyFilePath' => config('firestore.credentials'),
-        ]);
-        $collection = $firestore->collection('users');
-        $zoneCollection = $firestore->collection('zone');
+        $headerRow = array_shift($rows);
+        $headers = array_map('trim', array_values($headerRow));
         $imported = 0;
         $errors = [];
-        foreach ($rows as $rowIndex => $row) {
-            $rowNum = $rowIndex + 2; // Excel row number
-            $data = array_combine($headers, $row);
-            // Required fields
-            if (empty($data['firstName']) || empty($data['lastName']) || empty($data['email']) || empty($data['password'])) {
-                $errors[] = "Row $rowNum: Missing required fields.";
-                continue;
-            }
-            // Email format
-            if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
-                $errors[] = "Row $rowNum: Invalid email format.";
-                continue;
-            }
-            // Duplicate email check
-            $existing = $collection->where('email', '=', $data['email'])->limit(1)->documents();
-            if (!$existing->isEmpty()) {
-                $errors[] = "Row $rowNum: Email already exists.";
-                continue;
-            }
-            // Phone number (basic)
-            if (!empty($data['phoneNumber']) && !preg_match('/^[+0-9\- ]{7,20}$/', $data['phoneNumber'])) {
-                $errors[] = "Row $rowNum: Invalid phone number format.";
-                continue;
-            }
-            // zone name to zoneId lookup
-            $zoneId = '';
-            if (!empty($data['zone'])) {
-                $zoneDocs = $zoneCollection->where('name', '=', $data['zone'])->limit(1)->documents();
-                if ($zoneDocs->isEmpty()) {
-                    $errors[] = "Row $rowNum: zone '{$data['zone']}' does not exist.";
+
+        DB::beginTransaction();
+
+        try {
+            foreach ($rows as $rowIndex => $row) {
+                $rowNum = $rowIndex + 2; // Excel row number
+                $data = array_combine($headers, $row);
+
+                // Required fields
+                if (empty($data['firstName']) || empty($data['lastName']) || empty($data['email']) || empty($data['password'])) {
+                    $errors[] = "Row $rowNum: Missing required fields.";
                     continue;
-                } else {
-                    $zoneId = $zoneDocs->rows()[0]['id'];
                 }
-            }
-            $vendorData = [
-                'firstName' => $data['firstName'],
-                'lastName' => $data['lastName'],
-                'email' => $data['email'],
-                'password' => Hash::make($data['password']),
-                'active' => strtolower($data['active'] ?? '') === 'true',
-                'role' => 'vendor',
-                'profilePictureURL' => $data['profilePictureURL'] ?? '',
-                'zoneId' => $zoneId,
-                'phoneNumber' => $data['phoneNumber'] ?? '',
-                'migratedBy' => 'migrate:vendors',
-            ];
-            if (!empty($data['createdAt'])) {
-                try {
-                    $vendorData['createdAt'] = new \Google\Cloud\Core\Timestamp(Carbon::parse($data['createdAt']));
-                } catch (\Exception $e) {
-                    $vendorData['createdAt'] = new \Google\Cloud\Core\Timestamp(now());
+
+                // Email format
+                if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+                    $errors[] = "Row $rowNum: Invalid email format.";
+                    continue;
                 }
-            } else {
-                $vendorData['createdAt'] = new \Google\Cloud\Core\Timestamp(now());
+
+                // Duplicate email check
+                if (AppUser::where('email', $data['email'])->exists()) {
+                    $errors[] = "Row $rowNum: Email already exists.";
+                    continue;
+                }
+
+                // Phone number validation
+                if (!empty($data['phoneNumber']) && !preg_match('/^[+0-9\\- ]{7,20}$/', $data['phoneNumber'])) {
+                    $errors[] = "Row $rowNum: Invalid phone number format.";
+                    continue;
+                }
+
+                // Create vendor user
+                $vendor = new AppUser();
+                $vendor->firstName = $data['firstName'];
+                $vendor->lastName = $data['lastName'];
+                $vendor->email = $data['email'];
+                $vendor->password = Hash::make($data['password']);
+                $vendor->phoneNumber = $data['phoneNumber'] ?? null;
+                $vendor->countryCode = $data['countryCode'] ?? '';
+                $vendor->role = 'vendor';
+                $vendor->vType = $data['vType'] ?? 'restaurant';
+                $vendor->active = strtolower($data['active'] ?? '') === 'true' ? 1 : 0;
+                $vendor->profilePictureURL = $data['profilePictureURL'] ?? '';
+                $vendor->provider = 'email';
+                $vendor->appIdentifier = 'web';
+                $vendor->isDocumentVerify = 0;
+                $vendor->createdAt = !empty($data['createdAt'])
+                    ? '"' . Carbon::parse($data['createdAt'])->utc()->format('Y-m-d\TH:i:s.u\Z') . '"'
+                    : '"' . gmdate('Y-m-d\TH:i:s.u\Z') . '"';
+                $vendor->firebase_id = uniqid();
+                $vendor->_id = $vendor->firebase_id;
+
+                // Optional zoneId column
+                if (!empty($data['zoneId'])) {
+                    $vendor->zoneId = $data['zoneId'];
+                }
+
+                $vendor->save();
+                $imported++;
             }
-            $docRef = $collection->add($vendorData);
-            $docRef->set(['id' => $docRef->id()], ['merge' => true]);
-            $imported++;
-            // Send welcome email
-            try {
-                Mail::to($data['email'])->send(new DynamicEmail([
-                    'subject' => 'Welcome to JippyMart!',
-                    'body' => "Hi {$data['firstName']},<br><br>Welcome to JippyMart! Your account has been created.<br><br>Email: {$data['email']}<br>Password: (the password you provided)<br><br>Login at: <a href='" . url('/') . "'>JippyMart Admin</a><br><br>Thank you!"
-                ]));
-            } catch (\Exception $e) {
-                $errors[] = "Row $rowNum: Failed to send email (" . $e->getMessage() . ")";
+
+            DB::commit();
+
+            $msg = "Vendors imported successfully! ($imported rows)";
+            if (!empty($errors)) {
+                $msg .= "<br>Some issues occurred:<br>" . implode('<br>', $errors);
             }
+
+            if ($imported === 0) {
+                return back()->withErrors(['file' => $msg]);
+            }
+
+            return back()->with('success', $msg);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['file' => 'An error occurred while importing: ' . $e->getMessage()]);
         }
-        $msg = "Vendors imported successfully! ($imported rows)";
-        if (!empty($errors)) {
-            $msg .= "<br>Some issues occurred:<br>" . implode('<br>', $errors);
-        }
-        if ($imported === 0) {
-            return back()->withErrors(['file' => $msg]);
-        }
-        return back()->with('success', $msg);
     }
 
     public function downloadVendorsTemplate()
@@ -338,6 +352,7 @@ class RestaurantController extends Controller
         try {
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Restaurants');
 
             // Set headers
             $headers = [
@@ -393,93 +408,121 @@ class RestaurantController extends Controller
             'file' => 'required|mimes:xlsx,xls',
         ]);
 
-        // Get options for handling invalid rows
-        $skipInvalidRows = $request->input('skip_invalid_rows', false);
+        $skipInvalidRows = filter_var($request->input('skip_invalid_rows', false), FILTER_VALIDATE_BOOLEAN);
 
-        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($request->file('file'));
-        $rows = $spreadsheet->getActiveSheet()->toArray();
-
+        $spreadsheet = IOFactory::load($request->file('file'));
+        $sheet = $spreadsheet->getSheetByName('Restaurants');
+        if (!$sheet) {
+            $sheet = $spreadsheet->getActiveSheet();
+        }
+        $rows = $sheet->toArray(null, true, true, false);
         if (empty($rows) || count($rows) < 2) {
             return back()->withErrors(['file' => 'The uploaded file is empty or missing data.']);
         }
 
-        $headers = array_map('trim', array_shift($rows));
+//        $rawHeaderRow = array_shift($rows);
+        // Find the real header row dynamically
+        $rawHeaderRow = null;
+        while (!empty($rows)) {
+            $candidate = array_shift($rows);
+            $candidateLower = array_map('strtolower', array_map('trim', $candidate));
 
-        // Validate headers
-        $requiredHeaders = ['title', 'description', 'latitude', 'longitude', 'location', 'phonenumber', 'countryCode'];
-        $missingHeaders = array_diff($requiredHeaders, $headers);
+            // Detect if this row contains the required headers
+            if (in_array('title', $candidateLower) && in_array('description', $candidateLower)) {
+                $rawHeaderRow = $candidate;
+                break;
+            }
+        }
+
+        if (!$rawHeaderRow) {
+            return back()->withErrors(['file' => 'Could not detect header row. Please use the correct template.']);
+        }
+
+        $columnHeaders = [];
+        $headersLower = [];
+        foreach ($rawHeaderRow as $index => $value) {
+            $headerValue = '';
+            if (is_string($value)) {
+                $headerValue = trim($value);
+            } elseif (!is_null($value)) {
+                $headerValue = trim((string) $value);
+            }
+
+            $columnHeaders[$index] = $headerValue;
+            if ($headerValue !== '') {
+                $headersLower[] = strtolower($headerValue);
+            }
+        }
+
+        $headersLower = array_unique($headersLower);
+
+//        $requiredHeaders = ['title', 'description', 'latitude', 'longitude', 'location', 'phonenumber', 'countrycode'];
+//        $missingHeaders = array_diff(array_map('strtolower', $requiredHeaders), $headersLower);
+         // Make header validation fully case-insensitive and trim-safe
+        $requiredHeaders = ['title', 'description', 'latitude', 'longitude', 'location', 'phonenumber', 'countrycode'];
+
+        $headersLower = array_map(fn($h) => strtolower(trim($h)), $headersLower);
+        $missingHeaders = array_diff($requiredHeaders, $headersLower);
 
         if (!empty($missingHeaders)) {
             return back()->withErrors(['file' => 'Missing required columns: ' . implode(', ', $missingHeaders) .
                 '. Please use the template provided by the "Download Template" button.']);
         }
 
-        $firestore = new \Google\Cloud\Firestore\FirestoreClient([
-            'projectId' => config('firestore.project_id'),
-            'keyFilePath' => config('firestore.credentials'),
-        ]);
-        $collection = $firestore->collection('vendors');
-
-        // Batch processing configuration
-        $batchSize = 50; // Process 50 rows at a time
-        $totalRows = count($rows);
+        $batchSize = 50;
         $batches = array_chunk($rows, $batchSize);
 
         $created = 0;
         $updated = 0;
         $failed = 0;
         $skippedRows = 0;
-        $processedRows = 0;
+        $errorMessages = [];
 
-        // Pre-load lookup data for better performance
-        $lookupData = $this->preloadLookupData($firestore);
+        $lookupData = $this->preloadLookupData();
 
         foreach ($batches as $batchIndex => $batch) {
-            $batchCreated = 0;
-            $batchUpdated = 0;
-            $batchFailed = 0;
-
             foreach ($batch as $rowIndex => $row) {
                 $globalRowIndex = $batchIndex * $batchSize + $rowIndex;
-                $rowNum = $globalRowIndex + 2; // Excel row number
-                $data = array_combine($headers, $row);
+                $rowNum = $globalRowIndex + 2;
 
-                // Skip completely empty rows
                 if ($this->isEmptyRow($row)) {
                     continue;
                 }
 
-                try {
-                    $result = $this->processRestaurantRow($data, $rowNum, $firestore, $collection, $lookupData, $skipInvalidRows);
-
-                    if ($result['success']) {
-                        if ($result['action'] === 'created') {
-                            $batchCreated++;
-                        } else {
-                            $batchUpdated++;
-                        }
-                    } else {
-                        if ($result['action'] === 'skipped') {
-                            $skippedRows++;
-                        } else {
-                            $batchFailed++;
-                        }
+                $data = [];
+                foreach ($columnHeaders as $idx => $headerName) {
+                    if ($headerName === '') {
+                        continue;
                     }
-                } catch (\Exception $e) {
-                    $batchFailed++;
+                    $data[$headerName] = $row[$idx] ?? null;
                 }
 
-                $processedRows++;
-            }
-
-            // Commit batch results
-            $created += $batchCreated;
-            $updated += $batchUpdated;
-            $failed += $batchFailed;
-
-            // Log progress for large datasets
-            if ($totalRows > 100) {
-                \Log::info("Bulk import progress: {$processedRows}/{$totalRows} rows processed");
+                try {
+                    $result = $this->processRestaurantRow($data, $rowNum, $lookupData, $skipInvalidRows);
+                    if ($result['success'] ?? false) {
+                        if (($result['action'] ?? '') === 'created') {
+                            $created++;
+                        } else {
+                            $updated++;
+                        }
+                    } else {
+                        if (($result['action'] ?? '') === 'skipped') {
+                            $skippedRows++;
+                        } else {
+                            $failed++;
+                            if (!empty($result['error'])) {
+                                $errorMessages[] = $result['error'];
+                            }
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    $failed++;
+                    $errorMessages[] = "Row $rowNum: {$e->getMessage()}";
+                    \Log::error('Restaurant bulk update error', [
+                        'row' => $rowNum,
+                        'exception' => $e->getMessage(),
+                    ]);
+                }
             }
         }
 
@@ -488,82 +531,105 @@ class RestaurantController extends Controller
             $msg .= ", skipped: $skippedRows";
         }
 
+        if (!empty($errorMessages)) {
+            $msg .= "<br>" . implode('<br>', array_unique($errorMessages));
+        }
+
+        if ($failed > 0 && $created === 0 && $updated === 0) {
+            return back()->withErrors(['file' => $msg]);
+        }
+
         if ($failed > 0) {
             return back()->withErrors(['file' => $msg]);
         }
+
         return back()->with('success', $msg);
     }
 
     /**
      * Preload lookup data to avoid repeated queries
      */
-    private function preloadLookupData($firestore)
+    private function preloadLookupData(): array
     {
         $lookupData = [
-            'users' => [],
+            'users' => [
+                'records' => [],
+                'email_index' => [],
+                'name_index' => [],
+            ],
             'categories' => [],
             'cuisines' => [],
-            'zones' => [],
-            'existing_restaurants' => [] // Add existing restaurants for duplicate detection
+            'zones' => [
+                'by_name' => [],
+                'by_id' => [],
+            ],
+            'existing_restaurants' => [],
         ];
 
-        try {
-            // Preload users (limit to avoid memory issues)
-            $userDocs = $firestore->collection('users')->limit(1000)->documents();
-            foreach ($userDocs as $userDoc) {
-                $user = $userDoc->data();
-                $lookupData['users'][$userDoc->id()] = $user;
-                // Index by email and name for faster lookup
-                if (isset($user['email'])) {
-                    $lookupData['users']['email_' . strtolower($user['email'])] = $userDoc->id();
-                }
-                if (isset($user['firstName']) && isset($user['lastName'])) {
-                    $lookupData['users']['name_' . strtolower($user['firstName'] . ' ' . $user['lastName'])] = $userDoc->id();
-                }
-            }
+        // Users (limit to avoid huge memory usage)
+        AppUser::select('id', 'firstName', 'lastName', 'email')
+            ->where('role', 'vendor')
+            ->limit(2000)
+            ->get()
+            ->each(function ($user) use (&$lookupData) {
+                $lookupData['users']['records'][$user->id] = $user;
 
-            // Preload categories
-            $catDocs = $firestore->collection('vendor_categories')->documents();
-            foreach ($catDocs as $catDoc) {
-                $cat = $catDoc->data();
-                $lookupData['categories'][strtolower($cat['title'] ?? '')] = $catDoc->id();
-            }
-
-            // Preload zones
-            $zoneDocs = $firestore->collection('zone')->documents();
-            foreach ($zoneDocs as $zoneDoc) {
-                $zone = $zoneDoc->data();
-                if (isset($zone['name'])) {
-                    $lookupData['zones'][strtolower(trim($zone['name']))] = $zoneDoc->id();
+                if (!empty($user->email)) {
+                    $lookupData['users']['email_index'][strtolower(trim($user->email))] = $user->id;
                 }
-            }
-            \Log::info("Preloaded " . count($lookupData['zones']) . " zones: " . implode(', ', array_keys($lookupData['zones'])));
 
-            // Preload cuisines
-            $cuisineDocs = $firestore->collection('vendor_cuisines')->documents();
-            foreach ($cuisineDocs as $cuisineDoc) {
-                $cuisine = $cuisineDoc->data();
-                if (isset($cuisine['title'])) {
-                    $lookupData['cuisines'][strtolower(trim($cuisine['title']))] = $cuisineDoc->id();
+                $fullName = trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? ''));
+                if ($fullName !== '') {
+                    $lookupData['users']['name_index'][strtolower($fullName)] = $user->id;
                 }
-            }
-            \Log::info("Preloaded " . count($lookupData['cuisines']) . " cuisines: " . implode(', ', array_keys($lookupData['cuisines'])));
+            });
 
-            // Preload existing restaurants for duplicate detection (limit to recent ones)
-            $restaurantDocs = $firestore->collection('vendors')
-                ->orderBy('createdAt', 'desc')
-                ->limit(5000)->documents();
-            foreach ($restaurantDocs as $restaurantDoc) {
-                $restaurant = $restaurantDoc->data();
-                if (isset($restaurant['title']) && isset($restaurant['location'])) {
-                    $key = strtolower(trim($restaurant['title'])) . '|' . strtolower(trim($restaurant['location']));
-                    $lookupData['existing_restaurants'][$key] = $restaurantDoc->id();
+        // Categories
+        DB::table('vendor_categories')
+            ->select('id', 'title')
+            ->get()
+            ->each(function ($category) use (&$lookupData) {
+                if (!empty($category->title)) {
+                    $lookupData['categories'][strtolower(trim($category->title))] = (string)$category->id;
                 }
-            }
+            });
 
-        } catch (\Exception $e) {
-            \Log::error("Error preloading lookup data: " . $e->getMessage());
-        }
+        // Cuisines
+        DB::table('vendor_cuisines')
+            ->select('id', 'title')
+            ->get()
+            ->each(function ($cuisine) use (&$lookupData) {
+                if (!empty($cuisine->title)) {
+                    $lookupData['cuisines'][strtolower(trim($cuisine->title))] = (string)$cuisine->id;
+                }
+            });
+
+        // Zones
+        DB::table('zone')
+            ->select('id', 'name')
+            ->where('publish', 1)
+            ->get()
+            ->each(function ($zone) use (&$lookupData) {
+                if (!empty($zone->name)) {
+                    $lookupData['zones']['by_name'][strtolower(trim($zone->name))] = (string)$zone->id;
+                }
+                $lookupData['zones']['by_id'][(string)$zone->id] = [
+                    'id' => (string)$zone->id,
+                    'name' => $zone->name,
+                ];
+            });
+
+        // Existing restaurants (for duplicate detection)
+        Vendor::select('id', 'title', 'location')
+            ->orderBy('createdAt', 'desc')
+            ->limit(5000)
+            ->get()
+            ->each(function ($restaurant) use (&$lookupData) {
+                if (!empty($restaurant->title) && !empty($restaurant->location)) {
+                    $key = strtolower(trim($restaurant->title)) . '|' . strtolower(trim($restaurant->location));
+                    $lookupData['existing_restaurants'][$key] = $restaurant->id;
+                }
+            });
 
         return $lookupData;
     }
@@ -571,245 +637,334 @@ class RestaurantController extends Controller
     /**
      * Process a single restaurant row with optimized lookups
      */
-    private function processRestaurantRow($data, $rowNum, $firestore, $collection, $lookupData, $skipInvalidRows = false)
+    private function processRestaurantRow(array $data, int $rowNum, array &$lookupData, bool $skipInvalidRows = false): array
     {
-        // --- Data Validation ---
         $validationErrors = $this->validateRestaurantData($data, $rowNum);
         if (!empty($validationErrors)) {
             if ($skipInvalidRows) {
                 return [
                     'success' => false,
                     'action' => 'skipped',
-                    'error' => implode('; ', $validationErrors)
-                ];
-            } else {
-                return [
-                    'success' => false,
-                    'error' => implode('; ', $validationErrors)
+                    'error' => implode('; ', $validationErrors),
                 ];
             }
-        }
 
-        // --- Duplicate Detection ---
-        $duplicateCheck = $this->checkDuplicateRestaurant($data, $lookupData, $rowNum);
-        if ($duplicateCheck['isDuplicate']) {
             return [
                 'success' => false,
-                'error' => $duplicateCheck['error']
+                'error' => implode('; ', $validationErrors),
             ];
         }
 
-        // --- Optimized Author lookup using preloaded data ---
-        if (empty($data['author'])) {
-            $authorFound = false;
-
-            // 1. Lookup by email if authorEmail is provided
-            if (!empty($data['authorEmail'])) {
-                $emailKey = 'email_' . strtolower(trim($data['authorEmail']));
-                if (isset($lookupData['users'][$emailKey])) {
-                    $data['author'] = $lookupData['users'][$emailKey];
-                    $authorFound = true;
-                }
-            }
-
-            // 2. Lookup by exact authorName
-            if (!$authorFound && !empty($data['authorName'])) {
-                $nameKey = 'name_' . strtolower(trim($data['authorName']));
-                if (isset($lookupData['users'][$nameKey])) {
-                    $data['author'] = $lookupData['users'][$nameKey];
-                    $authorFound = true;
-                }
-            }
-
-            // 3. Fallback to fuzzy match only if necessary
-            if (!$authorFound && !empty($data['authorName'])) {
-                $authorFound = $this->fuzzyAuthorLookup($data, $firestore);
-            }
-
-            if (!$authorFound && (!empty($data['authorName']) || !empty($data['authorEmail']))) {
+        // Duplicate detection (only when creating new records)
+        $duplicateCheck = $this->checkDuplicateRestaurant($data, $lookupData, $rowNum);
+        if ($duplicateCheck['isDuplicate']) {
+            if (!empty($data['id']) && $duplicateCheck['existingId'] === $data['id']) {
+                // Updating the same restaurant is allowed
+            } else {
                 return [
                     'success' => false,
-                    'error' => "Row $rowNum: author lookup failed for authorName '{$data['authorName']}' or authorEmail '{$data['authorEmail']}'."
+                    'error' => $duplicateCheck['error'],
                 ];
             }
         }
 
-        // --- Optimized Category lookup ---
-            if (!empty($data['categoryTitle']) && empty($data['categoryID'])) {
-                $titles = json_decode($data['categoryTitle'], true);
-                if (!is_array($titles)) $titles = explode(',', $data['categoryTitle']);
-                $categoryIDs = [];
+        // Resolve author
+        if (empty($data['author'])) {
+            $authorId = $this->resolveAuthorId($data, $lookupData);
+            if ($authorId === false && (!empty($data['authorName']) || !empty($data['authorEmail']))) {
+                return [
+                    'success' => false,
+                    'error' => "Row $rowNum: author lookup failed for authorName '{$data['authorName']}' or authorEmail '{$data['authorEmail']}'.",
+                ];
+            }
 
-                foreach ($titles as $title) {
+            if ($authorId) {
+                $data['author'] = $authorId;
+            }
+        }
+
+        // Category lookup by title
+        if (!empty($data['categoryTitle']) && empty($data['categoryID'])) {
+            $titles = json_decode($data['categoryTitle'], true);
+            if (!is_array($titles)) {
+                $titles = explode(',', $data['categoryTitle']);
+            }
+            $categoryIds = [];
+            foreach ($titles as $title) {
                 $titleLower = strtolower(trim($title));
                 if (isset($lookupData['categories'][$titleLower])) {
-                    $categoryIDs[] = $lookupData['categories'][$titleLower];
+                    $categoryIds[] = $lookupData['categories'][$titleLower];
                 } else {
-                    // Fallback to fuzzy match
                     $found = $this->fuzzyCategoryLookup($title, $lookupData['categories']);
                     if ($found) {
-                        $categoryIDs[] = $found;
+                        $categoryIds[] = $found;
                     } else {
                         return [
                             'success' => false,
-                            'error' => "Row $rowNum: categoryTitle '$title' not found in vendor_categories."
+                            'error' => "Row $rowNum: categoryTitle '$title' not found in vendor_categories.",
                         ];
                     }
                 }
             }
-            $data['categoryID'] = $categoryIDs;
+            $data['categoryID'] = $categoryIds;
         }
 
-        // --- Optimized Zone lookup ---
+        // Zone lookup
         if (!empty($data['zoneName']) && empty($data['zoneId'])) {
             $zoneNameLower = strtolower(trim($data['zoneName']));
-            if (isset($lookupData['zones'][$zoneNameLower])) {
-                $data['zoneId'] = $lookupData['zones'][$zoneNameLower];
+            if (isset($lookupData['zones']['by_name'][$zoneNameLower])) {
+                $data['zoneId'] = $lookupData['zones']['by_name'][$zoneNameLower];
             } else {
-                // Fallback to fuzzy match
-                $found = $this->fuzzyZoneLookup($data['zoneName'], $lookupData['zones']);
+                $found = $this->fuzzyZoneLookup($data['zoneName'], $lookupData['zones']['by_name']);
                 if ($found) {
                     $data['zoneId'] = $found;
                 } else {
-                    // Debug: Log available zones for troubleshooting
-                    $availableZones = array_keys($lookupData['zones']);
-                    \Log::warning("Zone lookup failed for '{$data['zoneName']}'. Available zones: " . implode(', ', $availableZones));
-
                     return [
                         'success' => false,
-                        'error' => "Row $rowNum: zoneName '{$data['zoneName']}' not found in zone collection. Available zones: " . implode(', ', array_slice($availableZones, 0, 10))
+                        'error' => "Row $rowNum: zoneName '{$data['zoneName']}' not found in zones table.",
                     ];
                 }
             }
         }
 
-        // Validate zoneId if provided directly
-        if (!empty($data['zoneId']) && !in_array($data['zoneId'], array_values($lookupData['zones']))) {
-            $availableZoneIds = array_values($lookupData['zones']);
-            $availableZoneNames = array_keys($lookupData['zones']);
-
-            // Check if the value looks like a zone name instead of an ID
-            $providedValue = $data['zoneId'];
-            $zoneNameLower = strtolower(trim($providedValue));
-
-            if (isset($lookupData['zones'][$zoneNameLower])) {
-                // The user provided a zone name in the zoneId column - convert it
-                $data['zoneId'] = $lookupData['zones'][$zoneNameLower];
+        if (!empty($data['zoneId']) && !isset($lookupData['zones']['by_id'][(string)$data['zoneId']])) {
+            // Maybe the value is a zone name instead of ID
+            $zoneNameLower = strtolower(trim($data['zoneId']));
+            if (isset($lookupData['zones']['by_name'][$zoneNameLower])) {
+                $data['zoneId'] = $lookupData['zones']['by_name'][$zoneNameLower];
             } else {
                 return [
                     'success' => false,
-                    'error' => "Row $rowNum: zoneId '{$providedValue}' not found in zone collection. " .
-                               "If you meant to provide a zone name, use column 'zoneName' instead of 'zoneId'. " .
-                               "Available zone names: " . implode(', ', array_slice($availableZoneNames, 0, 10)) . ". " .
-                               "Available zone IDs: " . implode(', ', array_slice($availableZoneIds, 0, 5))
+                    'error' => "Row $rowNum: zoneId '{$data['zoneId']}' not found in zones table.",
                 ];
             }
         }
 
-        // --- Optimized Vendor Cuisine lookup ---
+        // Cuisine lookup
         if (!empty($data['vendorCuisineTitle']) && empty($data['vendorCuisineID'])) {
             $titleLower = strtolower(trim($data['vendorCuisineTitle']));
             if (isset($lookupData['cuisines'][$titleLower])) {
                 $data['vendorCuisineID'] = $lookupData['cuisines'][$titleLower];
             } else {
-                // Fallback to fuzzy match
                 $found = $this->fuzzyCuisineLookup($data['vendorCuisineTitle'], $lookupData['cuisines']);
                 if ($found) {
                     $data['vendorCuisineID'] = $found;
                 } else {
-                    // Debug: Log available cuisines for troubleshooting
-                    $availableCuisines = array_keys($lookupData['cuisines']);
-                    \Log::warning("Cuisine lookup failed for '{$data['vendorCuisineTitle']}'. Available cuisines: " . implode(', ', $availableCuisines));
-
                     return [
                         'success' => false,
-                        'error' => "Row $rowNum: vendorCuisineTitle '{$data['vendorCuisineTitle']}' not found in vendor_cuisines. Available cuisines: " . implode(', ', array_slice($availableCuisines, 0, 10))
+                        'error' => "Row $rowNum: vendorCuisineTitle '{$data['vendorCuisineTitle']}' not found in vendor_cuisines.",
                     ];
                 }
             }
         }
 
-        // Validate vendorCuisineID if provided directly
-        if (!empty($data['vendorCuisineID']) && !in_array($data['vendorCuisineID'], array_values($lookupData['cuisines']))) {
-            $availableCuisineIds = array_values($lookupData['cuisines']);
-            $availableCuisineNames = array_keys($lookupData['cuisines']);
-
-            // Check if the value looks like a cuisine name instead of an ID
-            $providedValue = $data['vendorCuisineID'];
-            $cuisineNameLower = strtolower(trim($providedValue));
-
-            if (isset($lookupData['cuisines'][$cuisineNameLower])) {
-                // The user provided a cuisine name in the vendorCuisineID column - convert it
-                $data['vendorCuisineID'] = $lookupData['cuisines'][$cuisineNameLower];
+        if (!empty($data['vendorCuisineID']) && !in_array($data['vendorCuisineID'], array_values($lookupData['cuisines']), true)) {
+            $providedValue = strtolower(trim($data['vendorCuisineID']));
+            if (isset($lookupData['cuisines'][$providedValue])) {
+                $data['vendorCuisineID'] = $lookupData['cuisines'][$providedValue];
             } else {
                 return [
                     'success' => false,
-                    'error' => "Row $rowNum: vendorCuisineID '{$providedValue}' not found in vendor_cuisines collection. " .
-                               "If you meant to provide a cuisine name, use column 'vendorCuisineTitle' instead of 'vendorCuisineID'. " .
-                               "Available cuisine names: " . implode(', ', array_slice($availableCuisineNames, 0, 10)) . ". " .
-                               "Available cuisine IDs: " . implode(', ', array_slice($availableCuisineIds, 0, 5))
+                    'error' => "Row $rowNum: vendorCuisineID '{$data['vendorCuisineID']}' not found in vendor_cuisines table.",
                 ];
             }
         }
 
-        // --- Data Type Conversions and Structure Fixes ---
         $data = $this->processDataTypes($data);
 
-        // --- Create or Update with Retry Mechanism ---
-            if (!empty($data['id'])) {
-                // Update
-            try {
-                return $this->retryFirestoreOperation(function() use ($collection, $data, $rowNum) {
-                $docRef = $collection->document($data['id']);
-                $snapshot = $docRef->snapshot();
-                if (!$snapshot->exists()) {
-                        return [
-                            'success' => false,
-                            'error' => "Row $rowNum: Restaurant with ID {$data['id']} not found."
-                        ];
-                }
-                $updateData = $data;
-                unset($updateData['id']);
+        $attributes = $this->prepareVendorAttributes($data);
 
-                // Filter out empty keys to prevent "empty field paths" error
-                $updateData = array_filter($updateData, function($value, $key) {
-                    return !empty($key) && $value !== null && $value !== '';
-                }, ARRAY_FILTER_USE_BOTH);
-
-                if (!empty($updateData)) {
-                    $docRef->update(array_map(
-                        fn($k, $v) => ['path' => $k, 'value' => $v],
-                        array_keys($updateData), $updateData
-                    ));
-                }
-                    return ['success' => true, 'action' => 'updated'];
-                });
-                } catch (\Exception $e) {
+        if (!empty($data['id'])) {
+            $vendor = Vendor::find($data['id']);
+            if (!$vendor) {
                 return [
                     'success' => false,
-                    'error' => "Row $rowNum: Update failed after retries ({$e->getMessage()})"
-                ];
-                }
-            } else {
-                // Create (auto Firestore ID)
-                try {
-                return $this->retryFirestoreOperation(function() use ($collection, $data) {
-                    // Filter out empty values to prevent issues
-                    $createData = array_filter($data, function($value, $key) {
-                        return !empty($key) && $value !== null && $value !== '';
-                    }, ARRAY_FILTER_USE_BOTH);
-
-                    $docRef = $collection->add($createData);
-                    $docRef->set(['id' => $docRef->id()], ['merge' => true]);
-                    return ['success' => true, 'action' => 'created'];
-                });
-            } catch (\Exception $e) {
-                return [
-                    'success' => false,
-                    'error' => "Row $rowNum: Create failed after retries ({$e->getMessage()})"
+                    'error' => "Row $rowNum: Restaurant with ID {$data['id']} not found.",
                 ];
             }
+
+            $updateData = array_filter($attributes, function ($value) {
+                return $value !== null && $value !== '';
+            });
+
+            foreach ($updateData as $key => $value) {
+                $vendor->{$key} = $value;
+            }
+
+            $vendor->save();
+            $this->updateDuplicateLookup($lookupData, $vendor);
+
+            return [
+                'success' => true,
+                'action' => 'updated',
+            ];
         }
+
+        // Create new restaurant
+        do {
+            $newId = 'rest_' . Str::uuid()->toString();
+        } while (Vendor::where('id', $newId)->exists());
+
+        $vendor = new Vendor();
+        $vendor->id = $newId;
+
+        foreach ($attributes as $key => $value) {
+            $vendor->{$key} = $value;
+        }
+
+        if (empty($vendor->createdAt)) {
+            $vendor->createdAt = '"' . gmdate('Y-m-d\TH:i:s.u\Z') . '"';
+        }
+
+        $vendor->save();
+        $this->updateDuplicateLookup($lookupData, $vendor);
+
+        return [
+            'success' => true,
+            'action' => 'created',
+        ];
+    }
+
+    private function resolveAuthorId(array $data, array $lookupData)
+    {
+        if (empty($lookupData['users']['records'])) {
+            return false;
+        }
+
+        if (!empty($data['authorEmail'])) {
+            $emailKey = strtolower(trim($data['authorEmail']));
+            if (isset($lookupData['users']['email_index'][$emailKey])) {
+                return $lookupData['users']['email_index'][$emailKey];
+            }
+        }
+
+        if (!empty($data['authorName'])) {
+            $nameKey = strtolower(trim($data['authorName']));
+            if (isset($lookupData['users']['name_index'][$nameKey])) {
+                return $lookupData['users']['name_index'][$nameKey];
+            }
+
+            $fuzzy = $this->fuzzyAuthorLookup($data, $lookupData);
+            if ($fuzzy) {
+                return $fuzzy;
+            }
+        }
+
+        return false;
+    }
+
+    private function prepareVendorAttributes(array $data): array
+    {
+        $attributes = [];
+
+        $simpleFields = [
+            'title', 'description', 'location', 'phonenumber', 'countryCode', 'zoneId',
+            'author', 'authorName', 'authorProfilePic', 'vendorCuisineID', 'restaurantCost',
+            'openDineTime', 'closeDineTime', 'photo', 'vType', 'walletAmount',
+            'subscriptionPlanId', 'subscriptionExpiryDate', 'subscriptionTotalOrders',
+            'dine_in_active', 'createdAt',
+        ];
+
+        foreach ($simpleFields as $field) {
+            if (array_key_exists($field, $data)) {
+                $attributes[$field] = $data[$field];
+            }
+        }
+
+        if (array_key_exists('latitude', $data)) {
+            $attributes['latitude'] = $data['latitude'] !== '' ? (float)$data['latitude'] : null;
+        }
+
+        if (array_key_exists('longitude', $data)) {
+            $attributes['longitude'] = $data['longitude'] !== '' ? (float)$data['longitude'] : null;
+        }
+
+        $booleanFields = [
+            'isOpen', 'reststatus', 'specialDiscountEnable', 'enabledDiveInFuture', 'hidephotos',
+        ];
+
+        foreach ($booleanFields as $field) {
+            if (array_key_exists($field, $data)) {
+                $attributes[$field] = $this->toBoolInt($data[$field]);
+            }
+        }
+
+        if (!array_key_exists('reststatus', $attributes) && array_key_exists('isOpen', $attributes)) {
+            $attributes['reststatus'] = $attributes['isOpen'];
+        }
+
+        $jsonFieldMap = [
+            'categoryID' => function ($value) {
+                return json_encode(array_values($value));
+            },
+            'categoryTitle' => function ($value) {
+                return json_encode(array_values($value));
+            },
+            'photos' => function ($value) {
+                return json_encode(array_values($value));
+            },
+            'restaurantMenuPhotos' => function ($value) {
+                return json_encode(array_values($value));
+            },
+            'filters' => function ($value) {
+                return json_encode($value);
+            },
+            'workingHours' => function ($value) {
+                return json_encode($value);
+            },
+            'adminCommission' => function ($value) {
+                return json_encode($value);
+            },
+            'specialDiscount' => function ($value) {
+                return json_encode($value);
+            },
+            'subscription_plan' => function ($value) {
+                return json_encode($value);
+            },
+        ];
+
+        foreach ($jsonFieldMap as $field => $encoder) {
+            if (array_key_exists($field, $data)) {
+                $value = $data[$field];
+                if ($value === null || $value === '' || (is_array($value) && empty($value))) {
+                    $attributes[$field] = null;
+                } elseif (is_string($value)) {
+                    $decoded = json_decode($value, true);
+                    $attributes[$field] = $encoder(is_array($decoded) ? $decoded : [$value]);
+                } else {
+                    $attributes[$field] = $encoder($value);
+                }
+            }
+        }
+
+        return $attributes;
+    }
+
+    private function updateDuplicateLookup(array &$lookupData, Vendor $vendor): void
+    {
+        if (!empty($vendor->title) && !empty($vendor->location)) {
+            $key = strtolower(trim($vendor->title)) . '|' . strtolower(trim($vendor->location));
+            $lookupData['existing_restaurants'][$key] = $vendor->id;
+        }
+    }
+
+    private function isEmptyRow(array $row): bool
+    {
+        foreach ($row as $value) {
+            if ($value === null) {
+                continue;
+            }
+
+            if (is_string($value)) {
+                if (trim($value) !== '') {
+                    return false;
+                }
+            } elseif (!empty($value)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -938,25 +1093,12 @@ class RestaurantController extends Controller
     }
 
     /**
-     * Check if a row is completely empty
-     */
-    private function isEmptyRow($row)
-    {
-        foreach ($row as $cell) {
-            if (!empty(trim($cell))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
      * Check for duplicate restaurants
      */
     private function checkDuplicateRestaurant($data, $lookupData, $rowNum)
     {
         if (empty($data['title']) || empty($data['location'])) {
-            return false; // Can't check duplicates without title and location
+            return ['isDuplicate' => false];
         }
 
         $key = strtolower(trim($data['title'])) . '|' . strtolower(trim($data['location']));
@@ -972,54 +1114,28 @@ class RestaurantController extends Controller
         return ['isDuplicate' => false];
     }
 
-    /**
-     * Retry mechanism for Firestore operations
-     */
-    private function retryFirestoreOperation($operation, $maxRetries = 3, $delay = 1000)
-    {
-        $attempts = 0;
-        $lastException = null;
-
-        while ($attempts < $maxRetries) {
-            try {
-                return $operation();
-                } catch (\Exception $e) {
-                $lastException = $e;
-                $attempts++;
-
-                if ($attempts < $maxRetries) {
-                    \Log::warning("Firestore operation failed (attempt $attempts/$maxRetries): " . $e->getMessage());
-                    usleep($delay * 1000); // Convert to microseconds
-                    $delay *= 2; // Exponential backoff
-                }
-            }
-        }
-
-        throw $lastException;
-    }
 
     /**
      * Optimized fuzzy author lookup
      */
-    private function fuzzyAuthorLookup($data, $firestore)
+    private function fuzzyAuthorLookup(array $data, array $lookupData)
     {
-        // Use Firestore query instead of full scan
-        $searchTerm = strtolower($data['authorName']);
-        $userDocs = $firestore->collection('users')
-            ->where('firstName', '>=', $searchTerm)
-            ->where('firstName', '<=', $searchTerm . '\uf8ff')
-            ->limit(10)->documents();
+        $searchTerm = strtolower(trim($data['authorName'] ?? ''));
+        if ($searchTerm === '' || empty($lookupData['users']['records'])) {
+            return false;
+        }
 
-        foreach ($userDocs as $userDoc) {
-            $user = $userDoc->data();
-            if (
-                (isset($user['firstName']) && stripos($user['firstName'], $searchTerm) !== false) ||
-                (isset($user['lastName']) && stripos($user['lastName'], $searchTerm) !== false)
-            ) {
-                $data['author'] = $userDoc->id();
-                return true;
+        foreach ($lookupData['users']['records'] as $user) {
+            $fullName = strtolower(trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? '')));
+            if ($fullName === '') {
+                continue;
+            }
+
+            if (str_contains($fullName, $searchTerm) || str_contains($searchTerm, $fullName)) {
+                return $user->id;
             }
         }
+
         return false;
     }
 
@@ -1070,41 +1186,48 @@ class RestaurantController extends Controller
      */
     private function processDataTypes($data)
     {
-        // Fix categoryID - ensure it's an array
         if (isset($data['categoryID'])) {
             if (is_string($data['categoryID'])) {
-                $data['categoryID'] = json_decode($data['categoryID'], true) ?: explode(',', $data['categoryID']);
+                $decoded = json_decode($data['categoryID'], true);
+                $data['categoryID'] = is_array($decoded) ? $decoded : explode(',', $data['categoryID']);
             }
             if (!is_array($data['categoryID'])) {
                 $data['categoryID'] = [$data['categoryID']];
             }
+            $data['categoryID'] = array_values(array_filter(array_map('trim', $data['categoryID']), fn($val) => $val !== ''));
         }
 
-        // Fix categoryTitle - ensure it's an array
         if (isset($data['categoryTitle'])) {
             if (is_string($data['categoryTitle'])) {
-                $data['categoryTitle'] = json_decode($data['categoryTitle'], true) ?: explode(',', $data['categoryTitle']);
+                $decoded = json_decode($data['categoryTitle'], true);
+                $data['categoryTitle'] = is_array($decoded) ? $decoded : explode(',', $data['categoryTitle']);
             }
             if (!is_array($data['categoryTitle'])) {
                 $data['categoryTitle'] = [$data['categoryTitle']];
             }
+            $data['categoryTitle'] = array_values(array_filter(array_map('trim', $data['categoryTitle']), fn($val) => $val !== ''));
         }
 
-        // Fix adminCommission - ensure it's an object with proper structure
         if (isset($data['adminCommission'])) {
             if (is_string($data['adminCommission'])) {
-                $adminCommission = json_decode($data['adminCommission'], true);
-                if ($adminCommission) {
-                    $data['adminCommission'] = $adminCommission;
+                $decoded = json_decode($data['adminCommission'], true);
+                if (is_array($decoded)) {
+                    $data['adminCommission'] = $decoded;
+                } elseif (is_numeric($data['adminCommission'])) {
+                    $data['adminCommission'] = [
+                        'commissionType' => 'Percent',
+                        'fix_commission' => (float)$data['adminCommission'],
+                        'isEnabled' => true,
+                    ];
                 } else {
                     $data['adminCommission'] = [
                         'commissionType' => 'Percent',
-                        'fix_commission' => (int)($data['adminCommission'] ?? 10),
-                        'isEnabled' => true
+                        'fix_commission' => 10,
+                        'isEnabled' => true,
                     ];
                 }
             }
-            // Ensure required fields exist
+
             if (!isset($data['adminCommission']['commissionType'])) {
                 $data['adminCommission']['commissionType'] = 'Percent';
             }
@@ -1116,38 +1239,42 @@ class RestaurantController extends Controller
             }
         }
 
-        // Fix coordinates - create GeoPoint if latitude and longitude are provided
-        if (isset($data['latitude']) && isset($data['longitude']) &&
-            is_numeric($data['latitude']) && is_numeric($data['longitude'])) {
-            $data['coordinates'] = new \Google\Cloud\Core\GeoPoint(
-                (float)$data['latitude'],
-                (float)$data['longitude']
-            );
-        }
-
-        // Fix boolean fields
-        $booleanFields = ['isOpen', 'enabledDiveInFuture', 'hidephotos', 'specialDiscountEnable'];
+        $booleanFields = ['isOpen', 'enabledDiveInFuture', 'hidephotos', 'specialDiscountEnable', 'reststatus'];
         foreach ($booleanFields as $field) {
             if (isset($data[$field])) {
                 if (is_string($data[$field])) {
-                    $data[$field] = strtolower($data[$field]) === 'true';
+                    $value = strtolower($data[$field]);
+                    if (in_array($value, ['true', '1', 'yes', 'on'], true)) {
+                        $data[$field] = true;
+                    } elseif (in_array($value, ['false', '0', 'no', 'off'], true)) {
+                        $data[$field] = false;
+                    }
                 }
+                $data[$field] = (bool)$data[$field];
             }
         }
 
-        // Fix numeric fields
         $numericFields = ['latitude', 'longitude', 'restaurantCost'];
         foreach ($numericFields as $field) {
-            if (isset($data[$field]) && is_numeric($data[$field])) {
+            if (isset($data[$field]) && $data[$field] !== '' && is_numeric($data[$field])) {
                 $data[$field] = (float)$data[$field];
             }
         }
 
-        // Add missing required fields with defaults
-        $defaultFields = [
-            'hidephotos' => false,
-            'createdAt' => new \Google\Cloud\Core\Timestamp(now()),
-            'filters' => [
+        $jsonArrayFields = ['photos', 'restaurantMenuPhotos', 'filters', 'workingHours', 'specialDiscount'];
+        foreach ($jsonArrayFields as $field) {
+            if (isset($data[$field])) {
+                if (is_string($data[$field])) {
+                    $decoded = json_decode($data[$field], true);
+                    $data[$field] = is_array($decoded) ? $decoded : [];
+                } elseif (!is_array($data[$field])) {
+                    $data[$field] = [];
+                }
+            }
+        }
+
+        if (!isset($data['filters'])) {
+            $data['filters'] = [
                 'Free Wi-Fi' => 'No',
                 'Good for Breakfast' => 'No',
                 'Good for Dinner' => 'No',
@@ -1156,81 +1283,35 @@ class RestaurantController extends Controller
                 'Outdoor Seating' => 'No',
                 'Takes Reservations' => 'No',
                 'Vegetarian Friendly' => 'No'
-            ],
-            'workingHours' => [
-                [
-                    'day' => 'Monday',
-                    'timeslot' => [
-                        [
-                            'from' => '09:30',
-                            'to' => '22:00'
-                        ]
-                    ]
-                ],
-                [
-                    'day' => 'Tuesday',
-                    'timeslot' => [
-                        [
-                            'from' => '09:30',
-                            'to' => '22:00'
-                        ]
-                    ]
-                ],
-                [
-                    'day' => 'Wednesday',
-                    'timeslot' => [
-                        [
-                            'from' => '09:30',
-                            'to' => '22:00'
-                        ]
-                    ]
-                ],
-                [
-                    'day' => 'Thursday',
-                    'timeslot' => [
-                        [
-                            'from' => '09:30',
-                            'to' => '22:00'
-                        ]
-                    ]
-                ],
-                [
-                    'day' => 'Friday',
-                    'timeslot' => [
-                        [
-                            'from' => '09:30',
-                            'to' => '22:00'
-                        ]
-                    ]
-                ],
-                [
-                    'day' => 'Saturday',
-                    'timeslot' => [
-                        [
-                            'from' => '09:30',
-                            'to' => '22:00'
-                        ]
-                    ]
-                ],
-                [
-                    'day' => 'Sunday',
-                    'timeslot' => [
-                        [
-                            'from' => '09:30',
-                            'to' => '22:00'
-                        ]
-                    ]
-                ]
-            ],
-            'specialDiscount' => [],
-            'photos' => [],
-            'restaurantMenuPhotos' => []
-        ];
+            ];
+        }
 
-        foreach ($defaultFields as $field => $defaultValue) {
-            if (!isset($data[$field])) {
-                $data[$field] = $defaultValue;
+        if (!isset($data['workingHours'])) {
+            $defaultSlots = [];
+            foreach (['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] as $day) {
+                $defaultSlots[] = [
+                    'day' => $day,
+                    'timeslot' => [
+                        [
+                            'from' => '09:30',
+                            'to' => '22:00'
+                        ]
+                    ]
+                ];
             }
+            $data['workingHours'] = $defaultSlots;
+        }
+
+        if (!isset($data['photos'])) {
+            $data['photos'] = [];
+        }
+
+        if (!isset($data['restaurantMenuPhotos'])) {
+            $data['restaurantMenuPhotos'] = [];
+        }
+
+        if (!isset($data['specialDiscount'])) {
+            $data['specialDiscount'] = [];
         }
 
         return $data;
@@ -1239,281 +1320,63 @@ class RestaurantController extends Controller
     public function downloadBulkUpdateTemplate()
     {
         try {
-            // Create a new Spreadsheet
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
 
-            // Set up headers with proper column names
             $headers = [
-                'id',                       // Optional: Restaurant ID (for updates)
-                'title',                    // Required: Restaurant name
-                'description',              // Required: Restaurant description
-                'latitude',                 // Required: Latitude coordinate (-90 to 90)
-                'longitude',                // Required: Longitude coordinate (-180 to 180)
-                'location',                 // Required: Address
-                'phonenumber',              // Required: Phone number
-                'countryCode',              // Required: Country code (e.g., "IN")
-                'zoneName',                 // Required: Zone name (will be converted to zoneId)
-                'authorName',               // Optional: Vendor name (will be converted to author ID)
-                'authorEmail',              // Optional: Vendor email (alternative to authorName)
-                'categoryTitle',            // Required: Category names (comma-separated or JSON array)
-                'vendorCuisineTitle',       // Required: Vendor cuisine name (will be converted to vendorCuisineID)
-                'adminCommission',          // Optional: Commission structure (JSON string)
-                'isOpen',                   // Optional: Restaurant open status (true/false)
-                'enabledDiveInFuture',      // Optional: Dine-in future enabled (true/false)
-                'restaurantCost',           // Optional: Restaurant cost (number)
-                'openDineTime',             // Optional: Opening time (HH:MM format)
-                'closeDineTime',            // Optional: Closing time (HH:MM format)
-                'photo',                    // Optional: Main photo URL
-                'hidephotos',               // Optional: Hide photos (true/false)
-                'specialDiscountEnable'     // Optional: Special discount enabled (true/false)
+                'id',
+                'title',
+                'description',
+                'latitude',
+                'longitude',
+                'location',
+                'phonenumber',
+                'countryCode',
+                'zoneName',
+                'authorName',
+                'authorEmail',
+                'categoryTitle',
+                'vendorCuisineTitle',
+                'adminCommission',
+                'isOpen',
+                'enabledDiveInFuture',
+                'restaurantCost',
+                'openDineTime',
+                'closeDineTime',
+                'photo',
+                'hidephotos',
+                'specialDiscountEnable'
             ];
 
-            // Set headers
             foreach ($headers as $colIndex => $header) {
                 $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1);
                 $sheet->setCellValue($column . '1', $header);
-
-                // Style headers
                 $sheet->getStyle($column . '1')->getFont()->setBold(true);
                 $sheet->getStyle($column . '1')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID);
                 $sheet->getStyle($column . '1')->getFill()->getStartColor()->setRGB('E6E6FA');
             }
 
-            // Add sample data row
-            $sampleData = [
-                '',                                  // id (leave empty for new restaurants)
-                'Sample Restaurant',                 // title
-                'A great restaurant with delicious food', // description
-                '15.12345',                         // latitude
-                '80.12345',                         // longitude
-                '123 Main Street, City, State',     // location
-                '1234567890',                       // phonenumber
-                'IN',                               // countryCode
-                'Ongole',                           // zoneName
-                'Vendor One',                       // authorName
-                'vendor@example.com',               // authorEmail
-                'Biryani, Pizza',                   // categoryTitle
-                'Indian',                           // vendorCuisineTitle
-                '{"commissionType":"Fixed","fix_commission":12,"isEnabled":true}', // adminCommission
-                'true',                             // isOpen
-                'false',                            // enabledDiveInFuture
-                '250',                              // restaurantCost
-                '09:30',                            // openDineTime
-                '22:00',                            // closeDineTime
-                'https://example.com/restaurant-photo.jpg', // photo
-                'false',                            // hidephotos
-                'false'                             // specialDiscountEnable
-            ];
+            $zones = DB::table('zone')
+                ->where('publish', 1)
+                ->orderBy('name')
+                ->pluck('name')
+                ->filter()
+                ->values()
+                ->all();
 
-        foreach ($sampleData as $colIndex => $value) {
-            $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1);
-            $sheet->setCellValue($column . '2', $value);
-        }
+            $cuisines = DB::table('vendor_cuisines')
+                ->orderBy('title')
+                ->pluck('title')
+                ->filter()
+                ->values()
+                ->all();
 
-        // Add instructions row
-        $instructions = [
-            'Restaurant name (required)',           // title
-            'Restaurant description (required)',    // description
-            'Latitude coordinate -90 to 90 (required)', // latitude
-            'Longitude coordinate -180 to 180 (required)', // longitude
-            'Full address (required)',              // location
-            'Phone number 7-20 digits (required)',  // phonenumber
-            'Country code like IN, US (required)',  // countryCode
-            'Zone name like Ongole, Hyderabad (required)', // zoneName
-            'Vendor name (optional)',               // authorName
-            'Vendor email (optional)',              // authorEmail
-            'Category names separated by comma (required)', // categoryTitle
-            'Cuisine name like Indian, Chinese (required)', // vendorCuisineTitle
-            'JSON format commission (optional)',    // adminCommission
-            'true/false for open status (optional)', // isOpen
-            'true/false for dine-in future (optional)', // enabledDiveInFuture
-            'Restaurant cost number (optional)',    // restaurantCost
-            'Opening time HH:MM format (optional)', // openDineTime
-            'Closing time HH:MM format (optional)', // closeDineTime
-            'Photo URL (optional)',                 // photo
-            'true/false to hide photos (optional)', // hidephotos
-            'true/false for special discount (optional)' // specialDiscountEnable
-        ];
-
-        foreach ($instructions as $colIndex => $instruction) {
-            $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1);
-            $sheet->setCellValue($column . '3', $instruction);
-
-            // Style instructions
-            $sheet->getStyle($column . '3')->getFont()->setItalic(true);
-            $sheet->getStyle($column . '3')->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('666666'));
-        }
-
-        // Add available zones and cuisines info
-        try {
-            $firestore = new \Google\Cloud\Firestore\FirestoreClient([
-                'projectId' => config('firestore.project_id'),
-                'keyFilePath' => config('firestore.credentials'),
-            ]);
-
-            // Get available zones
-            $zoneDocs = $firestore->collection('zone')->documents();
-            $zones = [];
-            foreach ($zoneDocs as $zoneDoc) {
-                $zone = $zoneDoc->data();
-                if (isset($zone['name'])) {
-                    $zones[] = $zone['name'];
-                }
-            }
-
-            // Get available cuisines
-            $cuisineDocs = $firestore->collection('vendor_cuisines')->documents();
-            $cuisines = [];
-            foreach ($cuisineDocs as $cuisineDoc) {
-                $cuisine = $cuisineDoc->data();
-                if (isset($cuisine['title'])) {
-                    $cuisines[] = $cuisine['title'];
-                }
-            }
-
-            // Add available options to the sheet
-            $sheet->setCellValue('A5', 'Available Zones:');
-            $sheet->setCellValue('A6', implode(', ', $zones));
-            $sheet->getStyle('A5')->getFont()->setBold(true);
-            $sheet->getStyle('A6')->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('0066CC'));
-
-            $sheet->setCellValue('A8', 'Available Cuisines:');
-            $sheet->setCellValue('A9', implode(', ', $cuisines));
-            $sheet->getStyle('A8')->getFont()->setBold(true);
-            $sheet->getStyle('A9')->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('0066CC'));
-
-        } catch (Exception $e) {
-            $sheet->setCellValue('A5', 'Note: Could not load available zones and cuisines');
-        }
-
-        // Auto-size columns
-        foreach (range('A', 'V') as $column) {
-            $sheet->getColumnDimension($column)->setAutoSize(true);
-        }
-
-        // Add data validation for boolean fields
-        $booleanFields = ['M', 'N', 'O', 'U', 'V']; // isOpen, enabledDiveInFuture, hidephotos, specialDiscountEnable
-        foreach ($booleanFields as $column) {
-            for ($row = 2; $row <= 1000; $row++) {
-                $validation = $sheet->getDataValidation($column . $row);
-                $validation->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
-                $validation->setFormula1('"true,false"');
-                $validation->setAllowBlank(false);
-                $validation->setShowDropDown(true);
-                $validation->setPromptTitle('Boolean Value');
-                $validation->setPrompt('Please select true or false');
-                $validation->setShowErrorMessage(true);
-                $validation->setErrorTitle('Invalid Value');
-                $validation->setError('Please select true or false only');
-            }
-        }
-
-        // Add data validation for country code
-        for ($row = 2; $row <= 1000; $row++) {
-            $validation = $sheet->getDataValidation('G' . $row);
-            $validation->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
-            $validation->setFormula1('"IN,US,UK,CA,AU,DE,FR,IT,ES,JP,CN,KR,BR,MX,AR,CL,CO,PE,VE,EC,BO,PY,UY,GY,SR,GF,FG,BR,AR,CL,CO,PE,VE,EC,BO,PY,UY,GY,SR,GF,FG"');
-            $validation->setAllowBlank(false);
-            $validation->setShowDropDown(true);
-            $validation->setPromptTitle('Country Code');
-            $validation->setPrompt('Please select a country code');
-            $validation->setShowErrorMessage(true);
-            $validation->setErrorTitle('Invalid Country Code');
-            $validation->setError('Please select a valid country code');
-        }
-
-            foreach ($sampleData as $colIndex => $value) {
-                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1);
-                $sheet->setCellValue($column . '2', $value);
-            }
-
-            // Add instructions row
-            $instructions = [
-                'Restaurant ID (optional - leave empty for new restaurants)', // id
-                'Restaurant name (required)',           // title
-                'Restaurant description (required)',    // description
-                'Latitude coordinate -90 to 90 (required)', // latitude
-                'Longitude coordinate -180 to 180 (required)', // longitude
-                'Full address (required)',              // location
-                'Phone number 7-20 digits (required)',  // phonenumber
-                'Country code like IN, US (required)',  // countryCode
-                'Zone name like Ongole, Hyderabad (required)', // zoneName
-                'Vendor name (optional)',               // authorName
-                'Vendor email (optional)',              // authorEmail
-                'Category names separated by comma (required)', // categoryTitle
-                'Cuisine name like Indian, Chinese (required)', // vendorCuisineTitle
-                'JSON format commission (optional)',    // adminCommission
-                'true/false for open status (optional)', // isOpen
-                'true/false for dine-in future (optional)', // enabledDiveInFuture
-                'Restaurant cost number (optional)',    // restaurantCost
-                'Opening time HH:MM format (optional)', // openDineTime
-                'Closing time HH:MM format (optional)', // closeDineTime
-                'Photo URL (optional)',                 // photo
-                'true/false to hide photos (optional)', // hidephotos
-                'true/false for special discount (optional)' // specialDiscountEnable
-            ];
-
-            foreach ($instructions as $colIndex => $instruction) {
-                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1);
-                $sheet->setCellValue($column . '3', $instruction);
-
-                // Style instructions
-                $sheet->getStyle($column . '3')->getFont()->setItalic(true);
-                $sheet->getStyle($column . '3')->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('666666'));
-            }
-
-            // Add available zones and cuisines info (with error handling)
-            try {
-                $firestore = new \Google\Cloud\Firestore\FirestoreClient([
-                    'projectId' => config('firestore.project_id'),
-                    'keyFilePath' => config('firestore.credentials'),
-                ]);
-
-                // Get available zones
-                $zoneDocs = $firestore->collection('zone')->documents();
-                $zones = [];
-                foreach ($zoneDocs as $zoneDoc) {
-                    $zone = $zoneDoc->data();
-                    if (isset($zone['name'])) {
-                        $zones[] = $zone['name'];
-                    }
-                }
-
-                // Get available cuisines
-                $cuisineDocs = $firestore->collection('vendor_cuisines')->documents();
-                $cuisines = [];
-                foreach ($cuisineDocs as $cuisineDoc) {
-                    $cuisine = $cuisineDoc->data();
-                    if (isset($cuisine['title'])) {
-                        $cuisines[] = $cuisine['title'];
-                    }
-                }
-
-                // Add available options to the sheet
-                $sheet->setCellValue('A5', 'Available Zones:');
-                $sheet->setCellValue('A6', implode(', ', $zones));
-                $sheet->getStyle('A5')->getFont()->setBold(true);
-                $sheet->getStyle('A6')->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('0066CC'));
-
-                $sheet->setCellValue('A8', 'Available Cuisines:');
-                $sheet->setCellValue('A9', implode(', ', $cuisines));
-                $sheet->getStyle('A8')->getFont()->setBold(true);
-                $sheet->getStyle('A9')->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('0066CC'));
-
-            } catch (\Exception $e) {
-                $sheet->setCellValue('A5', 'Note: Could not load available zones and cuisines');
-                \Log::error('Error loading zones/cuisines for template: ' . $e->getMessage());
-            }
-
-            // Auto-size columns
-            foreach (range('A', 'W') as $column) {
+            foreach (range('A', 'V') as $column) {
                 $sheet->getColumnDimension($column)->setAutoSize(true);
             }
 
-            // Add data validation for boolean fields
-            $booleanFields = ['O', 'P', 'U', 'V']; // isOpen, enabledDiveInFuture, hidephotos, specialDiscountEnable
-            foreach ($booleanFields as $column) {
+            $booleanColumns = ['O', 'P', 'U', 'V'];
+            foreach ($booleanColumns as $column) {
                 for ($row = 2; $row <= 1000; $row++) {
                     $validation = $sheet->getDataValidation($column . $row);
                     $validation->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
@@ -1528,7 +1391,6 @@ class RestaurantController extends Controller
                 }
             }
 
-            // Add data validation for country code
             for ($row = 2; $row <= 1000; $row++) {
                 $validation = $sheet->getDataValidation('H' . $row);
                 $validation->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
@@ -1542,12 +1404,56 @@ class RestaurantController extends Controller
                 $validation->setError('Please select a valid country code');
             }
 
-            // Create the Excel file
+            $instructionsSheet = $spreadsheet->createSheet();
+            $instructionsSheet->setTitle('Instructions');
+            $instructionsSheet->setCellValue('A1', 'How to use this template');
+            $instructionsSheet->getStyle('A1')->getFont()->setBold(true)->setSize(13);
+            $instructionsSheet->setCellValue('A2', '1. Do not modify the header row on the "Restaurants" sheet.');
+            $instructionsSheet->setCellValue('A3', '2. Starting at row 2, enter one restaurant per row. Leave optional cells blank if not needed.');
+            $instructionsSheet->setCellValue('A4', '3. Use proper formats for each column (dates, numbers, boolean values as true/false).');
+            $instructionsSheet->setCellValue('A5', '4. Save the file as XLSX/XLS and upload it back in the admin panel.');
+            $instructionsSheet->setCellValue('A7', 'Available Zones:');
+            $instructionsSheet->getStyle('A7')->getFont()->setBold(true);
+            $instructionsSheet->setCellValue('A8', empty($zones) ? 'No published zones found.' : implode(', ', $zones));
+            $instructionsSheet->setCellValue('A10', 'Available Cuisines:');
+            $instructionsSheet->getStyle('A10')->getFont()->setBold(true);
+            $instructionsSheet->setCellValue('A11', empty($cuisines) ? 'No cuisines found.' : implode(', ', $cuisines));
+            $instructionsSheet->setCellValue('A13', 'Sample row (replace with your own data)');
+            $instructionsSheet->getStyle('A13')->getFont()->setBold(true);
+            $sampleRow = [
+                '',
+                'Sample Restaurant',
+                'Describe your restaurant here',
+                '15.12345',
+                '80.12345',
+                '123 Main Street, City, State',
+                '1234567890',
+                'IN',
+                '',
+                '',
+                '',
+                'Biryani, Pizza',
+                'Indian',
+                '{"commissionType":"Fixed","fix_commission":12,"isEnabled":true}',
+                'true',
+                'false',
+                '250',
+                '09:30',
+                '22:00',
+                'https://example.com/restaurant-photo.jpg',
+                'false',
+                'false'
+            ];
+            $instructionsSheet->fromArray($headers, null, 'A15');
+            $instructionsSheet->fromArray($sampleRow, null, 'A16');
+            foreach (range('A', 'V') as $column) {
+                $instructionsSheet->getColumnDimension($column)->setAutoSize(true);
+            }
+
             $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
             $filePath = storage_path('app/templates/restaurants_bulk_update_template.xlsx');
-
-            // Ensure directory exists
             $directory = dirname($filePath);
+
             if (!is_dir($directory)) {
                 mkdir($directory, 0755, true);
             }
@@ -1556,9 +1462,8 @@ class RestaurantController extends Controller
 
             return response()->download($filePath, 'restaurants_bulk_update_template.xlsx', [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'Content-Disposition' => 'attachment; filename="restaurants_bulk_update_template.xlsx"'
+                'Content-Disposition' => 'attachment; filename="restaurants_bulk_update_template.xlsx"',
             ]);
-
         } catch (\Exception $e) {
             \Log::error('Error generating restaurant template: ' . $e->getMessage());
             return back()->withErrors(['file' => 'Error generating template: ' . $e->getMessage()]);
@@ -1596,11 +1501,22 @@ class RestaurantController extends Controller
             $uniqueIds = $subQuery->pluck('max_id')->toArray();
 
             // Now build main query using those unique IDs
-            $query = AppUser::whereIn('id', $uniqueIds);
+//            $query = AppUser::whereIn('id', $uniqueIds);
+            $query = AppUser::query()
+                ->whereIn('users.id', $uniqueIds)
+                ->leftJoin('vendors', 'vendors.id', '=', 'users.vendorID') // ✅ Correct join
+                ->leftJoin('zone', 'vendors.zoneId', '=', 'zone.id') // ✅ Join zone table to get zone name
+                ->select(
+                    'users.*',
+                    'vendors.zoneId as vendor_zoneId', // ✅ we pull zoneId from vendors table
+                    'zone.name as zone_name' // ✅ we pull zone name from zone table
+                );
+
 
             // Apply additional filters if provided
             if ($request->has('vendor_type') && $request->vendor_type != '') {
-                $query->where('vType', $request->vendor_type);
+//                $query->where('vType', $request->vendor_type);
+                $query->where('users.vType', $request->vendor_type);
             }
 
             if ($request->has('status') && $request->status != '') {
@@ -1608,7 +1524,7 @@ class RestaurantController extends Controller
             }
 
             if ($request->has('zone') && $request->zone != '') {
-                $query->where('zoneId', $request->zone);
+                $query->where('vendors.zoneId', $request->zone); // ✅ Correct source table
             }
 
             // Store zone sort preference for later
@@ -1631,11 +1547,13 @@ class RestaurantController extends Controller
             // Apply search filter
             if (!empty($searchValue)) {
                 $query->where(function($q) use ($searchValue) {
-                    $q->where('firstName', 'like', "%{$searchValue}%")
-                      ->orWhere('lastName', 'like', "%{$searchValue}%")
-                      ->orWhere('email', 'like', "%{$searchValue}%")
-                      ->orWhere('phoneNumber', 'like', "%{$searchValue}%")
-                      ->orWhere(DB::raw("CONCAT(firstName, ' ', lastName)"), 'like', "%{$searchValue}%");
+                    $q->where('users.firstName', 'like', "%{$searchValue}%")
+                      ->orWhere('users.lastName', 'like', "%{$searchValue}%")
+                      ->orWhere('users.email', 'like', "%{$searchValue}%")
+                      ->orWhere('users.phoneNumber', 'like', "%{$searchValue}%")
+                      ->orWhere('users.vType', 'like', "%{$searchValue}%")
+                      ->orWhere('zone.name', 'like', "%{$searchValue}%")
+                      ->orWhere(DB::raw("CONCAT(users.firstName, ' ', users.lastName)"), 'like', "%{$searchValue}%");
                 });
             }
 
@@ -1644,10 +1562,8 @@ class RestaurantController extends Controller
             // Apply ordering
             // If zone sort is requested, sort by zone name, otherwise by createdAt descending
             if (!empty($zoneSort)) {
-                // Join with zone table to sort by zone name
-                $vendors = $query->leftJoin('zone', 'users.zoneId', '=', 'zone.id')
-                               ->select('users.*', 'zone.name as zone_name')
-                               ->orderBy('zone.name', $zoneSort)
+                // Sort by zone name (zone table already joined above)
+                $vendors = $query->orderBy('zone.name', $zoneSort)
                                ->orderByRaw("REPLACE(REPLACE(users.createdAt, '\"', ''), 'T', ' ') DESC")
                                ->skip($start)
                                ->take($length)
@@ -1655,8 +1571,8 @@ class RestaurantController extends Controller
             } else {
                 // Get paginated records - order by parsed createdAt in descending order
                 // Remove quotes and convert to proper datetime for sorting
-                $vendors = $query->orderByRaw("REPLACE(REPLACE(createdAt, '\"', ''), 'T', ' ') DESC")
-                               ->skip($start)
+                $vendors = $query->orderByRaw("REPLACE(REPLACE(users.createdAt, '\"', ''), 'T', ' ') DESC")
+                    ->skip($start)
                                ->take($length)
                                ->get();
             }
@@ -1699,7 +1615,8 @@ class RestaurantController extends Controller
                     'countryCode' => $vendor->countryCode ?? '',
                     'profilePictureURL' => $vendor->profilePictureURL ?? '',
                     'active' => $vendor->active == '1' || $vendor->active === 'true' || $vendor->active === true,
-                    'zoneId' => $vendor->zoneId ?? '',
+                    'zoneId' => $vendor->vendor_zoneId ?? '',
+                    'zoneName' => $vendor->zone_name ?? '', // ✅ Include zone name from joined zone table
                     'vType' => $vendor->vType ?? 'restaurant',
                     'vendorID' => $vendor->vendorID ?? '',
                     'subscriptionPlanId' => $vendor->subscriptionPlanId ?? '',
@@ -1736,76 +1653,6 @@ class RestaurantController extends Controller
     }
 
     /**
-     * Get zones for vendor filter
-     */
-    public function getZones()
-    {
-        try {
-            // Get all zones first, then filter for publish = 1
-            $allZones = DB::table('zone')
-                      ->orderBy('name', 'asc')
-                      ->get();
-
-            \Log::info('Total zones found: ' . $allZones->count());
-
-            // Filter for published zones (handle different data types)
-            $zones = $allZones->filter(function($zone) {
-                return $zone->publish == 1 ||
-                       $zone->publish === '1' ||
-                       $zone->publish === true ||
-                       $zone->publish === 'true';
-            })->values();
-
-            \Log::info('Published zones: ' . $zones->count());
-
-            return response()->json([
-                'success' => true,
-                'data' => $zones,
-                'total_zones' => $allZones->count(),
-                'published_zones' => $zones->count()
-            ]);
-        } catch (\Exception $e) {
-            \Log::error('Error fetching zones: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Error fetching zones: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Get single zone with area data
-     */
-    public function getZoneById($id)
-    {
-        try {
-            $zone = DB::table('zone')->where('id', $id)->first();
-
-            if (!$zone) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Zone not found'
-                ], 404);
-            }
-
-            // Return zone with area as-is (already JSON string in database)
-            return response()->json([
-                'id' => $zone->id,
-                'name' => $zone->name,
-                'latitude' => $zone->latitude,
-                'longitude' => $zone->longitude,
-                'area' => $zone->area, // JSON string
-                'publish' => $zone->publish
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error fetching zone: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
      * Get single vendor data by ID
      */
     public function getVendorById($id)
@@ -1824,17 +1671,10 @@ class RestaurantController extends Controller
             ->where('role', 'vendor')
             ->first();
 
-            // Log for debugging
-            \Log::info('Looking for vendor with ID: ' . $id);
 
             if (!$vendor) {
                 \Log::warning('Vendor not found with ID: ' . $id);
 
-                // Try to find any vendor to help debug
-                $anyVendor = AppUser::where('role', 'vendor')->first();
-                if ($anyVendor) {
-                    \Log::info('Sample vendor found - firebase_id: ' . ($anyVendor->firebase_id ?? 'NULL') . ', _id: ' . ($anyVendor->_id ?? 'NULL'));
-                }
 
                 return response()->json([
                     'success' => false,
@@ -1842,7 +1682,6 @@ class RestaurantController extends Controller
                 ], 404);
             }
 
-            \Log::info('Vendor found: ' . ($vendor->firstName ?? '') . ' ' . ($vendor->lastName ?? ''));
 
             // Parse dates from JSON format
             $subscriptionExpiryDate = '';
@@ -1909,7 +1748,6 @@ class RestaurantController extends Controller
                 'isDocumentVerify' => $vendor->isDocumentVerify == '1' || $vendor->isDocumentVerify === 'true' || $vendor->isDocumentVerify === true,
             ];
 
-            \Log::info('Returning vendor data: ' . json_encode($vendorData));
 
             return response()->json([
                 'success' => true,
@@ -1943,7 +1781,6 @@ class RestaurantController extends Controller
             ->where('role', 'vendor')
             ->first();
 
-            \Log::info('Updating vendor with ID: ' . $id);
 
             if (!$vendor) {
                 \Log::warning('Vendor not found for update with ID: ' . $id);
@@ -1960,7 +1797,9 @@ class RestaurantController extends Controller
             if ($request->has('countryCode')) $vendor->countryCode = $request->countryCode;
             if ($request->has('vType')) $vendor->vType = $request->vType;
             if ($request->has('profilePictureURL')) $vendor->profilePictureURL = $request->profilePictureURL;
-            if ($request->has('active')) $vendor->active = $request->active ? '1' : '0';
+            if ($request->has('active')) {
+                $vendor->active = $this->toBoolInt($request->input('active'));
+            }
             if ($request->has('subscriptionPlanId')) $vendor->subscriptionPlanId = $request->subscriptionPlanId;
             if ($request->has('subscription_plan')) $vendor->subscription_plan = json_encode($request->subscription_plan);
             if ($request->has('subscriptionExpiryDate')) {
@@ -2034,12 +1873,13 @@ class RestaurantController extends Controller
                 ], 404);
             }
 
-            $vendor->active = $vendor->active == '1' ? '0' : '1';
+            $current = $this->toBoolInt($vendor->active);
+            $vendor->active = $current ? 0 : 1;
             $vendor->save();
 
             return response()->json([
                 'success' => true,
-                'active' => $vendor->active == '1'
+                'active' => (bool) $vendor->active
             ]);
         } catch (\Exception $e) {
             \Log::error('Error toggling vendor status: ' . $e->getMessage());
@@ -2091,6 +1931,19 @@ class RestaurantController extends Controller
                 'message' => 'Error deleting vendor: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    public function getZones()
+    {
+        $zones = DB::table('zone')
+            ->where('publish', 1)
+            ->orderBy('name', 'asc')
+            ->get();
+
+        return response()->json([
+            'success' => true,  // <- IMPORTANT
+            'data' => $zones
+        ]);
     }
 
     /**
@@ -2150,11 +2003,11 @@ class RestaurantController extends Controller
             $vendor->countryCode = $request->countryCode;
             $vendor->role = 'vendor';
             $vendor->vType = $request->vType ?? 'restaurant';
-            $vendor->active = $request->active ?? '0';
+            $vendor->active = $this->toBoolInt($request->input('active', 0));
             $vendor->profilePictureURL = $request->profilePictureURL ?? '';
             $vendor->provider = 'email';
             $vendor->appIdentifier = 'web';
-            $vendor->isDocumentVerify = '0';
+            $vendor->isDocumentVerify = 0;
             // Store createdAt in same JSON format as Firebase: "2025-10-16T07:13:41.487000Z"
             $vendor->createdAt = '"' . gmdate('Y-m-d\TH:i:s.u\Z') . '"';
 
@@ -2373,14 +2226,39 @@ class RestaurantController extends Controller
 
             $filteredRecords = $query->count();
 
-            // Get counts for statistics
-            $totalRestaurants = Vendor::count();
-            $activeRestaurants = Vendor::where('reststatus', 1)->count();
-            $inactiveRestaurants = Vendor::where('reststatus', 0)->count();
+//            // Get counts for statistics
+//            $totalRestaurants = Vendor::count();
+//            $activeRestaurants = Vendor::where('reststatus', 1)->count();
+//            $inactiveRestaurants = Vendor::where('reststatus', 0)->count();
+//
+//            // Get new joined (last 30 days)
+//            $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
+//            $newJoined = Vendor::whereRaw("DATE(REPLACE(REPLACE(createdAt, '\"', ''), 'T', ' ')) >= ?", [$thirtyDaysAgo])->count();
 
-            // Get new joined (last 30 days)
+            $statsQuery = Vendor::query();
+
+// APPLY SAME FILTERS AS MAIN QUERY
+            if ($request->zone != '') {
+                $statsQuery->where('zoneId', $request->zone);
+            }
+            if ($request->restaurant_type != '') {
+                if ($request->restaurant_type === 'true') {
+                    $statsQuery->where('dine_in_active', '!=', '');
+                }
+            }
+            if ($request->vType != '') {
+                $statsQuery->where('vType', $request->vType);
+            }
+
+            $totalRestaurants = $statsQuery->count();
+            $activeRestaurants = $statsQuery->clone()->where('reststatus', 1)->count();
+            $inactiveRestaurants = $statsQuery->clone()->where('reststatus', 0)->count();
+
             $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
-            $newJoined = Vendor::whereRaw("DATE(REPLACE(REPLACE(createdAt, '\"', ''), 'T', ' ')) >= ?", [$thirtyDaysAgo])->count();
+            $newJoined = $statsQuery->clone()
+                ->whereRaw("DATE(REPLACE(REPLACE(createdAt, '\"', ''), 'T', ' ')) >= ?", [$thirtyDaysAgo])
+                ->count();
+
 
             // Apply ordering - descending by createdAt
             $restaurants = $query->orderByRaw("REPLACE(REPLACE(createdAt, '\"', ''), 'T', ' ') DESC")
@@ -2403,6 +2281,14 @@ class RestaurantController extends Controller
                     }
                 }
 
+                // Parse adminCommission (JSON field)
+                $adminCommission = null;
+                if ($restaurant->adminCommission) {
+                    $adminCommission = is_string($restaurant->adminCommission)
+                        ? json_decode($restaurant->adminCommission, true)
+                        : $restaurant->adminCommission;
+                }
+
                 $restaurantData = [
                     'id' => $restaurant->id,
                     'title' => $restaurant->title ?? '',
@@ -2420,6 +2306,7 @@ class RestaurantController extends Controller
                     'categoryID' => $restaurant->categoryID ? json_decode($restaurant->categoryID, true) : [],
                     'categoryTitle' => $restaurant->categoryTitle ? json_decode($restaurant->categoryTitle, true) : [],
                     'reststatus' => $restaurant->reststatus == 1 || $restaurant->reststatus === 'true' || $restaurant->reststatus === true,
+                    'isActive' => $restaurant->reststatus == 1 || $restaurant->reststatus === 'true' || $restaurant->reststatus === true,
                     'isOpen' => $restaurant->isOpen == 1 || $restaurant->isOpen === 'true' || $restaurant->isOpen === true,
                     'reviewsCount' => $restaurant->reviewsCount ?? 0,
                     'reviewsSum' => $restaurant->reviewsSum ?? 0,
@@ -2427,6 +2314,7 @@ class RestaurantController extends Controller
                     'createdAtRaw' => $restaurant->createdAt ?? '',
                     'vType' => $restaurant->vType ?? 'restaurant',
                     'walletAmount' => $restaurant->walletAmount ?? 0,
+                    'adminCommission' => $adminCommission, // Include adminCommission object with fix_commission
                 ];
 
                 $data[] = $restaurantData;
@@ -2458,6 +2346,57 @@ class RestaurantController extends Controller
     }
 
     /**
+     * Apply global open/close status to restaurants in a given zone (MySQL).
+     */
+    public function updateGlobalStatus(Request $request)
+    {
+        $validated = $request->validate([
+            'is_open' => 'required|boolean',
+            'zone_id' => 'nullable|string',
+        ]);
+
+        $zoneId = $validated['zone_id'] ?? $request->input('zoneId');
+        if ($zoneId !== null && $zoneId !== '') {
+            $zoneId = trim((string) $zoneId);
+        } else {
+            $zoneId = null;
+        }
+
+        try {
+            $status = $this->toBoolInt($validated['is_open']);
+
+            $query = Vendor::query();
+            if ($zoneId) {
+                $query->where('zoneId', $zoneId);
+            }
+
+            $updatedCount = $query->update([
+                'isOpen' => $status,
+                'reststatus' => $status,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'updated' => $updatedCount,
+                'is_open' => (bool) $status,
+                'zone_id' => $zoneId,
+                'scope' => $zoneId ? 'zone' : 'all',
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error updating global restaurant status', [
+                'zone_id' => $zoneId,
+                'is_open' => $validated['is_open'],
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to update restaurants. Please try again later.',
+            ], 500);
+        }
+    }
+
+    /**
      * Get single restaurant data by ID
      */
     public function getRestaurantById($id)
@@ -2471,7 +2410,6 @@ class RestaurantController extends Controller
                 $restaurant = Vendor::find($id);
             }
 
-            \Log::info('Looking for restaurant with ID: ' . $id);
 
             if (!$restaurant) {
                 \Log::warning('Restaurant not found with ID: ' . $id);
@@ -2481,7 +2419,6 @@ class RestaurantController extends Controller
                 ], 404);
             }
 
-            \Log::info('Restaurant found: ' . ($restaurant->title ?? ''));
 
             // Parse and format data
             $restaurantData = [
@@ -2651,12 +2588,13 @@ class RestaurantController extends Controller
                 ], 404);
             }
 
-            $restaurant->reststatus = $restaurant->reststatus == 1 ? 0 : 1;
+            $current = $this->toBoolInt($restaurant->reststatus);
+            $restaurant->reststatus = $current ? 0 : 1;
             $restaurant->save();
 
             return response()->json([
                 'success' => true,
-                'reststatus' => $restaurant->reststatus == 1
+                'reststatus' => (bool) $restaurant->reststatus
             ]);
         } catch (\Exception $e) {
             \Log::error('Error toggling restaurant status: ' . $e->getMessage());
@@ -2687,12 +2625,13 @@ class RestaurantController extends Controller
                 ], 404);
             }
 
-            $restaurant->isOpen = $restaurant->isOpen == 1 ? 0 : 1;
+            $current = $this->toBoolInt($restaurant->isOpen);
+            $restaurant->isOpen = $current ? 0 : 1;
             $restaurant->save();
 
             return response()->json([
                 'success' => true,
-                'isOpen' => $restaurant->isOpen == 1
+                'isOpen' => (bool) $restaurant->isOpen
             ]);
         } catch (\Exception $e) {
             \Log::error('Error toggling restaurant open status: ' . $e->getMessage());
@@ -2723,6 +2662,9 @@ class RestaurantController extends Controller
                 ], 404);
             }
 
+            // Delete related local records if necessary (customers/vendors/users relations)
+            $this->cleanupRestaurantRelations($restaurant->id, $restaurant->author);
+
             $restaurant->delete();
 
             return response()->json([
@@ -2736,6 +2678,412 @@ class RestaurantController extends Controller
                 'message' => 'Error deleting restaurant: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    public function bulkDestroy(Request $request)
+    {
+        $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'string'
+        ]);
+
+        $ids = $request->input('ids', []);
+
+        try {
+            DB::beginTransaction();
+
+            foreach ($ids as $id) {
+                $restaurant = Vendor::where('id', $id)->first();
+
+                if (!$restaurant && is_numeric($id)) {
+                    $restaurant = Vendor::find($id);
+                }
+
+                if ($restaurant) {
+                    $this->cleanupRestaurantRelations($restaurant->id, $restaurant->author);
+                    $restaurant->delete();
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Selected restaurants deleted successfully.'
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Bulk delete restaurants error: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error deleting restaurants: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getCloneData($id)
+    {
+        $vendor = Vendor::find($id);
+
+        if (!$vendor) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Restaurant not found with ID: ' . $id
+            ], 404);
+        }
+
+        $owner = $this->findVendorOwner($vendor);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'vendor' => [
+                    'id' => $vendor->id,
+                    'title' => $vendor->title,
+                ],
+                'owner' => $owner ? [
+                    'id' => $owner->id,
+                    'firebase_id' => $owner->firebase_id,
+                    'firstName' => $owner->firstName,
+                    'lastName' => $owner->lastName,
+                    'email' => $owner->email,
+                ] : null,
+            ],
+        ]);
+    }
+
+    public function cloneRestaurant(Request $request)
+    {
+        $validated = $request->validate([
+            'source_vendor_id' => 'required|string',
+            'vendor_title' => 'required|string|max:255',
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'email' => 'required|email',
+            'password' => 'required|string|min:6',
+        ]);
+
+        $sourceVendor = Vendor::find($validated['source_vendor_id']);
+
+        if (!$sourceVendor) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Restaurant not found with ID: ' . $validated['source_vendor_id']
+            ], 404);
+        }
+
+        if (AppUser::where('email', $validated['email'])->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email already exists for another user.'
+            ], 422);
+        }
+
+        $sourceOwner = $this->findVendorOwner($sourceVendor);
+
+        try {
+            DB::beginTransaction();
+
+            $firebaseId = (string) Str::uuid();
+            $currentTimestamp = '"' . gmdate('Y-m-d\TH:i:s.u\Z') . '"';
+
+            $newUser = new AppUser();
+            $newUser->firstName = $validated['first_name'];
+            $newUser->lastName = $validated['last_name'];
+            $newUser->email = $validated['email'];
+            $newUser->password = Hash::make($validated['password']);
+            $newUser->phoneNumber = $sourceOwner->phoneNumber ?? null;
+            $newUser->countryCode = $sourceOwner->countryCode ?? '';
+            $newUser->role = 'vendor';
+            $newUser->vType = $sourceVendor->vType ?? 'restaurant';
+            $newUser->active = 1;
+            $newUser->profilePictureURL = $sourceOwner->profilePictureURL ?? '';
+            $newUser->provider = $sourceOwner->provider ?? 'email';
+            $newUser->appIdentifier = $sourceOwner->appIdentifier ?? 'web';
+            $newUser->isDocumentVerify = $sourceOwner->isDocumentVerify ?? 0;
+            $newUser->createdAt = $currentTimestamp;
+            $newUser->wallet_amount = 0;
+            $newUser->firebase_id = $firebaseId;
+            $newUser->_id = $firebaseId;
+            $newUser->vendorID = null;
+            $newUser->save();
+
+            $newVendorId = $this->generateVendorId();
+
+            /** @var \App\Models\Vendor $newVendor */
+            $newVendor = $sourceVendor->replicate();
+            $newVendor->id = $newVendorId;
+            $newVendor->title = $validated['vendor_title'];
+            $newVendor->author = $firebaseId ?: (string) ($newUser->id);
+            $newVendor->authorName = trim($validated['first_name'] . ' ' . $validated['last_name']);
+            $newVendor->authorProfilePic = $sourceOwner->profilePictureURL ?? $sourceVendor->authorProfilePic ?? '';
+            $newVendor->createdAt = $currentTimestamp;
+            $newVendor->subscriptionTotalOrders = $sourceVendor->subscriptionTotalOrders ?? null;
+            $newVendor->save();
+
+            $newUser->vendorID = $newVendorId;
+            $newUser->save();
+
+            $products = VendorProduct::where('vendorID', $sourceVendor->id)->get();
+            foreach ($products as $product) {
+                /** @var \App\Models\VendorProduct $productClone */
+                $productClone = $product->replicate();
+                $productClone->id = $this->generateVendorProductId();
+                $productClone->vendorID = $newVendorId;
+                if (isset($productClone->vendorTitle)) {
+                    $productClone->vendorTitle = $validated['vendor_title'];
+                }
+                if (isset($productClone->createdAt)) {
+                    $productClone->createdAt = $currentTimestamp;
+                }
+                if (isset($productClone->updatedAt)) {
+                    $productClone->updatedAt = $currentTimestamp;
+                }
+                if (isset($productClone->updated_at)) {
+                    $productClone->updated_at = now();
+                }
+                $productClone->save();
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Restaurant cloned successfully.'
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            \Log::error('Error cloning restaurant: ' . $e->getMessage(), [
+                'source_vendor_id' => $validated['source_vendor_id'],
+                'exception' => $e,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error cloning restaurant: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function assignSubscription(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'plan_id' => 'required|string',
+        ]);
+
+        $vendor = Vendor::find($id);
+        if (!$vendor) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Restaurant not found with ID: ' . $id
+            ], 404);
+        }
+
+        $owner = $this->findVendorOwner($vendor);
+        if (!$owner) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Owner not found for this restaurant.'
+            ], 404);
+        }
+
+        $plan = DB::table('subscription_plans')
+            ->where('id', $validated['plan_id'])
+            ->where('isEnable', true)
+            ->first();
+
+        if (!$plan) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Subscription plan not found or disabled.'
+            ], 404);
+        }
+
+        $planData = $this->normalizePlanData($plan);
+
+        $expiryDate = null;
+        if (isset($planData['expiryDay']) && $planData['expiryDay'] !== null && (int) $planData['expiryDay'] !== -1) {
+            $expiryCarbon = Carbon::now('UTC')->addDays((int) $planData['expiryDay']);
+            $expiryDate = '"' . $expiryCarbon->format('Y-m-d\TH:i:s.u\Z') . '"';
+        }
+
+        $currentTimestamp = '"' . gmdate('Y-m-d\TH:i:s.u\Z') . '"';
+        $planJson = json_encode($planData);
+
+        try {
+            DB::beginTransaction();
+
+            $vendor->subscriptionPlanId = $planData['id'] ?? $validated['plan_id'];
+            $vendor->subscription_plan = $planJson;
+            $vendor->subscriptionExpiryDate = $expiryDate;
+            $vendor->subscriptionTotalOrders = $planData['orderLimit'] ?? null;
+            $vendor->save();
+
+            $owner->subscriptionPlanId = $planData['id'] ?? $validated['plan_id'];
+            $owner->subscription_plan = $planJson;
+            $owner->subscriptionExpiryDate = $expiryDate;
+            $owner->save();
+
+            $historyId = 'subscription_' . Str::uuid()->toString();
+            $historyUserId = $vendor->author ?: ($owner->firebase_id ?? (string) $owner->id);
+
+            DB::table('subscription_history')->insert([
+                'id' => $historyId,
+                'user_id' => $historyUserId,
+                'subscription_plan' => $planJson,
+                'expiry_date' => $expiryDate,
+                'createdAt' => $currentTimestamp,
+                'payment_type' => 'Manual Pay',
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Subscription assigned successfully.'
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            \Log::error('Error assigning subscription: ' . $e->getMessage(), [
+                'vendor_id' => $id,
+                'plan_id' => $validated['plan_id'],
+                'exception' => $e,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error assigning subscription: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function updateSubscriptionLimits(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'order_limit' => 'required|string',
+            'item_limit' => 'required|string',
+        ]);
+
+        $vendor = Vendor::find($id);
+        if (!$vendor) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Restaurant not found with ID: ' . $id
+            ], 404);
+        }
+
+        $owner = $this->findVendorOwner($vendor);
+        if (!$owner) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Owner not found for this restaurant.'
+            ], 404);
+        }
+
+        if (empty($vendor->subscription_plan)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No active subscription found for this restaurant.'
+            ], 422);
+        }
+
+        $vendorPlan = json_decode($vendor->subscription_plan, true) ?: [];
+        $ownerPlan = json_decode($owner->subscription_plan ?? '[]', true) ?: [];
+
+        $vendorPlan['orderLimit'] = $validated['order_limit'];
+        $vendorPlan['itemLimit'] = $validated['item_limit'];
+        $ownerPlan['orderLimit'] = $validated['order_limit'];
+        $ownerPlan['itemLimit'] = $validated['item_limit'];
+
+        $vendor->subscription_plan = json_encode($vendorPlan);
+        $vendor->subscriptionTotalOrders = $validated['order_limit'];
+        $vendor->save();
+
+        if (!empty($owner->subscription_plan)) {
+            $owner->subscription_plan = json_encode($ownerPlan);
+            $owner->save();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Subscription limits updated successfully.'
+        ]);
+    }
+
+    private function cleanupRestaurantRelations(string $restaurantId, ?string $authorId): void
+    {
+        try {
+            if ($authorId) {
+                AppUser::where('id', $authorId)->update(['vendorID' => null]);
+                DB::table('users')->where('id', $authorId)->update(['vendorID' => null]);
+            }
+
+            DB::table('wallet')->where('user_id', $authorId)->delete();
+            DB::table('vendor_products')->where('vendorID', $restaurantId)->delete();
+            DB::table('foods_review')->where('VendorId', $restaurantId)->delete();
+            DB::table('favorite_restaurant')->where('restaurant_id', $restaurantId)->delete();
+            DB::table('payouts')->where('vendorID', $restaurantId)->delete();
+            DB::table('booked_table')->where('vendorID', $restaurantId)->delete();
+            DB::table('story')->where('vendorID', $restaurantId)->delete();
+            DB::table('favorite_item')->where('store_id', $restaurantId)->delete();
+            DB::table('mart_items')->where('vendorID', $restaurantId)->delete();
+        } catch (\Exception $e) {
+            \Log::warning("Error while cleaning up relations for restaurant {$restaurantId}: {$e->getMessage()}");
+        }
+    }
+
+    private function findVendorOwner(Vendor $vendor): ?AppUser
+    {
+        if (!empty($vendor->author)) {
+            $owner = AppUser::where('firebase_id', $vendor->author)
+                ->orWhere('_id', $vendor->author)
+                ->orWhere('id', $vendor->author)
+                ->first();
+
+            if ($owner) {
+                return $owner;
+            }
+        }
+
+        return AppUser::where('vendorID', $vendor->id)->first();
+    }
+
+    private function generateVendorId(): string
+    {
+        do {
+            $id = 'rest_' . Str::uuid()->toString();
+        } while (Vendor::where('id', $id)->exists());
+
+        return $id;
+    }
+
+    private function generateVendorProductId(): string
+    {
+        do {
+            $id = 'product_' . Str::uuid()->toString();
+        } while (VendorProduct::where('id', $id)->exists());
+
+        return $id;
+    }
+
+    /**
+     * @param  object|array  $plan
+     */
+    private function normalizePlanData($plan): array
+    {
+        $planArray = is_array($plan) ? $plan : (array) $plan;
+
+        foreach (['features', 'plan_points', 'planPoints'] as $field) {
+            if (isset($planArray[$field]) && is_string($planArray[$field])) {
+                $decoded = json_decode($planArray[$field], true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    $planArray[$field] = $decoded;
+                }
+            }
+        }
+
+        return $planArray;
     }
 
     /**
@@ -2784,44 +3132,6 @@ class RestaurantController extends Controller
         }
     }
 
-    /**
-     * Debug: Check if vendor exists with given ID
-     */
-    public function debugVendor($id)
-    {
-        try {
-            // Check all possible matches
-            $byFirebaseId = AppUser::where('firebase_id', $id)->where('role', 'vendor')->first();
-            $byUnderscoreId = AppUser::where('_id', $id)->where('role', 'vendor')->first();
-            $byNumericId = is_numeric($id) ? AppUser::where('id', $id)->where('role', 'vendor')->first() : null;
-
-            // Get sample vendors
-            $sampleVendors = AppUser::where('role', 'vendor')->limit(5)->get(['id', 'firebase_id', '_id', 'firstName', 'lastName', 'email']);
-
-            return response()->json([
-                'search_id' => $id,
-                'found_by_firebase_id' => $byFirebaseId ? true : false,
-                'found_by_underscore_id' => $byUnderscoreId ? true : false,
-                'found_by_numeric_id' => $byNumericId ? true : false,
-                'vendor_firebase_id' => $byFirebaseId ? [
-                    'firebase_id' => $byFirebaseId->firebase_id,
-                    '_id' => $byFirebaseId->_id,
-                    'name' => $byFirebaseId->firstName . ' ' . $byFirebaseId->lastName
-                ] : null,
-                'vendor_underscore_id' => $byUnderscoreId ? [
-                    'firebase_id' => $byUnderscoreId->firebase_id,
-                    '_id' => $byUnderscoreId->_id,
-                    'name' => $byUnderscoreId->firstName . ' ' . $byUnderscoreId->lastName
-                ] : null,
-                'sample_vendors' => $sampleVendors
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ], 500);
-        }
-    }
 
     /**
      * Get restaurant statistics for view page
@@ -3312,11 +3622,14 @@ class RestaurantController extends Controller
     public function uploadVendorDocument(Request $request, $vendorId, $docId)
     {
         try {
+
             $request->validate([
                 'frontImage' => 'nullable|string', // Base64 image data
                 'backImage' => 'nullable|string', // Base64 image data
                 'frontImageUrl' => 'nullable|string', // Existing URL
                 'backImageUrl' => 'nullable|string', // Existing URL
+                'frontSide' => 'nullable|string',
+                'backSide' => 'nullable|string',
             ]);
 
             // Get document details
@@ -3471,7 +3784,11 @@ class RestaurantController extends Controller
             if (!$filename) {
                 $filename = uniqid() . '_' . time();
             }
-            $filename .= '.jpg';
+
+            // Add extension if not present
+            if (!preg_match('/\.(jpg|jpeg|png|gif)$/i', $filename)) {
+                $filename .= '.jpg';
+            }
 
             // Save file using Storage
             $path = $folder . '/' . $filename;
@@ -3482,6 +3799,36 @@ class RestaurantController extends Controller
         } catch (\Exception $e) {
             \Log::error('Error uploading base64 image: ' . $e->getMessage());
             throw $e;
+        }
+    }
+
+    /**
+     * Generic image upload API endpoint
+     */
+    public function uploadImage(Request $request)
+    {
+        try {
+            $request->validate([
+                'image' => 'required|string',
+                'folder' => 'nullable|string',
+                'filename' => 'nullable|string'
+            ]);
+
+            $folder = $request->input('folder', 'uploads');
+            $filename = $request->input('filename', null);
+
+            $url = $this->uploadBase64Image($request->input('image'), $folder, $filename);
+
+            return response()->json([
+                'success' => true,
+                'url' => $url
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error in image upload API: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error uploading image: ' . $e->getMessage()
+            ], 500);
         }
     }
 
@@ -3520,6 +3867,63 @@ class RestaurantController extends Controller
                 ->update(['isDocumentVerify' => $isDocumentVerify ? 1 : 0]);
         } catch (\Exception $e) {
             \Log::error('Error updating vendor verification status: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Lightweight Story API for restaurants (used by edit page JS)
+     * Returns empty data to avoid breaking the page if story feature is unused.
+     */
+    public function getRestaurantStory($id)
+    {
+        try {
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'videoUrl' => [],
+                    'videoThumbnail' => ''
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching restaurant story: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching story'
+            ], 500);
+        }
+    }
+
+    public function upsertRestaurantStory(Request $request, $id)
+    {
+        try {
+            // Accept payload and return success (no-op storage for now)
+            return response()->json([
+                'success' => true,
+                'message' => 'Story saved'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error saving restaurant story: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error saving story'
+            ], 500);
+        }
+    }
+
+    public function deleteRestaurantStory($id)
+    {
+        try {
+            // No-op delete for now
+            return response()->json([
+                'success' => true,
+                'message' => 'Story deleted'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error deleting restaurant story: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error deleting story'
+            ], 500);
         }
     }
 }

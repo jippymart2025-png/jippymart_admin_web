@@ -1,14 +1,12 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\AppUser;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
-class AppUserController extends Controller
+class AdminUserController extends Controller
 {
     /**
      * Generate a unique Firebase ID in format: user_XXX
@@ -97,7 +95,7 @@ class AppUserController extends Controller
             'profilePictureURL' => $profileUrl,
             'provider' => 'email',
             'role' => $validated['role'] ?? 'customer',
-            'active' => $isActive ? 'true' : 'false',
+            'active' => $isActive ? 1 : 0,
             'isActive' => $isActive ? 1 : 0,
             'zoneId' => $validated['zoneId'] ?? null,
             'appIdentifier' => 'web',
@@ -142,20 +140,24 @@ class AppUserController extends Controller
             $query->where('createdAt', '<=', $to);
         }
 
-        // Status filter
-        if ($status === 'active') {
-            $query->where(function ($q) {
-                $q->where('active', '1')->orWhere('active', 'true')->orWhere('isActive', 1);
-            });
-        } elseif ($status === 'inactive') {
-            $query->where(function ($q) {
-                $q->where('active', '0')->orWhere('active', 'false')->orWhereNull('active')->orWhere('isActive', 0);
+        // NEW status filter (matches DB int 1/0)
+        $active = $request->query('active');  // frontend sends 1 or 0
+
+        if ($active !== null && $active !== '') {
+            $activeInt = (int) $active;
+
+            $query->where(function ($q) use ($activeInt) {
+                $q->where('active', $activeInt)
+                    ->orWhere('isActive', $activeInt);
             });
         }
 
-        // Zone filter
+        // Zone filter - search in shippingAddress JSON column
         if (!empty($zoneId)) {
-            $query->where('zoneId', $zoneId);
+            $query->where(function($q) use ($zoneId) {
+                // Search in shippingAddress JSON for zoneId
+                $q->where('shippingAddress', 'like', "%\"zoneId\":\"$zoneId\"%");
+            });
         }
 
         // Search
@@ -177,6 +179,10 @@ class AppUserController extends Controller
 
         $items = $rows->map(function ($u) {
             $fullName = trim(($u->firstName ?? '') . ' ' . ($u->lastName ?? ''));
+
+            // Extract zoneId from shippingAddress JSON using helper method
+            $zoneId = \App\Http\Controllers\UserController::extractZoneFromShippingAddress($u->shippingAddress);
+
             return [
                 'id' => (string) ($u->firebase_id ?: $u->id),
                 'firstName' => $u->firstName,
@@ -184,7 +190,7 @@ class AppUserController extends Controller
                 'fullName' => $fullName,
                 'email' => (string) ($u->email ?? ''),
                 'phoneNumber' => (string) ($u->phoneNumber ?? ''),
-                'zoneId' => (string) ($u->zoneId ?? ''),
+                'zoneId' => (string) $zoneId,
                 'createdAt' => (string) ($u->createdAt ?? ''),
                 'active' => in_array((string) $u->active, ['1','true'], true) || (bool) ($u->isActive ?? 0),
                 'profilePictureURL' => $u->profilePictureURL,
@@ -220,7 +226,7 @@ class AppUserController extends Controller
         if (!$user) {
             return response()->json(['status' => false, 'message' => 'User not found'], 404);
         }
-        $user->active = $isActive ? 'true' : 'false';
+        $user->active = $isActive ? 1 : 0;
         $user->isActive = $isActive ? 1 : 0;
         $user->save();
         return response()->json(['status' => true]);

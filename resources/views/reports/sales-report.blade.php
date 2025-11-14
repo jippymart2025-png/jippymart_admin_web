@@ -141,10 +141,63 @@
         }
         // Initialize options
         loadOptions();
+        function loadScriptOnce(url){
+            return new Promise(function(resolve,reject){
+                if (document.querySelector('script[src="'+url+'"]')) {
+                    resolve();
+                    return;
+                }
+                const script=document.createElement('script');
+                script.src=url;
+                script.onload=()=>resolve();
+                script.onerror=reject;
+                document.head.appendChild(script);
+            });
+        }
+        async function exportAsPdf(orderData, headers){
+            if (!(window.jspdf && window.jspdf.jsPDF)) {
+                await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+            }
+            if (!(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API.autoTable)) {
+                await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js');
+            }
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l','pt');
+            doc.setFontSize(16);
+            doc.text('Sales Report', 40, 40);
+            const headerRow = headers.map(function(h){
+                return (typeof h === 'object' && h.alias) ? h.alias : h;
+            });
+            const bodyRows = orderData.map(function(row){
+                return headerRow.map(function(head){
+                    return row[head] !== undefined ? row[head] : '';
+                });
+            });
+            doc.autoTable({
+                startY: 60,
+                head: [headerRow],
+                body: bodyRows,
+                styles: { fontSize: 9, overflow: 'linebreak' },
+                headStyles: { fillColor: [243, 108, 33] },
+            });
+            doc.save('sales-report.pdf');
+        }
         async function generateReport(orderData, headers, fileFormat) {
-            if ((fileFormat == "pdf") ? document.title = "sales-report" : "") ;
+            const lowerFormat = String(fileFormat || '').toLowerCase();
+            if (lowerFormat === 'pdf') {
+                document.title = "sales-report";
+                await exportAsPdf(orderData, headers);
+                return;
+            }
+            if (lowerFormat !== 'csv' && lowerFormat !== 'xls' && lowerFormat !== 'xlsx') {
+                throw new Error('Unsupported export format: ' + fileFormat);
+            }
+            if (typeof objectExporter !== 'function') {
+                await loadScriptOnce("{{ asset('js/objectexporter.min.js') }}");
+            }
+            const normalizedType = (lowerFormat === 'csv') ? 'CSV' : 'XLS';
             objectExporter({
-                type: fileFormat,
+                type: normalizedType,
                 exportable: orderData,
                 headers: headers,
                 fileName: 'sales-report',
@@ -265,7 +318,7 @@
             var headerArray = ['restaurantorders ID', 'Restaurant Name', 'Driver Name', 'Driver Email', 'Driver Phone', 'User Name', 'User Email', 'User Phone', 'Date', 'Category', 'Payment Method', 'Total', 'Admin Commission'];
             var headers = [];
             $(".error_top").html("");
-            if (fileFormat == 'xls' || fileFormat == 'csv') {
+            if (fileFormat == 'xls' || fileFormat == 'csv' || fileFormat == "pdf") {
                 headers = headerArray;
                 var script = document.createElement("script");
                 script.setAttribute("src", "https://unpkg.com/object-exporter@3.2.1/dist/objectexporter.min.js");

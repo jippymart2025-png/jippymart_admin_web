@@ -75,10 +75,13 @@ class CuisineController extends Controller
         $pageRows = $filteredQuery->offset($start)->limit($length)->get();
         $filtered = ($search==='') ? $total : (clone $filteredQuery)->count();
 
-        $placeholder = asset('assets/images/placeholder-image.png');
+        // Get placeholder image from settings
+        $placeholderImage = $this->getPlaceholderImage();
+
         $data = [];
         foreach ($pageRows as $row) {
-            $imageHtml = '<img alt="" width="100%" style="width:70px;height:70px;" src="'.($row->photo ?: $placeholder).'" onerror="this.onerror=null;this.src=\''.$placeholder.'\'" alt="image">';
+            $imageUrl = $row->photo ?: $placeholderImage;
+            $imageHtml = '<img alt="" width="100%" style="width:70px;height:70px;" src="'.e($imageUrl).'" onerror="this.onerror=null;this.src=\''.$placeholderImage.'\'" alt="image">';
             $editUrl = route('cuisines.edit', $row->id);
             $titleHtml = $imageHtml.'<a href="'.$editUrl.'">'.e($row->title).'</a>';
             $publishHtml = $row->publish ? '<label class="switch"><input type="checkbox" checked data-id="'.$row->id.'" name="isSwitch" class="toggle-publish"><span class="slider round"></span></label>' : '<label class="switch"><input type="checkbox" data-id="'.$row->id.'" name="isSwitch" class="toggle-publish"><span class="slider round"></span></label>';
@@ -104,7 +107,35 @@ class CuisineController extends Controller
             'recordsTotal' => $total,
             'recordsFiltered' => $filtered,
             'data' => $data,
+            'stats' => [
+                'total' => $total,
+                'filtered' => $filtered
+            ]
         ]);
+    }
+
+    /**
+     * Get placeholder image from settings
+     */
+    private function getPlaceholderImage()
+    {
+        try {
+            $setting = DB::table('settings')
+                ->where('document_name', 'placeHolderImage')
+                ->first();
+
+            if ($setting && !empty($setting->fields)) {
+                $fields = is_string($setting->fields) ? json_decode($setting->fields, true) : $setting->fields;
+                if (isset($fields['image'])) {
+                    return $fields['image'];
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::error('Error fetching placeholder image: ' . $e->getMessage());
+        }
+
+        // Fallback to default placeholder
+        return asset('assets/images/placeholder-image.png');
     }
 
     public function store(Request $request)
@@ -117,8 +148,8 @@ class CuisineController extends Controller
         $id = Str::uuid()->toString();
         $photoUrl = null;
         if ($request->hasFile('photo')) {
-            $photoUrl = $request->file('photo')->store('public/uploads/cuisines');
-            $photoUrl = Storage::url($photoUrl);
+            $path = $request->file('photo')->store('public/uploads/cuisines');
+            $photoUrl = asset('storage/' . str_replace('public/', '', $path));
         }
 
         VendorCuisine::create([
@@ -130,6 +161,9 @@ class CuisineController extends Controller
             'publish' => $request->boolean('publish') ? 1 : 0,
             'show_in_homepage' => $request->boolean('show_in_homepage') ? 1 : 0,
         ]);
+
+        // Log activity
+        \Log::info('✅ Cuisine created:', ['id' => $id, 'title' => $request->input('title')]);
 
         return response()->json(['success' => true, 'id' => $id]);
     }
@@ -144,8 +178,8 @@ class CuisineController extends Controller
 
         $photoUrl = $cuisine->photo;
         if ($request->hasFile('photo')) {
-            $photoUrl = $request->file('photo')->store('public/uploads/cuisines');
-            $photoUrl = Storage::url($photoUrl);
+            $path = $request->file('photo')->store('public/uploads/cuisines');
+            $photoUrl = asset('storage/' . str_replace('public/', '', $path));
         }
 
         $cuisine->update([
@@ -157,15 +191,24 @@ class CuisineController extends Controller
             'show_in_homepage' => $request->boolean('show_in_homepage') ? 1 : 0,
         ]);
 
+        // Log activity
+        \Log::info('✅ Cuisine updated:', ['id' => $id, 'title' => $request->input('title')]);
+
         return response()->json(['success' => true]);
     }
 
     public function togglePublish(Request $request, $id)
     {
         $cuisine = VendorCuisine::findOrFail($id);
-        $cuisine->publish = $request->boolean('publish') ? 1 : 0;
+        $oldStatus = $cuisine->publish;
+        $newStatus = $request->boolean('publish') ? 1 : 0;
+        $cuisine->publish = $newStatus;
         $cuisine->save();
-        return response()->json(['success' => true]);
+
+        // Log activity
+        \Log::info('✅ Cuisine publish toggled:', ['id' => $id, 'title' => $cuisine->title, 'publish' => $newStatus]);
+
+        return response()->json(['success' => true, 'publish' => $newStatus]);
     }
 
     public function import(Request $request)
@@ -276,7 +319,13 @@ class CuisineController extends Controller
             if (!$c) {
                 return redirect()->back()->with('error', 'Cuisine not found.');
             }
+
+            $cuisineTitle = $c->title;
             $c->delete();
+
+            // Log activity
+            \Log::info('✅ Cuisine deleted:', ['id' => $id, 'title' => $cuisineTitle]);
+
             return redirect()->back()->with('success', 'Cuisine deleted successfully.');
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Error deleting cuisine: ' . $e->getMessage());

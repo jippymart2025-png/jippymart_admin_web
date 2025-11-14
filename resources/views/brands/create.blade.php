@@ -106,6 +106,7 @@
         $(".save-form-btn").click(function(){
             const name = $(".brand_name").val();
             const description = $("#brand_description").val();
+
             if(!name){
                 $(".error_top").show().html('<p>{{trans('lang.enter_brand_name_error')}}</p>');
                 window.scrollTo(0,0); return;
@@ -114,23 +115,43 @@
                 $(".error_top").show().html('<p>{{trans('lang.enter_brand_description_error')}}</p>');
                 window.scrollTo(0,0); return;
             }
+
             $(".error_top").hide();
+            console.log('💾 Creating brand:', { name: name, description: description.substring(0, 50) + '...' });
+
+            jQuery("#data-table_processing").show();
+
             let fd = new FormData();
             fd.append('name', name);
             fd.append('slug', $(".brand_slug").val());
             fd.append('description', description);
             fd.append('status', $(".brand_status").is(':checked') ? 1 : 0);
             const file = document.getElementById('brand_logo').files[0];
-            if(file){ fd.append('logo', file); }
+            if(file){
+                fd.append('logo', file);
+                console.log('📤 Including logo file:', file.name);
+            }
             fd.append('_token','{{ csrf_token() }}');
+
             $.ajax({
                 url: '{{ route('brands.store') }}',
                 method: 'POST',
                 data: fd,
                 processData: false,
                 contentType: false,
-                success: function(res){ window.location.href = '{{ route('brands') }}'; },
+                success: function(res){
+                    console.log('✅ Brand created successfully:', res);
+
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        logActivity('brands', 'created', 'Created brand: ' + name);
+                    }
+
+                    window.location.href = '{{ route('brands') }}';
+                },
                 error: function(xhr){
+                    console.error('❌ Create failed:', xhr);
+                    jQuery("#data-table_processing").hide();
                     const msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Error saving brand';
                     $(".error_top").show().html('<p>'+msg+'</p>');
                     window.scrollTo(0,0);

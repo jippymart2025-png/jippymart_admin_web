@@ -121,6 +121,8 @@ $(document).ready(function(){
         fd.append('show_in_homepage', show_in_homepage ? 1 : 0);
         review_attributes.forEach(function(v){ fd.append('review_attributes[]', v); });
         if($('#category_image')[0] && $('#category_image')[0].files[0]){ fd.append('photo', $('#category_image')[0].files[0]); }
+        console.log('💾 Updating category:', { id: id, title: title });
+
         $.ajax({
             url: '{{ url('/categories') }}' + '/' + id,
             method: 'POST',
@@ -128,12 +130,23 @@ $(document).ready(function(){
             data: fd,
             processData: false,
             contentType: false
-        }).done(function(){ window.location.href='{{ route('categories') }}'; })
-          .fail(function(xhr){
+        })
+        .done(function(response){
+            console.log('✅ Category updated successfully:', response);
+
+            // Log activity
+            if (typeof logActivity === 'function') {
+                logActivity('categories', 'updated', 'Updated category: ' + title);
+            }
+
+            window.location.href='{{ route('categories') }}';
+        })
+        .fail(function(xhr){
+            console.error('❌ Update failed:', xhr);
             var msg = 'Failed to update';
             if(xhr.responseJSON && xhr.responseJSON.message){ msg = xhr.responseJSON.message; }
             $(".error_top").show().html('<p>'+msg+'</p>');
-          });
+        });
     });
 });
 </script>

@@ -209,10 +209,16 @@
 
             try {
                 console.log('✅ Uploading vendor document via SQL API');
+                console.log('Front photo:', front_photo ? 'Present' : 'None');
+                console.log('Back photo:', back_photo ? 'Present' : 'None');
+                console.log('FrontSide required:', frontSide);
+                console.log('BackSide required:', backSide);
 
                 // Prepare data
                 var uploadData = {
-                    _token: '{{ csrf_token() }}'
+                    _token: '{{ csrf_token() }}',
+                    frontSide: frontSide ? 'true' : 'false',
+                    backSide: backSide ? 'true' : 'false'
                 };
 
                 // Handle front image
@@ -247,6 +253,8 @@
                     }
                 }
 
+                console.log('Upload data:', uploadData);
+
                 const response = await $.ajax({
                     url: '/api/vendors/document-upload/' + id + '/' + docId,
                     method: 'POST',
@@ -267,9 +275,19 @@
                 }
             } catch (error) {
                 console.error('❌ Error uploading document:', error);
+                console.error('Full error:', error);
+
                 $(".error_top").show();
                 $(".error_top").html("");
-                $(".error_top").append("<p>Error uploading document. Please try again.</p>");
+
+                var errorMsg = 'Error uploading document. Please try again.';
+                if (error.responseJSON && error.responseJSON.message) {
+                    errorMsg = error.responseJSON.message;
+                } else if (error.statusText) {
+                    errorMsg = 'Server error: ' + error.statusText;
+                }
+
+                $(".error_top").append("<p>" + errorMsg + "</p>");
                 window.scrollTo(0, 0);
                 jQuery("#data-table_processing").hide();
             }

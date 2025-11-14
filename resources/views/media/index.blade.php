@@ -204,13 +204,59 @@ $(document).ready(function () {
         processing: true,
         serverSide: true,
         responsive: true,
-        ajax: function(data, callback){
-            const params = { start: data.start, length: data.length, draw: data.draw, search: data.search.value };
-            $.get('{{ route('media.data') }}', params, function(json){
-                $('.media_count').text(json.recordsTotal || 0);
+        {{--ajax: function(data, callback){--}}
+        {{--    const params = { start: data.start, length: data.length, draw: data.draw, search: data.search.value };--}}
+        {{--    console.log('📡 Fetching media:', params);--}}
+
+        {{--    $.get('{{ route('media.data') }}', params, function(json){--}}
+        {{--        console.log('📥 Media response:', json);--}}
+
+        {{--        // Update count display--}}
+        {{--        if (json.stats && json.stats.total) {--}}
+        {{--            $('.media_count').text(json.stats.total);--}}
+        {{--            console.log('📊 Total media:', json.stats.total);--}}
+        {{--        } else {--}}
+        {{--            $('.media_count').text(json.recordsTotal || 0);--}}
+        {{--        }--}}
+
+        {{--        callback(json);--}}
+        {{--    })--}}
+        {{--    .fail(function(xhr){--}}
+        {{--        console.error('❌ Failed to load media:', xhr);--}}
+        {{--        alert('Failed to load ('+xhr.status+'): '+xhr.statusText);--}}
+        {{--    })--}}
+        {{--    .always(function(){ $('#data-table_processing').hide(); });--}}
+        {{--},--}}
+        ajax: function(data, callback) {
+            const params = {
+                start: data.start,
+                length: data.length,
+                draw: data.draw,
+                order: data.order,
+                search: { value: data.search.value || '' } // ✅ correct search structure
+            };
+
+            console.log('📡 Fetching media:', params);
+
+            $.get('{{ route('media.data') }}', params, function(json) {
+                console.log('📥 Media response:', json);
+
+                if (json.stats && json.stats.total) {
+                    $('.media_count').text(json.stats.total);
+                    console.log('📊 Total media:', json.stats.total);
+                } else {
+                    $('.media_count').text(json.recordsTotal || 0);
+                }
+
                 callback(json);
-            }).fail(function(xhr){ alert('Failed to load ('+xhr.status+'): '+xhr.statusText); })
-              .always(function(){ $('#data-table_processing').hide(); });
+            })
+                .fail(function(xhr) {
+                    console.error('❌ Failed to load media:', xhr);
+                    alert('Failed to load (' + xhr.status + '): ' + xhr.statusText);
+                })
+                .always(function() {
+                    $('#data-table_processing').hide();
+                });
         },
         order: [1, 'asc'],
         columnDefs: [
@@ -231,23 +277,28 @@ $(document).ready(function () {
                     {
                         extend: 'excelHtml5',
                         text: 'Export Excel',
-                        action: function (e, dt, button, config) {
-                            exportData(dt, 'excel', fieldConfig);
-                        }
-                    },
-                    {
-                        extend: 'pdfHtml5',
-                        text: 'Export PDF',
-                        action: function (e, dt, button, config) {
-                            exportData(dt, 'pdf', fieldConfig);
-                        }
+                        exportOptions: {
+                            columns: ':visible:not(:first-child):not(:last-child)'
+                        },
+                        title: 'Media List',
                     },
                     {
                         extend: 'csvHtml5',
                         text: 'Export CSV',
-                        action: function (e, dt, button, config) {
-                            exportData(dt, 'csv', fieldConfig);
-                        }
+                        exportOptions: {
+                            columns: ':visible:not(:first-child):not(:last-child)'
+                        },
+                        title: 'Media List',
+                    },
+                    {
+                        extend: 'pdfHtml5',
+                        text: 'Export PDF',
+                        exportOptions: {
+                            columns: ':visible:not(:first-child):not(:last-child)'
+                        },
+                        title: 'Media List',
+                        orientation: 'landscape',
+                        pageSize: 'A4'
                     }
                 ]
             }
@@ -284,12 +335,42 @@ $(document).ready(function () {
     $('#mediaTable tbody').on('click', '.delete-btn', function () {
         var id = $(this).data('id');
         var mediaName = $(this).closest('tr').find('a').text().trim() || 'Unknown';
+
+        console.log('🗑️ Delete media clicked:', { id: id, name: mediaName });
+
         if (!confirm('Are you sure you want to delete "' + mediaName + '"?')) return;
+
         jQuery('#data-table_processing').show();
-        $.post({ url: '{{ url('media') }}' + '/' + id + '/delete', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-            .done(function(){ table.ajax.reload(); })
-            .fail(function(xhr){ alert('Error deleting media: ' + xhr.statusText); })
-            .always(function(){ jQuery('#data-table_processing').hide(); });
+
+        $.post({
+            {{--url: '{{ url('media') }}' + '/' + id + '/delete',--}}
+            url: '{{ url('media/delete') }}' + '/' + id,
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+        })
+        .done(function(response){
+            console.log('✅ Media deleted successfully:', response);
+
+            // Log activity
+            if (typeof logActivity === 'function') {
+                logActivity('media', 'deleted', 'Deleted media: ' + mediaName);
+            }
+
+            table.ajax.reload();
+
+            if (typeof toastr !== 'undefined') {
+                toastr.success(response.message || 'Media deleted successfully');
+            }
+        })
+        .fail(function(xhr){
+            console.error('❌ Delete failed:', xhr);
+
+            var errorMsg = xhr.responseJSON && xhr.responseJSON.message
+                ? xhr.responseJSON.message
+                : 'Error deleting media: ' + xhr.statusText;
+
+            alert(errorMsg);
+        })
+        .always(function(){ jQuery('#data-table_processing').hide(); });
     });
 
     // Bulk delete
@@ -302,13 +383,39 @@ $(document).ready(function () {
         }
 
         if (!confirm("{{trans('lang.selected_delete_alert')}}")) return;
+
         jQuery('#data-table_processing').show();
         var ids = [];
         $('#mediaTable .is_open:checked').each(function () { ids.push($(this).attr('dataId')); });
-        $.post({ url: '{{ route('media.bulkDelete') }}', data: { ids: ids }, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-            .done(function(){ table.ajax.reload(); })
-            .fail(function(xhr){ alert('Error deleting selected media: ' + xhr.statusText); })
-            .always(function(){ jQuery('#data-table_processing').hide(); });
+
+        console.log('🗑️ Bulk delete media requested:', { count: selectedCount, ids: ids });
+
+        $.post({
+            url: '{{ route('media.bulkDelete') }}',
+            data: { ids: ids },
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+        })
+        .done(function(response){
+            console.log('✅ Bulk delete successful:', response);
+
+            // Log activity
+            if (typeof logActivity === 'function') {
+                logActivity('media', 'bulk_deleted', 'Bulk deleted ' + selectedCount + ' media items');
+            }
+
+            table.ajax.reload();
+
+            if (typeof toastr !== 'undefined') {
+                toastr.success(response.message || 'Media items deleted successfully');
+            } else {
+                alert(response.message || 'Media items deleted successfully');
+            }
+        })
+        .fail(function(xhr){
+            console.error('❌ Bulk delete failed:', xhr);
+            alert('Error deleting selected media: ' + xhr.statusText);
+        })
+        .always(function(){ jQuery('#data-table_processing').hide(); });
     });
 
     // Search functionality with debounce

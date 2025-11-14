@@ -147,17 +147,36 @@
     const bulkDeleteUrl = '{{ route("brands.bulkDelete") }}';
     const checkDeletePermission = @json(in_array('brands.delete', json_decode(@session('user_permissions'), true) ?? []));
     $(document).ready(function () {
+        console.log('📡 Initializing Brands DataTable...');
+
         const table = $('#brandsTable').DataTable({
-            pageLength: 10,
+            pageLength: 30,
+            lengthMenu: [[10, 25, 30, 50, 100, -1], [10, 25, 30, 50, 100, "All"]],
             processing: true,
             serverSide: true,
             responsive: true,
             ajax: {
                 url: dataUrl,
-                data: function(d){ d.withDelete = checkDeletePermission ? 1 : 0; },
+                data: function(d){
+                    d.withDelete = checkDeletePermission ? 1 : 0;
+                    console.log('📡 Fetching brands:', d);
+                },
                 dataSrc: function(json){
-                    $('.brand_count').text(json.recordsTotal);
+                    console.log('📥 Brands response:', json);
+
+                    // Update count display
+                    if (json.stats && json.stats.total) {
+                        $('.brand_count').text(json.stats.total);
+                        console.log('📊 Total brands:', json.stats.total);
+                    } else {
+                        $('.brand_count').text(json.recordsTotal || 0);
+                    }
+
                     return json.data;
+                },
+                error: function(xhr, error, code) {
+                    console.error('❌ DataTables error:', error, code);
+                    console.error('Response:', xhr.responseText);
                 }
             },
             order: (checkDeletePermission) ? [1, 'asc'] : [0,'asc'],
@@ -173,31 +192,114 @@
         // Toggle status
         $(document).on('click', "input[name='isSwitch']", function(){
             const id = $(this).data('id');
+            const $cb = $(this);
+            const brandName = $cb.closest('tr').find('a').first().text().trim();
+            const intended = $cb.is(':checked');
+            const action = intended ? 'activated' : 'deactivated';
             const url = toggleUrlTpl.replace(':id', id);
-            $.post(url, {_token: '{{ csrf_token() }}' }, function(){
-                // no-op
-            });
+
+            console.log('🔄 Toggle brand status:', { id: id, name: brandName, status: intended });
+
+            $cb.prop('disabled', true);
+            $.post(url, {_token: '{{ csrf_token() }}' })
+                .done(function(resp){
+                    console.log('✅ Brand status toggled:', resp);
+
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        logActivity('brands', action, action.charAt(0).toUpperCase() + action.slice(1) + ' brand: ' + brandName);
+                    }
+
+                    $cb.prop('checked', !!resp.status);
+                })
+                .fail(function(xhr){
+                    console.error('❌ Toggle failed:', xhr);
+                    $cb.prop('checked', !intended);
+                })
+                .always(function(){
+                    $cb.prop('disabled', false);
+                });
         });
     });
+
     $(document).on('click', '.brand-delete', function(){
         const id = $(this).data('id');
+        const brandName = $(this).closest('tr').find('a').first().text().trim() || 'Unknown';
+
+        console.log('🗑️ Delete brand clicked:', { id: id, name: brandName });
+
         if(!confirm("{{trans('lang.are_you_sure')}}")) return;
+
         const url = deleteUrlTpl.replace(':id', id);
-        $.post(url, {_token: '{{ csrf_token() }}'}, function(){
-            $('#brandsTable').DataTable().ajax.reload();
-        });
+        jQuery("#data-table_processing").show();
+
+        $.post(url, {_token: '{{ csrf_token() }}'})
+            .done(function(response){
+                console.log('✅ Brand deleted successfully:', response);
+
+                // Log activity
+                if (typeof logActivity === 'function') {
+                    logActivity('brands', 'deleted', 'Deleted brand: ' + brandName);
+                }
+
+                $('#brandsTable').DataTable().ajax.reload();
+
+                if (typeof toastr !== 'undefined') {
+                    toastr.success(response.message || 'Brand deleted successfully');
+                }
+            })
+            .fail(function(xhr){
+                console.error('❌ Delete failed:', xhr);
+                alert(xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Error deleting brand');
+            })
+            .always(function(){
+                jQuery("#data-table_processing").hide();
+            });
     });
     $("#is_active").click(function () {
         $("#brandsTable .is_open").prop('checked', $(this).prop('checked'));
     });
     $("#deleteAll").click(async function () {
         if ($('#brandsTable .is_open:checked').length) {
+            const selectedCount = $('#brandsTable .is_open:checked').length;
+
+            console.log('🗑️ Bulk delete brands requested:', { count: selectedCount });
+
             if (confirm("{{trans('lang.selected_delete_alert')}}")) {
+                jQuery("#data-table_processing").show();
+
                 const ids = [];
                 $('#brandsTable .is_open:checked').each(function(){ ids.push($(this).attr('dataId')); });
-                $.post(bulkDeleteUrl, { ids: ids, _token: '{{ csrf_token() }}' }, function(){
-                    $('#brandsTable').DataTable().ajax.reload();
-                });
+
+                $.post(bulkDeleteUrl, { ids: ids, _token: '{{ csrf_token() }}' })
+                    .done(function(response){
+                        console.log('✅ Bulk delete completed:', response);
+
+                        // Log activity
+                        if (typeof logActivity === 'function') {
+                            logActivity('brands', 'bulk_deleted', 'Bulk deleted ' + response.deleted + ' brands');
+                        }
+
+                        $('#brandsTable').DataTable().ajax.reload();
+
+                        let message = 'Deleted ' + response.deleted + ' brand(s)';
+                        if (response.blocked && response.blocked.length > 0) {
+                            message += '. ' + response.blocked.length + ' brand(s) are in use and cannot be deleted.';
+                        }
+
+                        if (typeof toastr !== 'undefined') {
+                            toastr.success(message);
+                        } else {
+                            alert(message);
+                        }
+                    })
+                    .fail(function(xhr){
+                        console.error('❌ Bulk delete failed:', xhr);
+                        alert('Error deleting brands');
+                    })
+                    .always(function(){
+                        jQuery("#data-table_processing").hide();
+                    });
             }
         } else {
             alert("{{trans('lang.select_delete_alert')}}");

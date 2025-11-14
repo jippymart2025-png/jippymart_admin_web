@@ -47,19 +47,21 @@
         $(document).ready(function () {
             console.log('Create attribute - SQL mode');
             jQuery("#data-table_processing").hide();
-            
+
             $(".save-form-btn").click(function () {
                 var title = $(".cat-name").val();
                 $(".error_top").hide();
                 $(".error_top").html("");
-                
+
                 if (title == '') {
                     $(".error_top").show();
                     $(".error_top").append("<p>{{trans('lang.enter_itemattribute_title_error')}}</p>");
                     window.scrollTo(0, 0);
                 } else {
                     jQuery("#data-table_processing").show();
-                    
+
+                    console.log('💾 Creating attribute:', { title: title });
+
                     $.ajax({
                         url: "{{ route('attributes.store') }}",
                         type: 'POST',
@@ -70,16 +72,17 @@
                             title: title
                         },
                         success: function(response) {
-                            if (response.success) {
-                                console.log('Attribute created successfully');
-                                window.location.href = '{{ route("attributes")}}';
-                            } else {
-                                alert('Failed to create attribute');
-                                jQuery("#data-table_processing").hide();
+                            console.log('✅ Attribute created successfully:', response);
+
+                            // Log activity
+                            if (typeof logActivity === 'function') {
+                                logActivity('attributes', 'created', 'Created attribute: ' + title);
                             }
+
+                            window.location.href = '{{ route("attributes")}}';
                         },
                         error: function(xhr) {
-                            console.error('Create error:', xhr.responseText);
+                            console.error('❌ Create error:', xhr);
                             jQuery("#data-table_processing").hide();
                             $(".error_top").show();
                             $(".error_top").html("");

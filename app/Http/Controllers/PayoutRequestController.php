@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AppUser;
+use App\Models\Currency;
+use App\Models\DriverPayout;
 use App\Models\Payout;
 use App\Models\Vendor;
-use App\Models\Currency;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -18,12 +21,103 @@ class PayoutRequestController extends Controller
 
     public function index($id = '')
     {
-        return view("payoutRequests.drivers.index")->with('id',$id);
+        $driver = null;
+
+        if (!empty($id)) {
+            $driver = AppUser::where('role', 'driver')
+                ->where(function ($query) use ($id) {
+                    $query->where('id', $id)
+                        ->orWhere('firebase_id', $id)
+                        ->orWhere('_id', $id);
+                })
+                ->select('id', 'firebase_id', '_id', 'firstName', 'lastName')
+                ->first();
+        }
+
+        return view('payoutRequests.drivers.index', [
+            'id' => $id,
+            'driver' => $driver,
+        ]);
     }
 
     public function restaurant($id = '')
     {
-        return view("payoutRequests.restaurants.index")->with('id',$id);
+        $vendor = null;
+
+        if (!empty($id)) {
+            $vendor = Vendor::select('id', 'title', 'author')->find($id);
+        }
+
+        return view('payoutRequests.restaurants.index', [
+            'id' => $id,
+            'vendor' => $vendor,
+        ]);
+    }
+
+    /**
+     * Helper to fetch active currency configuration.
+     */
+    protected function getCurrencyFormatting(): array
+    {
+        $currency = Currency::where('isActive', true)->first();
+
+        return [
+            'symbol' => $currency->symbol ?? '$',
+            'symbol_at_right' => (bool) ($currency->symbolAtRight ?? false),
+            'decimal_digits' => (int) ($currency->decimal_degits ?? 2),
+        ];
+    }
+
+    protected function formatAmount($amount, array $currency): string
+    {
+        $amount = is_numeric($amount) ? (float) $amount : 0.0;
+        $formatted = number_format($amount, $currency['decimal_digits'], '.', '');
+
+        return $currency['symbol_at_right']
+            ? $formatted . $currency['symbol']
+            : $currency['symbol'] . $formatted;
+    }
+
+    protected function formatPaidDate(?string $paidDate): string
+    {
+        if (empty($paidDate)) {
+            return '--';
+        }
+
+        try {
+            $clean = trim($paidDate, '"');
+            $date = Carbon::parse($clean);
+            return $date->format('D M d Y g:i:s A');
+        } catch (\Throwable $e) {
+            return $paidDate;
+        }
+    }
+
+    protected function buildStatusBadge(?string $status): string
+    {
+        $status = $status ?? '';
+
+        switch ($status) {
+            case 'Pending':
+            case 'In Process':
+                $class = 'order_placed';
+                break;
+            case 'Reject':
+            case 'Failed':
+                $class = 'order_rejected';
+                break;
+            case 'Success':
+                $class = 'order_completed';
+                break;
+            default:
+                $class = '';
+        }
+
+        if (empty($class)) {
+            return e($status);
+        }
+
+        return '<span class="' . $class . '"><span>' . e($status) . '</span></span>';
     }
 
     /**
@@ -32,101 +126,100 @@ class PayoutRequestController extends Controller
     public function getRestaurantPayoutRequestsData(Request $request)
     {
         try {
-            $start = $request->input('start', 0);
-            $length = $request->input('length', 10);
-            $searchValue = strtolower($request->input('search.value', ''));
-            $orderColumnIndex = $request->input('order.0.column', 0);
-            $orderDirection = $request->input('order.0.dir', 'desc');
+            $start = (int)$request->input('start', 0);
+            $length = (int)$request->input('length', 10);
+            $searchValue = trim(strtolower($request->input('search.value', '')));
+            $orderColumnIndex = (int)$request->input('order.0.column', 0);
+            $orderDirection = $request->input('order.0.dir', 'desc') === 'asc' ? 'asc' : 'desc';
             $vendorId = $request->input('vendor_id', '');
 
-            // Build base query for PENDING payouts only
-            $query = Payout::select('payouts.*')
-                ->where('paymentStatus', 'Pending');
+            $currency = $this->getCurrencyFormatting();
 
-            // Filter by vendor if provided
+            $query = Payout::query()
+                ->leftJoin('vendors', 'vendors.id', '=', 'payouts.vendorID')
+                ->select('payouts.*', 'vendors.title as vendor_title', 'vendors.author as vendor_author')
+                ->where('payouts.paymentStatus', 'Pending');
+
             if (!empty($vendorId)) {
-                $query->where('vendorID', $vendorId);
+                $query->where('payouts.vendorID', $vendorId);
             }
 
-            $orderableColumns = ['', 'vendorID', 'amount', 'paidDate', 'paymentStatus', 'withdrawMethod'];
-            $orderByField = $orderableColumns[$orderColumnIndex] ?? 'paidDate';
+            $orderableColumns = !empty($vendorId)
+                ? ['', 'amount', 'note', 'paidDate', 'paymentStatus', 'withdrawMethod', 'actions']
+                : ['', 'vendor', 'amount', 'note', 'paidDate', 'paymentStatus', 'withdrawMethod', 'actions'];
 
-            // Get all pending payouts
-            $payouts = $query->orderBy('paidDate', 'desc')->get();
+            $fieldMap = [
+                'vendor' => 'vendors.title',
+                'amount' => 'payouts.amount',
+                'note' => 'payouts.note',
+                'paidDate' => 'payouts.paidDate',
+                'paymentStatus' => 'payouts.paymentStatus',
+                'withdrawMethod' => 'payouts.withdrawMethod',
+            ];
 
-            $records = [];
-            $filteredRecords = [];
+            $requestedColumn = $orderableColumns[$orderColumnIndex] ?? 'paidDate';
+            $orderByField = $fieldMap[$requestedColumn] ?? 'payouts.paidDate';
+
+            if ($searchValue !== '') {
+                $query->where(function ($q) use ($searchValue, $vendorId) {
+                    $q->where('payouts.note', 'like', "%{$searchValue}%")
+                        ->orWhere('payouts.paymentStatus', 'like', "%{$searchValue}%")
+                        ->orWhere('payouts.withdrawMethod', 'like', "%{$searchValue}%")
+                        ->orWhere('payouts.amount', 'like', "%{$searchValue}%");
+
+                    if (empty($vendorId)) {
+                        $q->orWhere('vendors.title', 'like', "%{$searchValue}%");
+                    }
+                });
+            }
+
+            $totalRecords = (clone $query)->count();
+
+            $payouts = $query->orderBy($orderByField, $orderDirection)
+                ->skip($start)
+                ->take($length)
+                ->get();
+
+            $data = [];
 
             foreach ($payouts as $payout) {
-                // Get restaurant name
-                $vendor = Vendor::where('id', $payout->vendorID)->first();
-                $payout->restaurantName = $vendor ? $vendor->title : 'Unknown';
+                $checkbox = '<input type="checkbox" class="is_open" dataId="' . e($payout->id) . '">';
 
-                // Format date
-                if ($payout->paidDate) {
-                    try {
-                        $dateStr = trim($payout->paidDate, '"');
-                        $dateObj = new \DateTime($dateStr);
-                        $payout->formattedDate = $dateObj->format('D M d Y g:i:s A');
-                    } catch (\Exception $e) {
-                        $payout->formattedDate = $payout->paidDate;
+                $vendorCell = '';
+                if (empty($vendorId)) {
+                    if (!empty($payout->vendorID)) {
+                        $vendorRoute = route('restaurants.view', $payout->vendorID);
+                        $vendorCell = '<a href="' . $vendorRoute . '">' . e($payout->vendor_title ?? 'Unknown') . '</a>';
+                    } else {
+                        $vendorCell = e($payout->vendor_title ?? 'Unknown');
                     }
                 }
 
-                // Apply search filter
-                if ($searchValue) {
-                    if (
-                        (isset($payout->restaurantName) && stripos($payout->restaurantName, $searchValue) !== false) ||
-                        (isset($payout->amount) && stripos((string)$payout->amount, $searchValue) !== false) ||
-                        (isset($payout->formattedDate) && stripos($payout->formattedDate, $searchValue) !== false) ||
-                        (isset($payout->note) && stripos($payout->note, $searchValue) !== false) ||
-                        (isset($payout->withdrawMethod) && stripos($payout->withdrawMethod, $searchValue) !== false)
-                    ) {
-                        $filteredRecords[] = $payout;
-                    }
-                } else {
-                    $filteredRecords[] = $payout;
-                }
+                $amount = $this->formatAmount($payout->amount, $currency);
+                $note = e($payout->note ?? '');
+                $paidDate = $this->formatPaidDate($payout->paidDate);
+                $status = $this->buildStatusBadge($payout->paymentStatus);
+                $withdrawMethod = $payout->withdrawMethod === 'bank'
+                    ? 'Bank Transfer'
+                    : ucfirst($payout->withdrawMethod ?? '');
+
+                $data[] = [
+                    'checkbox' => $checkbox,
+                    'vendor' => $vendorCell,
+                    'amount' => $amount,
+                    'note' => $note,
+                    'paidDate' => $paidDate,
+                    'status' => $status,
+                    'withdrawMethod' => e($withdrawMethod),
+                    'actions' => '-',
+                ];
             }
-
-            // Sort filtered records
-            usort($filteredRecords, function($a, $b) use ($orderByField, $orderDirection) {
-                $aValue = $a->$orderByField ?? '';
-                $bValue = $b->$orderByField ?? '';
-
-                if ($orderByField === 'amount') {
-                    $aValue = is_numeric($aValue) ? floatval($aValue) : 0;
-                    $bValue = is_numeric($bValue) ? floatval($bValue) : 0;
-                } elseif ($orderByField === 'paidDate') {
-                    try {
-                        $aValue = $a->paidDate ? strtotime(trim($a->paidDate, '"')) : 0;
-                        $bValue = $b->paidDate ? strtotime(trim($b->paidDate, '"')) : 0;
-                    } catch (\Exception $e) {
-                        $aValue = 0;
-                        $bValue = 0;
-                    }
-                } else {
-                    $aValue = strtolower($aValue);
-                    $bValue = strtolower($bValue);
-                }
-
-                if ($orderDirection === 'asc') {
-                    return ($aValue > $bValue) ? 1 : -1;
-                } else {
-                    return ($aValue < $bValue) ? 1 : -1;
-                }
-            });
-
-            $totalRecords = count($filteredRecords);
-
-            // Get paginated records
-            $paginatedRecords = array_slice($filteredRecords, $start, $length);
 
             return response()->json([
                 'draw' => intval($request->input('draw')),
                 'recordsTotal' => $totalRecords,
                 'recordsFiltered' => $totalRecords,
-                'data' => $paginatedRecords
+                'data' => $data,
             ]);
 
         } catch (\Exception $e) {
@@ -140,4 +233,125 @@ class PayoutRequestController extends Controller
         }
     }
 
+    /**
+     * Get driver payout requests data (Pending status)
+     */
+    public function getDriverPayoutRequestsData(Request $request)
+    {
+        try {
+            $start = (int) $request->input('start', 0);
+            $length = (int) $request->input('length', 10);
+            $searchValue = trim(strtolower($request->input('search.value', '')));
+            $orderColumnIndex = (int) $request->input('order.0.column', 0);
+            $orderDirection = $request->input('order.0.dir', 'desc') === 'asc' ? 'asc' : 'desc';
+            $driverId = $request->input('driver_id', '');
+
+            $currency = $this->getCurrencyFormatting();
+
+            $query = DriverPayout::query()
+                ->leftJoin('users', function ($join) {
+                    $join->on('driver_payouts.driverID', '=', 'users.id')
+                        ->orOn('driver_payouts.driverID', '=', 'users.firebase_id')
+                        ->orOn('driver_payouts.driverID', '=', 'users._id');
+                })
+                ->select('driver_payouts.*', 'users.firstName as driver_first_name', 'users.lastName as driver_last_name')
+                ->where('driver_payouts.paymentStatus', 'Pending');
+
+            if (!empty($driverId)) {
+                $query->where(function ($q) use ($driverId) {
+                    $q->where('driver_payouts.driverID', $driverId)
+                        ->orWhere('users.id', $driverId)
+                        ->orWhere('users.firebase_id', $driverId)
+                        ->orWhere('users._id', $driverId);
+                });
+            }
+
+            $orderableColumns = !empty($driverId)
+                ? ['', 'amount', 'note', 'paidDate', 'paymentStatus', 'withdrawMethod', 'actions']
+                : ['', 'driver', 'amount', 'note', 'paidDate', 'paymentStatus', 'withdrawMethod', 'actions'];
+
+            $fieldMap = [
+                'driver' => 'users.firstName',
+                'amount' => 'driver_payouts.amount',
+                'note' => 'driver_payouts.note',
+                'paidDate' => 'driver_payouts.paidDate',
+                'paymentStatus' => 'driver_payouts.paymentStatus',
+                'withdrawMethod' => 'driver_payouts.withdrawMethod',
+            ];
+
+            $requestedColumn = $orderableColumns[$orderColumnIndex] ?? 'paidDate';
+            $orderByField = $fieldMap[$requestedColumn] ?? 'driver_payouts.paidDate';
+
+            if ($searchValue !== '') {
+                $query->where(function ($q) use ($searchValue, $driverId) {
+                    $q->where('driver_payouts.note', 'like', "%{$searchValue}%")
+                      ->orWhere('driver_payouts.paymentStatus', 'like', "%{$searchValue}%")
+                      ->orWhere('driver_payouts.withdrawMethod', 'like', "%{$searchValue}%")
+                      ->orWhere('driver_payouts.amount', 'like', "%{$searchValue}%");
+
+                    if (empty($driverId)) {
+                        $q->orWhere(DB::raw("CONCAT(IFNULL(users.firstName,''),' ',IFNULL(users.lastName,''))"), 'like', "%{$searchValue}%");
+                    }
+                });
+            }
+
+            $totalRecords = (clone $query)->count();
+
+            $payouts = $query->orderBy($orderByField, $orderDirection)
+                ->skip($start)
+                ->take($length)
+                ->get();
+
+            $data = [];
+
+            foreach ($payouts as $payout) {
+                $checkbox = '<input type="checkbox" class="is_open" dataId="' . e($payout->id) . '">';
+
+                $driverName = trim(($payout->driver_first_name ?? '') . ' ' . ($payout->driver_last_name ?? ''));
+                if (empty($driverName)) {
+                    $driverName = 'Unknown';
+                }
+
+                $driverCell = $driverName;
+                if (empty($driverId) && !empty($payout->driverID)) {
+                    $driverRoute = route('drivers.view', $payout->driverID);
+                    $driverCell = '<a href="' . $driverRoute . '">' . e($driverName) . '</a>';
+                }
+
+                $amount = $this->formatAmount($payout->amount, $currency);
+                $note = e($payout->note ?? '');
+                $paidDate = $this->formatPaidDate($payout->paidDate);
+                $status = $this->buildStatusBadge($payout->paymentStatus);
+                $withdrawMethod = $payout->withdrawMethod === 'bank'
+                    ? 'Bank Transfer'
+                    : ucfirst($payout->withdrawMethod ?? '');
+
+                $data[] = [
+                    'checkbox' => $checkbox,
+                    'driver' => $driverCell,
+                    'amount' => $amount,
+                    'note' => $note,
+                    'paidDate' => $paidDate,
+                    'status' => $status,
+                    'withdrawMethod' => e($withdrawMethod),
+                    'actions' => '-',
+                ];
+            }
+
+            return response()->json([
+                'draw' => intval($request->input('draw')),
+                'recordsTotal' => $totalRecords,
+                'recordsFiltered' => $totalRecords,
+                'data' => $data,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'draw' => intval($request->input('draw', 0)),
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
+                'data' => [],
+                'error' => 'Error fetching driver payout requests: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 }

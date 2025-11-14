@@ -42,34 +42,38 @@
 @section('scripts')
     <script>
         var id = "<?php echo $id;?>";
-        
+
         $(document).ready(function () {
             console.log('Edit attribute - SQL mode, ID:', id);
             jQuery("#data-table_processing").show();
-            
+
             // Load attribute data from SQL
+            console.log('🔄 Loading attribute data for ID:', id);
+
             $.get("{{ route('attributes.show.json', ':id') }}".replace(':id', id), function(attribute) {
-                console.log('Attribute loaded:', attribute);
+                console.log('✅ Attribute loaded:', attribute);
                 $(".attribute-name").val(attribute.title);
                 jQuery("#data-table_processing").hide();
             }).fail(function(xhr) {
-                console.error('Failed to load attribute:', xhr.responseText);
+                console.error('❌ Failed to load attribute:', xhr);
                 jQuery("#data-table_processing").hide();
-                alert('Failed to load attribute data');
+                $(".error_top").show().html('<p>Failed to load attribute data</p>');
             });
-            
+
             $(".edit-form-btn").click(function () {
                 var title = $(".attribute-name").val();
                 $(".error_top").hide();
                 $(".error_top").html("");
-                
+
                 if (title == '') {
                     $(".error_top").show();
                     $(".error_top").append("<p>{{trans('lang.enter_itemattribute_title_error')}}</p>");
                     window.scrollTo(0, 0);
                 } else {
                     jQuery("#data-table_processing").show();
-                    
+
+                    console.log('💾 Updating attribute:', { id: id, title: title });
+
                     $.ajax({
                         url: "{{ route('attributes.update', ':id') }}".replace(':id', id),
                         type: 'POST',
@@ -80,16 +84,17 @@
                             title: title
                         },
                         success: function(response) {
-                            if (response.success) {
-                                console.log('Attribute updated successfully');
-                                window.location.href = '{{ route("attributes")}}';
-                            } else {
-                                alert('Failed to update attribute');
-                                jQuery("#data-table_processing").hide();
+                            console.log('✅ Attribute updated successfully:', response);
+
+                            // Log activity
+                            if (typeof logActivity === 'function') {
+                                logActivity('attributes', 'updated', 'Updated attribute: ' + title);
                             }
+
+                            window.location.href = '{{ route("attributes")}}';
                         },
                         error: function(xhr) {
-                            console.error('Update error:', xhr.responseText);
+                            console.error('❌ Update error:', xhr);
                             jQuery("#data-table_processing").hide();
                             $(".error_top").show();
                             $(".error_top").html("");

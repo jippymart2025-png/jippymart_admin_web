@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
 
 class ReportController extends Controller
 {
@@ -104,11 +105,31 @@ class ReportController extends Controller
         $start = $request->input('start_date');
         $end = $request->input('end_date');
 
+        $dateExpr = "CASE
+            WHEN o.createdAt REGEXP '^[0-9]+$' THEN FROM_UNIXTIME(CASE WHEN LENGTH(o.createdAt)>10 THEN o.createdAt/1000 ELSE o.createdAt END)
+            WHEN o.createdAt LIKE '\"%\"' THEN STR_TO_DATE(REPLACE(REPLACE(REPLACE(o.createdAt,'\"',''),'Z',''), 'T',' '), '%Y-%m-%d %H:%i:%s.%f')
+            WHEN o.createdAt LIKE '%T%' THEN STR_TO_DATE(REPLACE(REPLACE(o.createdAt,'Z',''),'T',' '), '%Y-%m-%d %H:%i:%s.%f')
+            WHEN STR_TO_DATE(o.createdAt, '%Y-%m-%d %H:%i:%s') IS NOT NULL THEN STR_TO_DATE(o.createdAt, '%Y-%m-%d %H:%i:%s')
+            ELSE NULL END";
+
         $q = DB::table('restaurant_orders as o')
             ->leftJoin('vendors as v','v.id','=','o.vendorID')
             ->leftJoin('users as d','d.id','=','o.driverID')
             ->leftJoin('users as u','u.id','=','o.authorID')
-            ->select('o.*','v.title as vendor_title','v.categoryTitle as vendor_categoryTitle','d.firstName as d_first','d.lastName as d_last','d.email as d_email','d.phoneNumber as d_phone','u.firstName as u_first','u.lastName as u_last','u.email as u_email','u.phoneNumber as u_phone');
+            ->select(
+                'o.*',
+                'v.title as vendor_title',
+                'v.categoryTitle as vendor_categoryTitle',
+                'd.firstName as d_first',
+                'd.lastName as d_last',
+                'd.email as d_email',
+                'd.phoneNumber as d_phone',
+                'u.firstName as u_first',
+                'u.lastName as u_last',
+                'u.email as u_email',
+                'u.phoneNumber as u_phone'
+            )
+            ->addSelect(DB::raw("$dateExpr as parsed_created_at"));
 
         // Include common variants of completed statuses
         $completedStatuses = [
@@ -131,14 +152,10 @@ class ReportController extends Controller
         if ($start && $end) {
             // Robust date filtering: handle datetime strings and unix timestamps (ms or s)
             $start = (string)$start; $end = (string)$end;
-            $dateExpr = "CASE
-                WHEN o.createdAt REGEXP '^[0-9]+$' THEN FROM_UNIXTIME(CASE WHEN LENGTH(o.createdAt)>10 THEN o.createdAt/1000 ELSE o.createdAt END)
-                WHEN STR_TO_DATE(o.createdAt, '%Y-%m-%d %H:%i:%s') IS NOT NULL THEN STR_TO_DATE(o.createdAt, '%Y-%m-%d %H:%i:%s')
-                ELSE NULL END";
-            $q->whereBetween(DB::raw($dateExpr), [$start, $end]);
+            $q->whereBetween(DB::raw("($dateExpr)"), [$start, $end]);
         }
 
-        $rows = $q->orderBy('o.createdAt','desc')->limit(5000)->get();
+        $rows = $q->orderBy(DB::raw("($dateExpr)"),'desc')->limit(5000)->get();
 
         try {
             $currency = DB::table('currencies')->where('isActive',1)
@@ -152,22 +169,51 @@ class ReportController extends Controller
         }
         if (!$currency) { $currency = (object)['symbol'=>'₹','symbolAtRight'=>0,'decimal_degits'=>2]; }
 
+        $normalizeNumeric = function ($value) {
+            if (is_null($value)) {
+                return 0.0;
+            }
+            if (is_numeric($value)) {
+                return (float) $value;
+            }
+            if (is_string($value)) {
+                $trimmed = trim($value, "\"' ");
+                if ($trimmed === '') {
+                    return 0.0;
+                }
+                if (is_numeric($trimmed)) {
+                    return (float) $trimmed;
+                }
+                $decoded = json_decode($value, true);
+                if (is_numeric($decoded)) {
+                    return (float) $decoded;
+                }
+            }
+            return 0.0;
+        };
+
         $out = [];
         foreach ($rows as $r) {
             $driverName = trim(($r->d_first ?? '').' '.($r->d_last ?? ''));
             $userName = trim(($r->u_first ?? '').' '.($r->u_last ?? ''));
-            $dateTxt = (string) $r->createdAt;
+            $rawDate = $r->parsed_created_at ?? $r->createdAt ?? '';
+            $dateTxt = '';
+            if (!empty($rawDate)) {
+                $cleanDate = is_string($rawDate) ? trim($rawDate, "\"") : $rawDate;
+                try {
+                    $dateObj = Carbon::parse($cleanDate);
+                    $dateTxt = $dateObj->format('M d, Y h:i A');
+                } catch (\Throwable $e) {
+                    $dateTxt = (string) $cleanDate;
+                }
+            }
             // category title: join array -> string
             $catTitles = json_decode($r->vendor_categoryTitle ?? '[]', true) ?: [];
             $categoryTxt = is_array($catTitles) ? implode(', ', $catTitles) : (string) ($r->vendor_categoryTitle ?? '');
 
             // Total: use ToPay if exists, else 0 (heavy calc skipped)
-            $total = 0;
-            if (isset($r->ToPay) && is_numeric($r->ToPay)) { $total = (float)$r->ToPay; }
-            $adminCommission = 0;
-            if (isset($r->adminCommission) && is_numeric($r->adminCommission)) {
-                $adminCommission = (float)$r->adminCommission;
-            }
+            $total = $normalizeNumeric($r->ToPay ?? 0);
+            $adminCommission = $normalizeNumeric($r->adminCommission ?? 0);
             // currency formatting moved to frontend if needed; we keep raw numbers here
             $out[] = [
                 'order_id' => $r->id,

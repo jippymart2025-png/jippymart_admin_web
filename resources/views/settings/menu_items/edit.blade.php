@@ -111,7 +111,7 @@
 <script>
     var id = "<?php echo $id; ?>";
     var currentData = null;
-    
+
     function toggleRedirectUI(){
         var redirect_type = $(".redirect_type:checked").val();
         if (redirect_type == "store") {
@@ -130,7 +130,7 @@
     function loadZones() {
         console.log('✅ Loading zones from SQL');
         $.ajax({
-            url: '{{ url('/zone/data') }}',
+            url: '{{ route("menu-items.zones") }}',
             method: 'GET',
             success: function(response) {
                 if (response.success && response.data) {
@@ -139,7 +139,7 @@
                     response.data.forEach(function(zone) {
                         $('#zoneId').append('<option value="' + zone.id + '">' + zone.name + '</option>');
                     });
-                    
+
                     // Set selected zone if editing
                     if (currentData && currentData.zoneId) {
                         $('#zoneId').val(currentData.zoneId);
@@ -147,7 +147,8 @@
                 }
             },
             error: function(xhr) {
-                console.error('Error loading zones:', xhr);
+                console.error('❌ Error loading zones:', xhr);
+                alert('Failed to load zones. Please refresh the page.');
             }
         });
     }
@@ -156,9 +157,9 @@
     function loadStores() {
         console.log('✅ Loading stores from SQL');
         var zoneId = $('#zoneId').val();
-        
+
         $.ajax({
-            url: '{{ route('menu-items.stores') }}',
+            url: '{{ route('menu-items.store') }}',
             method: 'GET',
             data: { zoneId: zoneId },
             success: function(response) {
@@ -168,7 +169,7 @@
                     response.data.forEach(function(store) {
                         $('#storeId').append('<option value="' + store.id + '">' + store.title + '</option>');
                     });
-                    
+
                     // Set selected store if editing
                     if (currentData && currentData.redirect_type === 'store' && currentData.redirect_id) {
                         setTimeout(function() {
@@ -187,7 +188,7 @@
     function loadProducts() {
         console.log('✅ Loading products from SQL');
         var storeId = $('#storeId').val();
-        
+
         $.ajax({
             url: '{{ route('menu-items.products') }}',
             method: 'GET',
@@ -199,7 +200,7 @@
                     response.data.forEach(function(product) {
                         $('#productId').append('<option value="' + product.id + '">' + product.name + '</option>');
                     });
-                    
+
                     // Set selected product if editing
                     if (currentData && currentData.redirect_type === 'product' && currentData.redirect_id) {
                         setTimeout(function() {
@@ -213,7 +214,7 @@
             }
         });
     }
-    
+
     // Zone change handler - reload stores
     $('#zoneId').on('change', function() {
         if ($("input[name=redirect_type][value=store]").is(':checked')) {
@@ -230,29 +231,29 @@
 
     $(document).ready(function(){
         console.log('✅ Initializing Menu Items Edit page');
-        
+
         // Load zones first
         loadZones();
-        
+
         // Load existing record
         $.get('{{ route('menu-items.json', ['id'=>':id']) }}'.replace(':id', id), function(data){
             console.log('✅ Menu item data loaded:', data);
             currentData = data;
-            
+
             $(".title").val(data.title || '');
             $("#position").val(data.position || 'top');
             $(".set_order").val(data.set_order || 0);
             $(".extlink").val(data.redirect_id || '');
-            
+
             // Set zone after zones are loaded
             setTimeout(function() {
                 if (data.zoneId) { $("#zoneId").val(data.zoneId); }
             }, 500);
-            
+
             if (data.is_publish) { $("#is_publish").prop("checked", true); }
             if (data.photo) { $(".user_image").append('<img class="rounded" style="width:50px" src="' + data.photo + '" alt="image">'); }
-            if (data.redirect_type) { 
-                $("input[name=redirect_type][value=" + data.redirect_type + "]").prop('checked', true); 
+            if (data.redirect_type) {
+                $("input[name=redirect_type][value=" + data.redirect_type + "]").prop('checked', true);
                 toggleRedirectUI();
             }
         });
@@ -276,9 +277,32 @@
             fd.append('redirect_id', redirect_id);
             var fileInput = $("input[type='file']")[0];
             if (fileInput && fileInput.files && fileInput.files[0]) { fd.append('photo', fileInput.files[0]); }
-            $.ajax({ url: '{{ route('menu-items.update', ['id'=>':id']) }}'.replace(':id', id), method: 'POST', data: fd, processData: false, contentType: false, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-                .done(function(){ window.location.href = '{{ route('setting.banners') }}'; })
-                .fail(function(xhr){ $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>'); window.scrollTo(0,0); });
+
+            jQuery("#data-table_processing").show();
+
+            $.ajax({
+                url: '{{ route('menu-items.update', ['id'=>':id']) }}'.replace(':id', id),
+                method: 'POST',
+                data: fd,
+                processData: false,
+                contentType: false,
+                headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+            })
+            .done(function(response){
+                console.log('✅ Menu item updated:', response);
+
+                // Log activity
+                if (typeof logActivity === 'function') {
+                    logActivity('menu_items', 'updated', 'Updated menu item: ' + title);
+                }
+
+                window.location.href = '{{ route('setting.banners') }}';
+            })
+            .fail(function(xhr){
+                jQuery("#data-table_processing").hide();
+                $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>');
+                window.scrollTo(0,0);
+            });
         });
     });
 </script>

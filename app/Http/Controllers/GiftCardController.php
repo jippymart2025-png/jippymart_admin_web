@@ -30,6 +30,31 @@ class GiftCardController extends Controller
         return view('gift_card.save')->with('id', $id);
     }
 
+    // Get placeholder image from settings
+    private function getPlaceholderImage()
+    {
+        try {
+            $placeholder = DB::table('settings')
+                ->where('document_name', 'placeholder_image')
+                ->value('image');
+
+            if ($placeholder) {
+                // Check if it's already a full URL
+                if (strpos($placeholder, 'http') === 0) {
+                    return $placeholder;
+                }
+                // Otherwise, treat it as a storage path
+                return asset('storage/' . ltrim($placeholder, '/'));
+            }
+
+            // Fallback to default placeholder
+            return asset('images/placeholder.png');
+        } catch (\Exception $e) {
+            \Log::error('Error getting placeholder image:', ['error' => $e->getMessage()]);
+            return asset('images/placeholder.png');
+        }
+    }
+
     // DataTables
     public function data(Request $request)
     {
@@ -38,22 +63,37 @@ class GiftCardController extends Controller
         $draw = (int) $request->input('draw', 1);
         $search = strtolower((string) data_get($request->input('search'), 'value', ''));
 
+        // Base query for total
+        $baseQ = DB::table('gift_cards');
+        $totalRecords = $baseQ->count();
+
+        // Filtered query
         $q = DB::table('gift_cards as g');
         if ($search !== '') {
             $q->where(function($qq) use ($search){
                 $qq->where('g.title','like','%'.$search.'%')
+                   ->orWhere('g.message','like','%'.$search.'%')
                    ->orWhere('g.expiryDay','like','%'.$search.'%');
             });
         }
-        $total = (clone $q)->count();
+
+        $filteredRecords = (clone $q)->count();
         $rows = $q->orderBy('g.title','asc')->offset($start)->limit($length)->get();
 
         $canDelete = in_array('gift-card.delete', json_decode(@session('user_permissions'), true) ?: []);
-        $placeholder = asset('assets/images/placeholder-image.png');
+        $placeholder = $this->getPlaceholderImage();
+
         $data = [];
         foreach ($rows as $r) {
             $editUrl = route('gift-card.edit', $r->id);
+
+            // Use placeholder if no image
             $img = $r->image ?: $placeholder;
+            if ($r->image && strpos($r->image, 'http') !== 0 && strpos($r->image, 'storage/') !== 0) {
+                // If it's a relative path, convert it
+                $img = asset('storage/' . ltrim($r->image, '/'));
+            }
+
             $imgHtml = '<img onerror="this.onerror=null;this.src=\''.$placeholder.'\'" class="rounded" width="100%" style="width:70px;height:70px;" src="'.$img.'" alt="image">';
             $titleHtml = $imgHtml.'<a href="'.$editUrl.'">'.e($r->title ?: '').'</a>';
             $expiry = e($r->expiryDay ?: 0).' Days';
@@ -71,7 +111,17 @@ class GiftCardController extends Controller
                 $data[] = [ $titleHtml, $expiry, $toggle, $actionsHtml ];
             }
         }
-        return response()->json(['draw'=>$draw,'recordsTotal'=>$total,'recordsFiltered'=>$total,'data'=>$data]);
+
+        return response()->json([
+            'draw' => $draw,
+            'recordsTotal' => $totalRecords,
+            'recordsFiltered' => $filteredRecords,
+            'data' => $data,
+            'stats' => [
+                'total' => $totalRecords,
+                'filtered' => $filteredRecords
+            ]
+        ]);
     }
 
     public function json($id)
@@ -92,7 +142,8 @@ class GiftCardController extends Controller
         $id = (string) Str::uuid();
         $imageUrl = null;
         if ($request->hasFile('image')) {
-            $imageUrl = Storage::url($request->file('image')->store('public/uploads/gift_cards'));
+            $path = $request->file('image')->store('uploads/gift_cards', 'public');
+            $imageUrl = $path;
         }
         GiftCard::create([
             'id'=>$id,
@@ -103,6 +154,10 @@ class GiftCardController extends Controller
             'image'=>$imageUrl,
             'createdAt'=>now()->format('Y-m-d H:i:s'),
         ]);
+
+        // Log activity
+        \Log::info('✅ Gift card created:', ['id' => $id, 'title' => $request->input('title')]);
+
         return response()->json(['success'=>true,'id'=>$id]);
     }
 
@@ -117,7 +172,8 @@ class GiftCardController extends Controller
         ]);
         $imageUrl = $g->image;
         if ($request->hasFile('image')) {
-            $imageUrl = Storage::url($request->file('image')->store('public/uploads/gift_cards'));
+            $path = $request->file('image')->store('uploads/gift_cards', 'public');
+            $imageUrl = $path;
         }
         $g->update([
             'title'=>$request->input('title'),
@@ -126,31 +182,55 @@ class GiftCardController extends Controller
             'isEnable'=>$request->boolean('isEnable',$g->isEnable)?1:0,
             'image'=>$imageUrl,
         ]);
+
+        // Log activity
+        \Log::info('✅ Gift card updated:', ['id' => $id, 'title' => $request->input('title')]);
+
         return response()->json(['success'=>true]);
     }
 
     public function toggle($id, Request $request)
     {
         $g = GiftCard::findOrFail($id);
-        $g->isEnable = $request->boolean('isEnable') ? 1 : 0;
+        $newStatus = $request->boolean('isEnable') ? 1 : 0;
+        $g->isEnable = $newStatus;
         $g->save();
+
+        // Log activity
+        $action = $newStatus ? 'enabled' : 'disabled';
+        \Log::info("✅ Gift card $action:", ['id' => $id, 'title' => $g->title, 'status' => $newStatus]);
+
         return response()->json(['success'=>true,'id'=>$g->id,'isEnable'=>(bool)$g->isEnable]);
     }
 
     public function destroy($id)
     {
         $g = GiftCard::find($id);
-        if(!$g) return response()->json(['success'=>false],404);
+        if(!$g) {
+            \Log::error('❌ Gift card not found for deletion:', ['id' => $id]);
+            return response()->json(['success'=>false, 'message'=>'Gift card not found'],404);
+        }
+
+        $title = $g->title;
         $g->delete();
-        return response()->json(['success'=>true]);
+
+        // Log activity
+        \Log::info('✅ Gift card deleted:', ['id' => $id, 'title' => $title]);
+
+        return response()->json(['success'=>true, 'message'=>'Gift card deleted successfully']);
     }
 
     public function bulkDelete(Request $request)
     {
         $ids = (array) $request->input('ids', []);
         if (empty($ids)) return response()->json(['success'=>false,'message'=>'No ids'],400);
-        GiftCard::whereIn('id',$ids)->delete();
-        return response()->json(['success'=>true]);
+
+        $deleted = GiftCard::whereIn('id',$ids)->delete();
+
+        // Log activity
+        \Log::info('✅ Gift cards bulk deleted:', ['count' => $deleted, 'ids' => $ids]);
+
+        return response()->json(['success'=>true, 'deleted'=>$deleted]);
     }
 
 }

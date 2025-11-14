@@ -17,6 +17,7 @@ class Mealtime extends Model
         'label',
         'from',
         'to',
+        'publish',
     ];
 }
 

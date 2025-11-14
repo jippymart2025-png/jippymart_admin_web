@@ -42,34 +42,38 @@
 @section('scripts')
 <script>
     var id = "<?php echo $id;?>";
-    
+
     $(document).ready(function () {
         console.log('Edit review attribute - SQL mode, ID:', id);
         jQuery("#data-table_processing").show();
-        
+
         // Load review attribute data from SQL
+        console.log('🔄 Loading review attribute data for ID:', id);
+
         $.get("{{ route('reviewattributes.show.json', ':id') }}".replace(':id', id), function(reviewattribute) {
-            console.log('Review attribute loaded:', reviewattribute);
+            console.log('✅ Review attribute loaded:', reviewattribute);
             $(".reviewattribute-name").val(reviewattribute.title);
             jQuery("#data-table_processing").hide();
         }).fail(function(xhr) {
-            console.error('Failed to load review attribute:', xhr.responseText);
+            console.error('❌ Failed to load review attribute:', xhr);
             jQuery("#data-table_processing").hide();
-            alert('Failed to load review attribute data');
+            $(".error_top").show().html('<p>Failed to load review attribute data</p>');
         });
-        
+
         $(".edit-form-btn").click(function () {
             var title = $(".reviewattribute-name").val();
             $(".error_top").hide();
             $(".error_top").html("");
-            
+
             if (title == '') {
                 $(".error_top").show();
                 $(".error_top").append("<p>{{trans('lang.enter_reviewattribute_title_error')}}</p>");
                 window.scrollTo(0, 0);
             } else {
                 jQuery("#data-table_processing").show();
-                
+
+                console.log('💾 Updating review attribute:', { id: id, title: title });
+
                 $.ajax({
                     url: "{{ route('reviewattributes.update', ':id') }}".replace(':id', id),
                     type: 'POST',
@@ -80,16 +84,17 @@
                         title: title
                     },
                     success: function(response) {
-                        if (response.success) {
-                            console.log('Review attribute updated successfully');
-                            window.location.href = '{{ route("reviewattributes")}}';
-                        } else {
-                            alert('Failed to update review attribute');
-                            jQuery("#data-table_processing").hide();
+                        console.log('✅ Review attribute updated successfully:', response);
+
+                        // Log activity
+                        if (typeof logActivity === 'function') {
+                            logActivity('review_attributes', 'updated', 'Updated review attribute: ' + title);
                         }
+
+                        window.location.href = '{{ route("reviewattributes")}}';
                     },
                     error: function(xhr) {
-                        console.error('Update error:', xhr.responseText);
+                        console.error('❌ Update error:', xhr);
                         jQuery("#data-table_processing").hide();
                         $(".error_top").show();
                         $(".error_top").html("");

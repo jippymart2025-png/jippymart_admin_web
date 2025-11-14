@@ -81,12 +81,32 @@
         var requestId = "<?php echo $id; ?>";
         $(document).ready(function(){
             if (requestId) {
+                console.log('🔄 Loading gift card data for ID:', requestId);
+
                 $.get('{{ url('gift-card/json') }}/' + requestId, function(resp){
+                    console.log('✅ Gift card data loaded:', resp);
+
                     $("#title").val(resp.title || '');
                     $('#message').val(resp.message || '');
                     $('#expiry').val(resp.expiryDay || '');
                     if (resp.isEnable) { $("#status").prop('checked', true); }
-                    if (resp.image) { $(".gift_card_image").html('<span class="image-item"><img class="rounded" style="width:50px" src="'+resp.image+'" alt="image"></span>'); }
+
+                    if (resp.image) {
+                        // Handle both full URLs and storage paths
+                        var imgSrc = resp.image;
+                        if (resp.image.indexOf('http') !== 0 && resp.image.indexOf('storage/') !== 0) {
+                            imgSrc = '{{ asset('storage') }}/' + resp.image;
+                        } else if (resp.image.indexOf('storage/') === 0) {
+                            imgSrc = '{{ asset('') }}' + resp.image;
+                        }
+                        $(".gift_card_image").html('<span class="image-item"><img class="rounded" style="width:50px" src="'+imgSrc+'" alt="image"></span>');
+                    }
+
+                    console.log('📝 Form populated with gift card data');
+                })
+                .fail(function(xhr){
+                    console.error('❌ Failed to load gift card data:', xhr);
+                    $(".error_top").show().html('<p>Error loading gift card data</p>');
                 });
             }
 
@@ -96,21 +116,53 @@
                 var message = $('#message').val();
                 var expiryDay = $('#expiry').val();
                 var isEnable = $("#status").is(":checked");
+
                 if (!title || !message || !expiryDay || parseInt(expiryDay) <= 0) {
                     $(".error_top").show().html('<p>Please fill all required fields correctly</p>');
                     window.scrollTo(0,0); return;
                 }
+
+                var action = requestId ? 'Updating' : 'Creating';
+                console.log('💾 ' + action + ' gift card:', { title: title, expiryDay: expiryDay });
+
+                jQuery("#data-table_processing").show();
+
                 var fd = new FormData();
                 fd.append('title', title);
                 fd.append('message', message);
                 fd.append('expiryDay', expiryDay);
                 fd.append('isEnable', isEnable ? 1 : 0);
                 var file = document.getElementById('gift_card_image').files[0];
-                if (file) fd.append('image', file);
+                if (file) {
+                    fd.append('image', file);
+                    console.log('📤 Including image file:', file.name);
+                }
                 var url = requestId ? ('{{ url('gift-card') }}' + '/' + requestId) : '{{ route('gift-card.store') }}';
-                $.ajax({ url: url, method: 'POST', data: fd, processData: false, contentType: false, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-                    .done(function(){ window.location.href='{{ route('gift-card.index') }}'; })
-                    .fail(function(xhr){ $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.statusText+'</p>'); });
+
+                $.ajax({
+                    url: url,
+                    method: 'POST',
+                    data: fd,
+                    processData: false,
+                    contentType: false,
+                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                })
+                .done(function(response){
+                    console.log('✅ Gift card ' + (requestId ? 'updated' : 'created') + ' successfully:', response);
+
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        var activityAction = requestId ? 'updated' : 'created';
+                        logActivity('gift_cards', activityAction, (requestId ? 'Updated' : 'Created') + ' gift card: ' + title);
+                    }
+
+                    window.location.href='{{ route('gift-card.index') }}';
+                })
+                .fail(function(xhr){
+                    console.error('❌ Save failed:', xhr);
+                    jQuery("#data-table_processing").hide();
+                    $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.statusText+'</p>');
+                });
             });
         });
     </script>
