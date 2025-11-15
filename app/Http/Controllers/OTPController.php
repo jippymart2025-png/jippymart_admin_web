@@ -88,10 +88,16 @@ class OTPController extends Controller
      */
     public function verifyOtp(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'phone' => 'required|string|regex:/^[0-9]{10,15}$/',
-            'otp' => 'required|string|size:6'
-        ]);
+        // Accept either 'phone' or 'phoneNumber'
+        $phone = $request->input('phone') ?? $request->input('phoneNumber');
+
+        $validator = Validator::make(
+            ['phone' => $phone, 'otp' => $request->input('otp')],
+            [
+                'phone' => 'required|string|regex:/^[0-9]{10,15}$/',
+                'otp' => 'required|string|size:6'
+            ]
+        );
 
         if ($validator->fails()) {
             return response()->json([
@@ -101,18 +107,16 @@ class OTPController extends Controller
             ], 422);
         }
 
-        $phone = $request->phone;
-        $otp = $request->otp;
+        $otpValue = $request->input('otp');
 
-        // Find the OTP record
+        // Find OTP record
         $otpRecord = Otp::where('phone', $phone)
-            ->where('otp', $otp)
+            ->where('otp', $otpValue)
             ->where('expires_at', '>', Carbon::now())
             ->where('verified', false)
             ->first();
 
         if (!$otpRecord) {
-            // Increment attempts for failed verification
             Otp::where('phone', $phone)
                 ->where('verified', false)
                 ->increment('attempts');
@@ -123,7 +127,6 @@ class OTPController extends Controller
             ], 401);
         }
 
-        // Check if too many attempts
         if ($otpRecord->attempts >= 5) {
             return response()->json([
                 'success' => false,
@@ -132,35 +135,40 @@ class OTPController extends Controller
         }
 
         // Mark OTP as verified
-        $otpRecord->markAsVerified();
+        $otpRecord->verified = true;
+        $otpRecord->save();
 
         // Find or create user
-        $user = User::where('phone', $phone)->first();
+        $user = User::where('phoneNumber', $phone)->first();
 
         if (!$user) {
-            // Generate unique firebase_id for new user
             $firebaseId = 'user_' . Str::uuid();
-            
-            // Create new user
+
             $user = User::create([
-                'firstName' => 'User',
-                'lastName' => substr($phone, -4),
-                'phoneNumber' => $phone,
-                'phone' => $phone,
-                'firebase_id' => $firebaseId,
-                '_id' => $firebaseId,
-                'email' => $phone . '@jippymart.in', // Temporary email
-                'password' => bcrypt(Str::random(16)), // Random password
-                'active' => 'true',
-                'isActive' => true,
-                'role' => 'customer',
+                'firstName'     => 'User',
+                'lastName'      => substr($phone, -4),
+                'phoneNumber'   => $phone,
+                'firebase_id'   => $firebaseId,
+                '_id'           => $firebaseId,
+                'email'         => null,
+                'password'      => bcrypt(Str::random(16)),
+                'active'        => 1,
+                'isActive'      => true,
+                'role'          => 'customer',
                 'wallet_amount' => 0,
-                'orderCompleted' => 0,
-                '_created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                '_updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                'createdAt' => Carbon::now()->format('Y-m-d H:i:s'),
+                'orderCompleted'=> 0,
+                '_created_at'   => Carbon::now()->format('Y-m-d H:i:s'),
+                '_updated_at'   => Carbon::now()->format('Y-m-d H:i:s'),
+                'createdAt'     => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
         }
+
+        // Determine registration status
+        $isRegistered = !(
+            $user->firstName === 'User' ||
+            empty($user->email) ||
+            $user->email === $user->phoneNumber . '@jippymart.in'
+        );
 
         // Generate API token
         $token = $user->createToken('otp-auth')->plainTextToken;
@@ -168,11 +176,11 @@ class OTPController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'OTP verified successfully',
+            'is_registered' => $isRegistered,
             'user' => [
                 'id' => $user->id,
                 'firstName' => $user->firstName,
                 'lastName' => $user->lastName,
-                'phone' => $user->phone,
                 'phoneNumber' => $user->phoneNumber,
                 'email' => $user->email,
                 'firebase_id' => $user->firebase_id,
@@ -229,6 +237,111 @@ class OTPController extends Controller
         return false;
     }
 
+
+    public function signUp(Request $request)
+    {
+        // Accept either 'phone' or 'phoneNumber'
+        $phone = $request->input('phone') ?? $request->input('phoneNumber');
+
+        // Validate input
+        $validator = Validator::make(
+            array_merge($request->all(), ['phone' => $phone]),
+            [
+                'firstName' => 'required|string|max:100',
+                'lastName' => 'required|string|max:100',
+                'email' => 'nullable|email|max:191',
+                'phone' => 'required|string|regex:/^[0-9]{10,15}$/',
+                'referralCode' => 'nullable|string|max:50'
+            ]
+        );
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid input',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            // Find existing user (should exist from OTP verification)
+            $user = User::where('phoneNumber', $phone)->first();
+
+            if ($user) {
+                // Check if already fully registered
+                $alreadyRegistered = !empty($user->email) && $user->firstName !== 'User';
+                if ($alreadyRegistered) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'User already registered with this phone number'
+                    ], 409);
+                }
+
+                // Update user details
+                $updateData = [
+                    'firstName' => $request->input('firstName'),
+                    'lastName' => $request->input('lastName'),
+                    'email' => $request->input('email', $phone . '@jippymart.in'),
+                    'isActive' => 1,
+                    'active' => 1,
+                    '_updated_at' => Carbon::now()->format('Y-m-d H:i:s')
+                ];
+
+                // Add referral code only if provided
+                if ($request->filled('referralCode')) {
+                    $updateData['referral_code'] = $request->input('referralCode');
+                }
+
+                $user->update($updateData);
+            } else {
+                // Create new user if doesn't exist
+                $newUserData = [
+                    'firstName' => $request->input('firstName'),
+                    'lastName' => $request->input('lastName'),
+                    'email' => $request->input('email', $phone . '@jippymart.in')
+                ];
+
+                // Add referral code only if provided
+                if ($request->filled('referralCode')) {
+                    $newUserData['referral_code'] = $request->input('referralCode');
+                }
+
+                $user = $this->createNewUser($phone, $newUserData);
+            }
+
+            // Refresh user to get updated data
+            $user->refresh();
+
+            // Generate auth token
+            $token = $user->createToken('signup-auth')->plainTextToken;
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Signup successful',
+                'user' => $user,
+                'token' => $token,
+                'token_type' => 'Bearer'
+            ], 201);
+
+        } catch (\Exception $e) {
+            Log::error('Signup Error: ' . $e->getMessage(), [
+                'phone' => $phone,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            // Return more detailed error in development
+            $errorMessage = 'Signup failed. Please try again.';
+            if (config('app.debug')) {
+                $errorMessage .= ' Error: ' . $e->getMessage();
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $errorMessage
+            ], 500);
+        }
+    }
     /**
      * Send SMS using Guzzle HTTP Client
      */
@@ -281,6 +394,8 @@ class OTPController extends Controller
 
         return $httpCode >= 200 && $httpCode < 300;
     }
+
+
 
     /**
      * Send SMS using HTTP_Request2 (if available)
@@ -380,7 +495,7 @@ class OTPController extends Controller
     public function debugOtp($phone)
     {
         $otps = Otp::where('phone', $phone)->get();
-        
+
         return response()->json([
             'phone' => $phone,
             'total_records' => $otps->count(),
