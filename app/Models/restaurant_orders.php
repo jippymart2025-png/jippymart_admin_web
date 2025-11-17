@@ -10,7 +10,7 @@ use Carbon\Carbon;
 class restaurant_orders extends Model
 {
     use HasFactory;
-
+    public $timestamps = false;
     protected $table = 'restaurant_orders';
     protected $guarded = [];
     public $timestamps = false;

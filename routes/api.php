@@ -2,11 +2,15 @@
 
 
 use App\Http\Controllers\AdminUserController;
+use App\Http\Controllers\Api\MobileSqlBridgeController;
+use App\Http\Controllers\Api\OrderSupportController;
 use App\Http\Controllers\Api\productcontroller;
 use App\Http\Controllers\Api\FirestoreBridgeController;
 use App\Http\Controllers\Api\SettingsApiController;
 use App\Http\Controllers\Api\VendorController;
 use App\Http\Controllers\Api\Vendor_Reviews;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\SettingsController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\PaymentController;
@@ -266,7 +270,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/vendor/attributes', [SettingsApiController::class, 'getVendorAttributes']);
 });
 
-
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/vendor/{vendorId}/reviews', [Vendor_Reviews::class, 'getVendorReviews']);
     Route::get('/reviews/order', [Vendor_Reviews::class, 'getOrderReviewById']);
@@ -326,4 +329,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/chat/upload/image', [ChatController::class, 'uploadImage']);
     // Upload video
     Route::post('/chat/upload/video', [ChatController::class, 'uploadVideo']);
+});
+
+Route::get('/settings/ringtone', [SettingsController::class, 'getRingtone']);
+Route::get('/orders/latest-id', [OrderController::class, 'getLatestOrderId']);
+Route::get('/orders/get/{id}', [OrderController::class, 'getOrder']);
+
+Route::post('/mobile/orders/place-basic', [OrderSupportController::class, 'placeOrder']);
+Route::middleware('auth:sanctum')->group(function () {
+Route::post('/mobile/orders', [MobileSqlBridgeController::class, 'createOrder']);
 });
