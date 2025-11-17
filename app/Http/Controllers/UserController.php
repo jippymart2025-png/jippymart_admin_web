@@ -916,7 +916,7 @@ class UserController extends Controller
     {
         try {
             $request->validate([
-                'amount' => 'required|numeric|min:0',
+                'amount' => 'required|numeric',
                 'note' => 'nullable|string'
             ]);
 

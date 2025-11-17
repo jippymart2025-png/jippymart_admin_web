@@ -2222,249 +2222,444 @@
 {{--        });--}}
 {{--    })();--}}
 {{--</script>--}}
+{{--<script type="text/javascript">--}}
+{{--    /*--}}
+{{--      Clean MySQL-based order notification system--}}
+{{--      - Polls /api/orders/latest-id every 4s--}}
+{{--      - Fetches full order with /api/orders/get/:id--}}
+{{--      - Loads ringtone from /api/settings/ringtone with fallback--}}
+{{--      - Uses SweetAlert2 for toasts--}}
+{{--      - Exposes testNotification()--}}
+{{--    */--}}
+
+{{--    (function() {--}}
+{{--        // Config--}}
+{{--        const POLL_INTERVAL_MS = 1000; // you chose A => 4 seconds--}}
+{{--        const LATEST_ID_ENDPOINT = '/api/orders/latest-id';--}}
+{{--        const GET_ORDER_ENDPOINT = (id) => `/api/orders/get/${id}`;--}}
+{{--        const RINGTONE_ENDPOINT = '/api/settings/ringtone';--}}
+
+{{--        // State--}}
+{{--        let lastOrderId = 0;--}}
+{{--        let ringtoneAudio = null;--}}
+{{--        let soundEnabled = localStorage.getItem('notificationSoundEnabled') !== 'false';--}}
+{{--        let toastOffset = 0;--}}
+
+{{--        // Fallback beep data URI--}}
+{{--        const FALLBACK_BEEP = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT';--}}
+
+{{--        // Utility: load ringtone from SQL endpoint--}}
+{{--        function loadRingtone() {--}}
+{{--            $.get(RINGTONE_ENDPOINT, function(res) {--}}
+{{--                try {--}}
+{{--                    if (res && res.ringtone) {--}}
+{{--                        ringtoneAudio = new Audio(res.ringtone);--}}
+{{--                        ringtoneAudio.volume = 1.0;--}}
+{{--                        console.log('🔔 Ringtone loaded:', res.ringtone);--}}
+{{--                    } else {--}}
+{{--                        ringtoneAudio = new Audio(FALLBACK_BEEP);--}}
+{{--                        ringtoneAudio.volume = 0.3;--}}
+{{--                        console.log('🔔 No ringtone in DB — using fallback beep');--}}
+{{--                    }--}}
+{{--                } catch (e) {--}}
+{{--                    console.warn('⚠️ Ringtone load error, using fallback', e);--}}
+{{--                    ringtoneAudio = new Audio(FALLBACK_BEEP);--}}
+{{--                    ringtoneAudio.volume = 0.3;--}}
+{{--                }--}}
+{{--            }).fail(function() {--}}
+{{--                console.warn('⚠️ Could not load ringtone endpoint — using fallback');--}}
+{{--                ringtoneAudio = new Audio(FALLBACK_BEEP);--}}
+{{--                ringtoneAudio.volume = 0.3;--}}
+{{--            });--}}
+{{--        }--}}
+
+{{--        // Play ringtone (safe)--}}
+{{--        function playNotificationSound1() {--}}
+{{--            if (!soundEnabled) {--}}
+{{--                // console.log('🔕 Sound disabled');--}}
+{{--                return;--}}
+{{--            }--}}
+{{--            try {--}}
+{{--                if (!ringtoneAudio) {--}}
+{{--                    // in case not loaded yet, use fallback--}}
+{{--                    ringtoneAudio = new Audio(FALLBACK_BEEP);--}}
+{{--                    ringtoneAudio.volume = 0.3;--}}
+{{--                }--}}
+{{--                ringtoneAudio.currentTime = 0;--}}
+{{--                ringtoneAudio.play().catch(err => {--}}
+{{--                    // Mobile/Chrome often blocks autoplay — gracefully ignore--}}
+{{--                    console.log('🔊 play blocked or failed:', err);--}}
+{{--                });--}}
+{{--            } catch (e) {--}}
+{{--                console.error('🔊 playNotificationSound1 error:', e);--}}
+{{--            }--}}
+{{--        }--}}
+
+{{--        // UI: show toast + update badge--}}
+{{--        function showNewOrderNotification(orderData) {--}}
+{{--            // defensively extract id & vendor name--}}
+{{--            const orderId = orderData && (orderData.id || orderData.order_id || orderData.orderId) ? (orderData.id || orderData.order_id || orderData.orderId) : 'Unknown';--}}
+{{--            const vendorTitle = orderData && orderData.vendor && orderData.vendor.title ? orderData.vendor.title : (orderData.vendorTitle || 'Restaurant');--}}
+
+{{--            // Play small sound--}}
+{{--            playNotificationSound1();--}}
+
+{{--            // Create unique wrapper per toast to control stacking--}}
+{{--            const wrapper = document.createElement('div');--}}
+{{--            wrapper.style.marginTop = `${toastOffset}px`;--}}
+{{--            document.getElementById('toast-container').appendChild(wrapper);--}}
+
+{{--            // Use SweetAlert2 toast--}}
+{{--            if (typeof Swal !== 'undefined') {--}}
+{{--                Swal.fire({--}}
+{{--                    title: 'New Order Received!',--}}
+{{--                    html: `<strong>Order #${orderId}</strong><br>From: ${vendorTitle}`,--}}
+{{--                    icon: 'info',--}}
+{{--                    toast: true,--}}
+{{--                    position: 'top',--}}
+{{--                    showConfirmButton: false,--}}
+{{--                    showCloseButton: true,--}}
+{{--                    timer: 10000,--}}
+{{--                    timerProgressBar: true,--}}
+{{--                    target: wrapper,--}}
+{{--                    didOpen: (toast) => {--}}
+{{--                        toast.addEventListener('click', () => {--}}
+{{--                            window.location.href = '{{ route("orders") }}';--}}
+{{--                        });--}}
+{{--                    },--}}
+{{--                    willClose: () => {--}}
+{{--                        wrapper.remove();--}}
+{{--                        toastOffset -= 90;--}}
+{{--                    }--}}
+{{--                });--}}
+{{--            } else {--}}
+{{--                // fallback alert--}}
+{{--                alert(`New Order #${orderId} from ${vendorTitle}`);--}}
+{{--            }--}}
+
+{{--            toastOffset += 90;--}}
+{{--            if (toastOffset > 500) toastOffset = 0;--}}
+
+{{--            // Update small badge--}}
+{{--            const badge = document.getElementById('new-orders-badge');--}}
+{{--            if (badge) {--}}
+{{--                badge.textContent = '1';--}}
+{{--                badge.style.display = 'block';--}}
+{{--                setTimeout(() => {--}}
+{{--                    badge.style.display = 'none';--}}
+{{--                    badge.textContent = '0';--}}
+{{--                }, 30000);--}}
+{{--            }--}}
+
+{{--            // optionally update any dashboard counters if present--}}
+{{--            const orderCountElement = document.getElementById('order_count');--}}
+{{--            if (orderCountElement) {--}}
+{{--                // simple increment visually (best effort)--}}
+{{--                const current = parseInt(orderCountElement.textContent || '0', 10);--}}
+{{--                orderCountElement.textContent = isNaN(current) ? '1' : (current + 1).toString();--}}
+{{--            }--}}
+{{--        }--}}
+
+{{--        // Polling loop: checks latest id, fetches the order, shows notification--}}
+{{--        function startMysqlOrderListener() {--}}
+{{--            // initial load of lastOrderId--}}
+{{--            $.get(LATEST_ID_ENDPOINT, function(res) {--}}
+{{--                try {--}}
+{{--                    lastOrderId = res.latest_id ? res.latest_id.toString() : "";--}}
+{{--                    console.log('🔍 Initial lastOrderId:', lastOrderId);--}}
+{{--                } catch (e) {--}}
+{{--                    lastOrderId = 0;--}}
+{{--                }--}}
+{{--            }).always(function() {--}}
+{{--                // start interval--}}
+{{--                setInterval(function() {--}}
+{{--                    $.get(LATEST_ID_ENDPOINT, function(res) {--}}
+{{--                        const newestId = res.latest_id ? res.latest_id.toString() : "";--}}
+{{--                        if (newestId !== lastOrderId && newestId !== "") {--}}
+{{--                            console.log('🆕 New order detected:', newestId);--}}
+{{--                            // fetch order details--}}
+{{--                            $.get(GET_ORDER_ENDPOINT(newestId), function(order) {--}}
+{{--                                try {--}}
+{{--                                    playNotificationSound1();--}}
+{{--                                    showNewOrderNotification(order);--}}
+{{--                                } catch (e) {--}}
+{{--                                    console.error('Error showing notification:', e);--}}
+{{--                                }--}}
+{{--                            }).fail(function() {--}}
+{{--                                console.warn('⚠️ Could not fetch order details for', newestId);--}}
+{{--                            });--}}
+
+{{--                            // Reload page on new order--}}
+{{--                            setTimeout(() => {--}}
+{{--                                window.location.reload();--}}
+{{--                            }, 1000);--}}
+
+{{--                            lastOrderId = newestId;--}}
+{{--                        }--}}
+{{--                    }).fail(function() {--}}
+{{--                        // tolerate errors (shared hosting)--}}
+{{--                        console.warn('⚠️ latest-id endpoint failed');--}}
+{{--                    });--}}
+{{--                }, POLL_INTERVAL_MS);--}}
+{{--            });--}}
+{{--        }--}}
+
+{{--        // Expose debug / test API--}}
+{{--        window.orderNotificationSystem = {--}}
+{{--            testNotification: function() {--}}
+{{--                const dummyOrder = {--}}
+{{--                    id: Math.floor(Math.random() * 99999),--}}
+{{--                    vendor: { title: 'Test Store' },--}}
+{{--                    status: 'Order Placed'--}}
+{{--                };--}}
+{{--                playNotificationSound1();--}}
+{{--                showNewOrderNotification(dummyOrder);--}}
+{{--                console.log('🔔 testNotification fired');--}}
+{{--            },--}}
+{{--            toggleSound: function(enabled) {--}}
+{{--                if (typeof enabled === 'boolean') {--}}
+{{--                    soundEnabled = enabled;--}}
+{{--                    localStorage.setItem('notificationSoundEnabled', enabled.toString());--}}
+{{--                } else {--}}
+{{--                    soundEnabled = !soundEnabled;--}}
+{{--                    localStorage.setItem('notificationSoundEnabled', soundEnabled.toString());--}}
+{{--                }--}}
+{{--                console.log('🔊 soundEnabled =', soundEnabled);--}}
+{{--            },--}}
+{{--            clearBadge: function() {--}}
+{{--                const badge = document.getElementById('new-orders-badge');--}}
+{{--                if (badge) {--}}
+{{--                    badge.style.display = 'none';--}}
+{{--                    badge.textContent = '0';--}}
+{{--                }--}}
+{{--            }--}}
+{{--        };--}}
+
+{{--        // Initialize on DOM ready--}}
+{{--        $(document).ready(function() {--}}
+{{--            // remove any firebase usage (safety) - you already removed scripts earlier--}}
+{{--            loadRingtone();--}}
+{{--            startMysqlOrderListener();--}}
+
+{{--            // show/hide sound controls UI if present--}}
+{{--            const soundToggle = document.getElementById('sound-toggle');--}}
+{{--            if (soundToggle) {--}}
+{{--                // set initial icon--}}
+{{--                const icon = soundToggle.querySelector('i');--}}
+{{--                if (icon) icon.className = soundEnabled ? 'fa fa-volume-up' : 'fa fa-volume-off';--}}
+
+{{--                soundToggle.addEventListener('click', function() {--}}
+{{--                    orderNotificationSystem.toggleSound();--}}
+{{--                    const icon = soundToggle.querySelector('i');--}}
+{{--                    if (icon) icon.className = (localStorage.getItem('notificationSoundEnabled') === 'false') ? 'fa fa-volume-off' : 'fa fa-volume-up';--}}
+{{--                });--}}
+{{--            }--}}
+
+{{--            // clear badge on orders page--}}
+{{--            if (window.location.pathname.includes('/orders')) {--}}
+{{--                orderNotificationSystem.clearBadge();--}}
+{{--            }--}}
+{{--        });--}}
+
+{{--    })(); // IIFE end--}}
+{{--</script>--}}
 <script type="text/javascript">
     /*
-      Clean MySQL-based order notification system
-      - Polls /api/orders/latest-id every 4s
-      - Fetches full order with /api/orders/get/:id
-      - Loads ringtone from /api/settings/ringtone with fallback
-      - Uses SweetAlert2 for toasts
-      - Exposes testNotification()
+       Real-time MySQL Order Listener
+       - Polls /api/orders/latest-id every 1s
+       - Loads full order on change
+       - Plays ringtone + shows SweetAlert2 toast
     */
 
-    (function() {
-        // Config
-        const POLL_INTERVAL_MS = 1000; // you chose A => 4 seconds
-        const LATEST_ID_ENDPOINT = '/api/orders/latest-id';
-        const GET_ORDER_ENDPOINT = (id) => `/api/orders/get/${id}`;
-        const RINGTONE_ENDPOINT = '/api/settings/ringtone';
+    (function () {
 
-        // State
-        let lastOrderId = 0;
+        // ============================
+        // CONFIG
+        // ============================
+        const POLL_INTERVAL_MS = 1000;
+        const ENDPOINT_LATEST = "/api/orders/latest-id";
+        const ENDPOINT_ORDER = (id) => `/api/orders/get/${id}`;
+        const ENDPOINT_RINGTONE = "/api/settings/ringtone";
+
+        let lastOrderId = "";
         let ringtoneAudio = null;
-        let soundEnabled = localStorage.getItem('notificationSoundEnabled') !== 'false';
+        let soundEnabled = localStorage.getItem("notificationSoundEnabled") !== "false";
         let toastOffset = 0;
 
-        // Fallback beep data URI
-        const FALLBACK_BEEP = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT';
+        const FALLBACK_BEEP =
+            "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT";
 
-        // Utility: load ringtone from SQL endpoint
+
+        // ============================
+        // HELPERS
+        // ============================
+
+        function extractNumber(id) {
+            return parseInt(id.replace("Jippy", ""), 10);
+        }
+
         function loadRingtone() {
-            $.get(RINGTONE_ENDPOINT, function(res) {
+            $.get(ENDPOINT_RINGTONE, function (res) {
                 try {
-                    if (res && res.ringtone) {
+                    if (res?.ringtone) {
                         ringtoneAudio = new Audio(res.ringtone);
                         ringtoneAudio.volume = 1.0;
-                        console.log('🔔 Ringtone loaded:', res.ringtone);
+                        console.log("🔔 Ringtone loaded:", res.ringtone);
                     } else {
                         ringtoneAudio = new Audio(FALLBACK_BEEP);
                         ringtoneAudio.volume = 0.3;
-                        console.log('🔔 No ringtone in DB — using fallback beep');
+                        console.warn("⚠️ No ringtone in DB, using fallback.");
                     }
                 } catch (e) {
-                    console.warn('⚠️ Ringtone load error, using fallback', e);
                     ringtoneAudio = new Audio(FALLBACK_BEEP);
                     ringtoneAudio.volume = 0.3;
+                    console.error("⚠️ Ringtone load error:", e);
                 }
-            }).fail(function() {
-                console.warn('⚠️ Could not load ringtone endpoint — using fallback');
+            }).fail(() => {
                 ringtoneAudio = new Audio(FALLBACK_BEEP);
                 ringtoneAudio.volume = 0.3;
+                console.warn("⚠️ Failed to load ringtone endpoint. Using fallback.");
             });
         }
 
-        // Play ringtone (safe)
-        function playNotificationSound1() {
-            if (!soundEnabled) {
-                // console.log('🔕 Sound disabled');
-                return;
-            }
+        function playNotificationSound() {
+            if (!soundEnabled) return;
+
             try {
                 if (!ringtoneAudio) {
-                    // in case not loaded yet, use fallback
                     ringtoneAudio = new Audio(FALLBACK_BEEP);
                     ringtoneAudio.volume = 0.3;
                 }
                 ringtoneAudio.currentTime = 0;
-                ringtoneAudio.play().catch(err => {
-                    // Mobile/Chrome often blocks autoplay — gracefully ignore
-                    console.log('🔊 play blocked or failed:', err);
-                });
+                ringtoneAudio.play().catch(() => {});
             } catch (e) {
-                console.error('🔊 playNotificationSound1 error:', e);
+                console.error("playNotificationSound error:", e);
             }
         }
 
-        // UI: show toast + update badge
-        function showNewOrderNotification(orderData) {
-            // defensively extract id & vendor name
-            const orderId = orderData && (orderData.id || orderData.order_id || orderData.orderId) ? (orderData.id || orderData.order_id || orderData.orderId) : 'Unknown';
-            const vendorTitle = orderData && orderData.vendor && orderData.vendor.title ? orderData.vendor.title : (orderData.vendorTitle || 'Restaurant');
+        function showNewOrderNotification(order) {
+            const orderId = order?.id ?? "Unknown";
+            const vendorTitle =
+                order?.vendor?.title ||
+                order?.vendorTitle ||
+                "Restaurant";
 
-            // Play small sound
-            playNotificationSound1();
+            playNotificationSound();
 
-            // Create unique wrapper per toast to control stacking
-            const wrapper = document.createElement('div');
-            wrapper.style.marginTop = `${toastOffset}px`;
-            document.getElementById('toast-container').appendChild(wrapper);
+            const wrapper = document.createElement("div");
+            wrapper.style.marginTop = toastOffset + "px";
+            document.getElementById("toast-container").appendChild(wrapper);
 
-            // Use SweetAlert2 toast
-            if (typeof Swal !== 'undefined') {
-                Swal.fire({
-                    title: 'New Order Received!',
-                    html: `<strong>Order #${orderId}</strong><br>From: ${vendorTitle}`,
-                    icon: 'info',
-                    toast: true,
-                    position: 'top',
-                    showConfirmButton: false,
-                    showCloseButton: true,
-                    timer: 10000,
-                    timerProgressBar: true,
-                    target: wrapper,
-                    didOpen: (toast) => {
-                        toast.addEventListener('click', () => {
-                            window.location.href = '{{ route("orders") }}';
-                        });
-                    },
-                    willClose: () => {
-                        wrapper.remove();
-                        toastOffset -= 90;
-                    }
-                });
-            } else {
-                // fallback alert
-                alert(`New Order #${orderId} from ${vendorTitle}`);
-            }
+            Swal.fire({
+                title: "New Order Received!",
+                html: `<strong>Order #${orderId}</strong><br>From: ${vendorTitle}`,
+                icon: "info",
+                toast: true,
+                position: "top",
+                showConfirmButton: false,
+                showCloseButton: true,
+                timer: 10000,
+                timerProgressBar: true,
+                target: wrapper,
+                didOpen: (toast) => {
+                    toast.addEventListener("click", () => {
+                        window.location.href = "/orders";
+                    });
+                },
+                willClose: () => {
+                    wrapper.remove();
+                    toastOffset -= 90;
+                },
+            });
 
             toastOffset += 90;
             if (toastOffset > 500) toastOffset = 0;
-
-            // Update small badge
-            const badge = document.getElementById('new-orders-badge');
-            if (badge) {
-                badge.textContent = '1';
-                badge.style.display = 'block';
-                setTimeout(() => {
-                    badge.style.display = 'none';
-                    badge.textContent = '0';
-                }, 30000);
-            }
-
-            // optionally update any dashboard counters if present
-            const orderCountElement = document.getElementById('order_count');
-            if (orderCountElement) {
-                // simple increment visually (best effort)
-                const current = parseInt(orderCountElement.textContent || '0', 10);
-                orderCountElement.textContent = isNaN(current) ? '1' : (current + 1).toString();
-            }
         }
 
-        // Polling loop: checks latest id, fetches the order, shows notification
-        function startMysqlOrderListener() {
-            // initial load of lastOrderId
-            $.get(LATEST_ID_ENDPOINT, function(res) {
-                try {
-                    lastOrderId = res.latest_id ? res.latest_id.toString() : "";
-                    console.log('🔍 Initial lastOrderId:', lastOrderId);
-                } catch (e) {
-                    lastOrderId = 0;
-                }
-            }).always(function() {
-                // start interval
-                setInterval(function() {
-                    $.get(LATEST_ID_ENDPOINT, function(res) {
-                        const newestId = res.latest_id ? res.latest_id.toString() : "";
-                        if (newestId > lastOrderId) {
-                            console.log('🆕 New order detected:', newestId);
-                            // fetch order details
-                            $.get(GET_ORDER_ENDPOINT(newestId), function(order) {
-                                try {
-                                    playNotificationSound1();
-                                    showNewOrderNotification(order);
-                                } catch (e) {
-                                    console.error('Error showing notification:', e);
-                                }
-                            }).fail(function() {
-                                console.warn('⚠️ Could not fetch order details for', newestId);
-                            });
 
-                            // Reload page on new order
-                            setTimeout(() => {
-                                window.location.reload();
-                            }, 1000);
+        // ============================
+        // POLLING LOGIC
+        // ============================
 
-                            lastOrderId = newestId;
+        function startPolling() {
+            setInterval(() => {
+                $.get(ENDPOINT_LATEST, function (res) {
+                    const newestId = res?.latest_id?.toString() ?? "";
+
+                    if (!newestId || !lastOrderId) return;
+
+                    if (extractNumber(newestId) > extractNumber(lastOrderId)) {
+                        console.log("🆕 New Order:", newestId);
+
+                        $.get(ENDPOINT_ORDER(newestId), function (order) {
+                            showNewOrderNotification(order);
+                        });
+
+                        lastOrderId = newestId;
+
+                        // setTimeout(() => window.location.reload(), 3000);
+
+                        if (window.location.pathname.includes("/orders")) {
+                            setTimeout(() => window.location.reload(), 2000);
                         }
-                    }).fail(function() {
-                        // tolerate errors (shared hosting)
-                        console.warn('⚠️ latest-id endpoint failed');
-                    });
-                }, POLL_INTERVAL_MS);
+
+                    }
+                });
+            }, POLL_INTERVAL_MS);
+        }
+
+        function startMysqlOrderListener() {
+            $.get(ENDPOINT_LATEST, function (res) {
+                lastOrderId = res?.latest_id?.toString() ?? "";
+                console.log("Initial lastOrderId:", lastOrderId);
+
+                startPolling();
             });
         }
 
-        // Expose debug / test API
+
+        // ============================
+        // DEBUG / PUBLIC API
+        // ============================
+
         window.orderNotificationSystem = {
-            testNotification: function() {
-                const dummyOrder = {
+            testNotification() {
+                const dummy = {
                     id: Math.floor(Math.random() * 99999),
-                    vendor: { title: 'Test Store' },
-                    status: 'Order Placed'
+                    vendor: { title: "Test Store" },
                 };
-                playNotificationSound1();
-                showNewOrderNotification(dummyOrder);
-                console.log('🔔 testNotification fired');
+                playNotificationSound();
+                showNewOrderNotification(dummy);
             },
-            toggleSound: function(enabled) {
-                if (typeof enabled === 'boolean') {
-                    soundEnabled = enabled;
-                    localStorage.setItem('notificationSoundEnabled', enabled.toString());
-                } else {
-                    soundEnabled = !soundEnabled;
-                    localStorage.setItem('notificationSoundEnabled', soundEnabled.toString());
-                }
-                console.log('🔊 soundEnabled =', soundEnabled);
+            toggleSound() {
+                soundEnabled = !soundEnabled;
+                localStorage.setItem("notificationSoundEnabled", soundEnabled);
             },
-            clearBadge: function() {
-                const badge = document.getElementById('new-orders-badge');
+            clearBadge() {
+                const badge = document.getElementById("new-orders-badge");
                 if (badge) {
-                    badge.style.display = 'none';
-                    badge.textContent = '0';
+                    badge.style.display = "none";
+                    badge.textContent = "0";
                 }
-            }
+            },
         };
 
-        // Initialize on DOM ready
-        $(document).ready(function() {
-            // remove any firebase usage (safety) - you already removed scripts earlier
+
+        // ============================
+        // INITIALIZE
+        // ============================
+
+        $(document).ready(() => {
             loadRingtone();
             startMysqlOrderListener();
 
-            // show/hide sound controls UI if present
-            const soundToggle = document.getElementById('sound-toggle');
-            if (soundToggle) {
-                // set initial icon
-                const icon = soundToggle.querySelector('i');
-                if (icon) icon.className = soundEnabled ? 'fa fa-volume-up' : 'fa fa-volume-off';
-
-                soundToggle.addEventListener('click', function() {
-                    orderNotificationSystem.toggleSound();
-                    const icon = soundToggle.querySelector('i');
-                    if (icon) icon.className = (localStorage.getItem('notificationSoundEnabled') === 'false') ? 'fa fa-volume-off' : 'fa fa-volume-up';
-                });
-            }
-
-            // clear badge on orders page
-            if (window.location.pathname.includes('/orders')) {
-                orderNotificationSystem.clearBadge();
+            if (window.location.pathname.includes("/orders")) {
+                window.orderNotificationSystem.clearBadge();
             }
         });
 
-    })(); // IIFE end
+    })();
 </script>
-
-
 
 @yield('scripts')
 <!-- Auto-login script for Admin Impersonation -->

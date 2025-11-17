@@ -434,6 +434,15 @@ Route::get('/brands/download-template', [App\Http\Controllers\BrandController::c
 
 Route::middleware(['permission:drivers,drivers'])->group(function () {
     Route::get('/drivers', [App\Http\Controllers\DriverController::class, 'index'])->name('drivers');
+    Route::get('/drivers/data', [App\Http\Controllers\DriverController::class, 'getDriversData'])->name('drivers.data');
+    Route::get('/drivers/zones', [App\Http\Controllers\DriverController::class, 'getZones'])->name('drivers.zones');
+    Route::get('/drivers/debug/{id}', [App\Http\Controllers\DriverController::class, 'debugDriver'])->name('drivers.debug');
+    Route::get('/drivers/{id}/data', [App\Http\Controllers\DriverController::class, 'getDriverById'])->name('drivers.getById');
+    Route::get('/drivers/{id}/stats', [App\Http\Controllers\DriverController::class, 'getDriverStats'])->name('drivers.stats');
+    Route::get('/drivers/{id}/documents', [App\Http\Controllers\DriverController::class, 'getDriverDocuments'])->name('drivers.documents');
+    Route::get('/drivers/{id}/payouts', [App\Http\Controllers\DriverController::class, 'getDriverPayouts'])->name('drivers.payouts');
+    Route::get('/api/document-types/driver', [App\Http\Controllers\DriverController::class, 'getDocumentTypes'])->name('drivers.document-types');
+    Route::get('/drivers/{id}/document-verification', [App\Http\Controllers\DriverController::class, 'getDocumentVerification'])->name('drivers.document-verification');
 });
 Route::middleware(['permission:approve_drivers,approve.driver.list'])->group(function () {
     Route::get('/drivers/approved', [App\Http\Controllers\DriverController::class, 'index'])->name('drivers.approved');
@@ -458,26 +467,36 @@ Route::middleware(['permission:drivers,drivers.edit'])->group(function () {
     Route::post('/drivers/clear-all-order-request-data', [App\Http\Controllers\DriverController::class, 'clearAllOrderRequestData'])->name('drivers.clearAllOrderRequestData');
 });
 
-// Driver SQL API routes
-Route::middleware(['permission:drivers,drivers'])->group(function () {
-    Route::get('/drivers/data', [App\Http\Controllers\DriverController::class, 'getDriversData'])->name('drivers.data');
-    Route::get('/drivers/zones', [App\Http\Controllers\DriverController::class, 'getZones'])->name('drivers.zones');
-    Route::get('/drivers/debug/{id}', [App\Http\Controllers\DriverController::class, 'debugDriver'])->name('drivers.debug');
-    Route::get('/drivers/{id}/data', [App\Http\Controllers\DriverController::class, 'getDriverById'])->name('drivers.getById');
-    Route::get('/drivers/{id}/stats', [App\Http\Controllers\DriverController::class, 'getDriverStats'])->name('drivers.stats');
-    Route::get('/drivers/{id}/documents', [App\Http\Controllers\DriverController::class, 'getDriverDocuments'])->name('drivers.documents');
-    Route::get('/drivers/{id}/payouts', [App\Http\Controllers\DriverController::class, 'getDriverPayouts'])->name('drivers.payouts');
-    Route::get('/api/document-types/driver', [App\Http\Controllers\DriverController::class, 'getDocumentTypes'])->name('drivers.document-types');
-    Route::get('/drivers/{id}/document-verification', [App\Http\Controllers\DriverController::class, 'getDocumentVerification'])->name('drivers.document-verification');
-});
-
-Route::middleware(['permission:drivers,drivers.create'])->group(function () {
-    Route::post('/drivers', [App\Http\Controllers\DriverController::class, 'createDriver'])->name('drivers.create.post');
-});
-
 Route::middleware(['permission:drivers,drivers.delete'])->group(function () {
     Route::delete('/drivers/{id}', [App\Http\Controllers\DriverController::class, 'destroy'])->name('drivers.delete');
 });
+
+////Driver Wallet Management Routes
+//Route::middleware(['permission:driver-wallets,driverWallets'])->group(function () {
+//    Route::get('driver-wallets', [App\Http\Controllers\DriverWalletController::class, 'index'])->name('driver.wallets');
+//    Route::get('api/driver-wallets', [App\Http\Controllers\DriverWalletController::class, 'getDriverWallets'])->name('api.driver.wallets');
+//    Route::get('api/driver-wallets/{driverId}', [App\Http\Controllers\DriverWalletController::class, 'getDriverWallet'])->name('api.driver.wallet');
+//    Route::post('api/driver-wallets/sync-all', [App\Http\Controllers\DriverWalletController::class, 'syncAllWallets'])->name('api.driver.wallets.sync');
+//    Route::post('api/driver-wallets/add-credit', [App\Http\Controllers\DriverWalletController::class, 'addCredit'])->name('api.driver.wallets.add.credit');
+//    Route::post('api/driver-wallets/{driverId}/refresh', [App\Http\Controllers\DriverWalletController::class, 'refreshDriverWallet'])->name('api.driver.wallet.refresh');
+//    Route::put('api/driver-wallets/{driverId}', [App\Http\Controllers\DriverWalletController::class, 'updateDriverWallet'])->name('api.driver.wallet.update');
+//});
+//// Driver SQL API routes
+//Route::middleware(['permission:drivers,drivers'])->group(function () {
+//    Route::get('/drivers/data', [App\Http\Controllers\DriverController::class, 'getDriversData'])->name('drivers.data');
+//    Route::get('/drivers/zones', [App\Http\Controllers\DriverController::class, 'getZones'])->name('drivers.zones');
+//    Route::get('/drivers/debug/{id}', [App\Http\Controllers\DriverController::class, 'debugDriver'])->name('drivers.debug');
+//    Route::get('/drivers/{id}/data', [App\Http\Controllers\DriverController::class, 'getDriverById'])->name('drivers.getById');
+//    Route::get('/drivers/{id}/stats', [App\Http\Controllers\DriverController::class, 'getDriverStats'])->name('drivers.stats');
+//    Route::get('/drivers/{id}/documents', [App\Http\Controllers\DriverController::class, 'getDriverDocuments'])->name('drivers.documents');
+//    Route::get('/drivers/{id}/payouts', [App\Http\Controllers\DriverController::class, 'getDriverPayouts'])->name('drivers.payouts');
+//    Route::get('/api/document-types/driver', [App\Http\Controllers\DriverController::class, 'getDocumentTypes'])->name('drivers.document-types');
+//    Route::get('/drivers/{id}/document-verification', [App\Http\Controllers\DriverController::class, 'getDocumentVerification'])->name('drivers.document-verification');
+//});
+
+//Route::middleware(['permission:drivers,drivers.create'])->group(function () {
+//    Route::post('/drivers', [App\Http\Controllers\DriverController::class, 'createDriver'])->name('drivers.create.post');
+//});
 
 // Driver document API endpoints (SQL-based)
 Route::get('/api/drivers/document-data/{id}', [App\Http\Controllers\DriverController::class, 'getDriverDocumentData'])->name('api.drivers.document.data');
@@ -524,16 +543,7 @@ Route::middleware(['permission:driver-payouts,driversPayouts.create'])->group(fu
 
 });
 
-// Driver Wallet Management Routes
-//Route::middleware(['permission:driver-wallets,driverWallets'])->group(function () {
-//    Route::get('driver-wallets', [App\Http\Controllers\DriverWalletController::class, 'index'])->name('driver.wallets');
-//    Route::get('api/driver-wallets', [App\Http\Controllers\DriverWalletController::class, 'getDriverWallets'])->name('api.driver.wallets');
-//    Route::get('api/driver-wallets/{driverId}', [App\Http\Controllers\DriverWalletController::class, 'getDriverWallet'])->name('api.driver.wallet');
-//    Route::post('api/driver-wallets/sync-all', [App\Http\Controllers\DriverWalletController::class, 'syncAllWallets'])->name('api.driver.wallets.sync');
-//    Route::post('api/driver-wallets/add-credit', [App\Http\Controllers\DriverWalletController::class, 'addCredit'])->name('api.driver.wallets.add.credit');
-//    Route::post('api/driver-wallets/{driverId}/refresh', [App\Http\Controllers\DriverWalletController::class, 'refreshDriverWallet'])->name('api.driver.wallet.refresh');
-//    Route::put('api/driver-wallets/{driverId}', [App\Http\Controllers\DriverWalletController::class, 'updateDriverWallet'])->name('api.driver.wallet.update');
-//});
+
 
 Route::middleware(['permission:wallet-transaction,walletstransaction'])->group(function () {
     Route::get('walletstransaction', [App\Http\Controllers\TransactionController::class, 'index'])->name('walletstransaction');
@@ -1461,7 +1471,7 @@ Route::middleware(['permission:restaurants,restaurants'])->group(function () {
     Route::post('/restaurants/global-status', [App\Http\Controllers\RestaurantController::class, 'updateGlobalStatus'])->name('restaurants.global-status');
     Route::get('/api/users/{id}', [App\Http\Controllers\UserController::class, 'getUserById'])->name('users.api.getById');
     Route::get('/api/users/{id}/wallet-balance', [App\Http\Controllers\UserController::class, 'getWalletBalance'])->name('users.api.wallet-balance');
-    Route::post('/api/users/wallet/add', [App\Http\Controllers\UserController::class, 'addWalletAmount'])->name('users.api.wallet.add');
+//    Route::post('/users/wallet/add', [App\Http\Controllers\UserController::class, 'addWalletAmount'])->name('users.api.wallet.add');
     Route::get('/api/users/{id}/subscription-history', [App\Http\Controllers\UserController::class, 'getSubscriptionHistory'])->name('users.api.subscription-history');
     Route::get('/api/email-templates/{type}', [App\Http\Controllers\RestaurantController::class, 'getEmailTemplate'])->name('email-templates.get');
 });
