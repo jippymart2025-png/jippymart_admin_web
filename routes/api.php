@@ -1,6 +1,7 @@
 <?php
 
 
+use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\Api\productcontroller;
 use App\Http\Controllers\Api\FirestoreBridgeController;
 use App\Http\Controllers\Api\SettingsApiController;
@@ -57,12 +58,16 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 //    Route::post('/firebase/drivers/locations', [FirebaseLiveTrackingController::class, 'batchDriverLocations']);
 //});
 //
-//// SQL users listing (replaces client-side Firebase usage on Users page)
+// SQL users listing (replaces client-side Firebase usage on Users page)
 //Route::get('/app-users', [AppUserController::class, 'index']);
 //Route::post('/app-users', [AppUserController::class, 'store']);
 //Route::delete('/app-users/{id}', [AppUserController::class, 'destroy']);
 //Route::patch('/app-users/{id}/active', [AppUserController::class, 'setActive']);
-
+// SQL users listing (replaces client-side Firebase usage on Users page)
+Route::get('/app-users', [AdminUserController::class, 'index']);
+Route::post('/app-users', [AdminUserController::class, 'store']);
+Route::delete('/app-users/{id}', [AdminUserController::class, 'destroy']);
+Route::patch('/app-users/{id}/active', [AdminUserController::class, 'setActive']);
 
 Route::get('/settings/mobile', [SettingsApiController::class, 'mobileSettings']);
 Route::get('/settings/delivery-charge', [App\Http\Controllers\Api\SettingsApiController::class, 'getDeliveryChargeSettings']);
@@ -122,16 +127,16 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Category API routes (Public - no auth required)
 Route::middleware('auth:sanctum')->group(function () {
-Route::get('/categories/home', [CategoryController::class, 'home']);
-Route::get('/categories', [CategoryController::class, 'index']);
-Route::get('/categories/{id}', [CategoryController::class, 'show']);
+    Route::get('/categories/home', [CategoryController::class, 'home']);
+    Route::get('/categories', [CategoryController::class, 'index']);
+    Route::get('/categories/{id}', [CategoryController::class, 'show']);
 });
 Route::middleware('auth:sanctum')->group(function () {
 
 // Banner API routes (Public - no auth required)
-Route::get('/banners/top', [BannerController::class, 'top']);
-Route::get('/banners', [BannerController::class, 'index']);
-Route::get('/banners/{id}', [BannerController::class, 'show']);
+    Route::get('/banners/top', [BannerController::class, 'top']);
+    Route::get('/banners', [BannerController::class, 'index']);
+    Route::get('/banners/{id}', [BannerController::class, 'show']);
 });
 Route::middleware('auth:sanctum')->group(function () {
 // Menu Item Banner API routes (Public - no auth required)
@@ -143,7 +148,7 @@ Route::get('/menu-items/banners/{id}', [MenuItemBannerController::class, 'show']
 });
 Route::middleware('auth:sanctum')->group(function () {
 // Stories API routes (Public - no auth required)
-Route::get('/stories', [StoryController::class, 'index']);
+    Route::get('/stories', [StoryController::class, 'index']);
 });
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -164,7 +169,7 @@ Route::middleware('auth:sanctum')->group(function () {
 // User Profile API routes (Customers only)
 Route::middleware('auth:sanctum')->group(function () {
 
-Route::get('/users/profile/{firebase_id}', [UserProfileController::class, 'show']); // Public - get customer by firebase_id
+    Route::get('/users/profile/{firebase_id}', [UserProfileController::class, 'show']); // Public - get customer by firebase_id
     Route::get('/user/profile', [UserProfileController::class, 'me']); // Get current customer profile
     Route::post('/user/profile', [UserProfileController::class, 'update']); // Update current customer profile
     Route::delete('/users/profile/{firebase_id}', [UserProfileController::class, 'destroy']); // Delete user and related data from database
@@ -175,17 +180,17 @@ Route::get('/users/profile/{firebase_id}', [UserProfileController::class, 'show'
 //restaurants
 Route::middleware('auth:sanctum')->group(function () {
 
-Route::prefix('favorites')->group(function () {
-    // Restaurants
-    Route::get('restaurants/{firebase_id}', [FavoriteController::class, 'getFavoriteRestaurants']);
-    Route::post('restaurants', [FavoriteController::class, 'addFavoriteRestaurant']);
-    Route::delete('restaurants', [FavoriteController::class, 'removeFavoriteRestaurant']);
+    Route::prefix('favorites')->group(function () {
+        // Restaurants
+        Route::get('restaurants/{firebase_id}', [FavoriteController::class, 'getFavoriteRestaurants']);
+        Route::post('restaurants', [FavoriteController::class, 'addFavoriteRestaurant']);
+        Route::delete('restaurants', [FavoriteController::class, 'removeFavoriteRestaurant']);
 
-    // Items
-    Route::get('items/{firebase_id}', [FavoriteController::class, 'getFavoriteItems']);
-    Route::post('items', [FavoriteController::class, 'addFavoriteItem']);
-    Route::delete('items', [FavoriteController::class, 'removeFavoriteItem']);
-});
+        // Items
+        Route::get('items/{firebase_id}', [FavoriteController::class, 'getFavoriteItems']);
+        Route::post('items', [FavoriteController::class, 'addFavoriteItem']);
+        Route::delete('items', [FavoriteController::class, 'removeFavoriteItem']);
+    });
 });
 
 
@@ -199,8 +204,8 @@ Route::prefix('vendors')->group(function () {
 
 });
 
-Route::get('vendor-categories/{id}', [VendorController::class, 'getVendorCategoryById']);
-Route::get('products/{id}', [VendorController::class, 'getProductById']);
+    Route::get('vendor-categories/{id}', [VendorController::class, 'getVendorCategoryById']);
+    Route::get('products/{id}', [VendorController::class, 'getProductById']);
 });
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -212,16 +217,16 @@ Route::middleware('auth:sanctum')->group(function () {
 //wallet
 Route::middleware('auth:sanctum')->group(function () {
 
-Route::post('/update-wallet', [WalletController::class, 'updateWallet']);
+    Route::post('/update-wallet', [WalletController::class, 'updateWallet']);
 
 });
 
 
 Route::middleware('auth:sanctum')->group(function () {
-Route::get(
-    '/restaurants/{vendorId}/product-feed{extra?}',
-    [\App\Http\Controllers\Api\ProductController::class, 'getRestaurantProductFeed']
-)->where('extra', '.*');
+    Route::get(
+        '/restaurants/{vendorId}/product-feed{extra?}',
+        [\App\Http\Controllers\Api\ProductController::class, 'getRestaurantProductFeed']
+    )->where('extra', '.*');
 
 });
 
@@ -235,17 +240,17 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // mart all apis
 Route::middleware('auth:sanctum')->group(function () {
-Route::get('/mart-items/trending', [MartItemController::class, 'getTrendingItems']);
-Route::get('/mart-items/featured', [MartItemController::class, 'getFeaturedItems']);
-Route::get('/mart-items/on-sale', [MartItemController::class, 'getItemsOnSale']);
-Route::get('/mart-items/search', [MartItemController::class, 'searchItems']);
-Route::get('/mart-items/by-category', [MartItemController::class, 'getItemsByCategory']);
-Route::get('/mart-items/by-category-only', [MartItemController::class, 'getItemsByCategoryOnly']);
-Route::get('/mart-items/by-vendor', [MartItemController::class, 'getItemsByVendor']);
-Route::get('/mart-items/by-section', [MartItemController::class, 'getItemsBySection']);
-Route::get('/mart-items/all', [MartItemController::class, 'getMartItems']);
-Route::get('/mart-items/by-brand', [MartItemController::class, 'getItemsByBrand']);
-Route::get('/mart-items/sections', [MartItemController::class, 'getUniqueSections']);
+    Route::get('/mart-items/trending', [MartItemController::class, 'getTrendingItems']);
+    Route::get('/mart-items/featured', [MartItemController::class, 'getFeaturedItems']);
+    Route::get('/mart-items/on-sale', [MartItemController::class, 'getItemsOnSale']);
+    Route::get('/mart-items/search', [MartItemController::class, 'searchItems']);
+    Route::get('/mart-items/by-category', [MartItemController::class, 'getItemsByCategory']);
+    Route::get('/mart-items/by-category-only', [MartItemController::class, 'getItemsByCategoryOnly']);
+    Route::get('/mart-items/by-vendor', [MartItemController::class, 'getItemsByVendor']);
+    Route::get('/mart-items/by-section', [MartItemController::class, 'getItemsBySection']);
+    Route::get('/mart-items/all', [MartItemController::class, 'getMartItems']);
+    Route::get('/mart-items/by-brand', [MartItemController::class, 'getItemsByBrand']);
+    Route::get('/mart-items/sections', [MartItemController::class, 'getUniqueSections']);
     Route::get('/mart-items/getmartcategory', [MartItemController::class, 'getmartcategory']);
     Route::get('/mart-items/categoryhome', [MartItemController::class, 'getcategoryhome']);
     Route::get('/mart-items/sub_category', [MartItemController::class, 'getSubcategoriesByParent']);
@@ -265,7 +270,7 @@ Route::get('/mart-items/sections', [MartItemController::class, 'getUniqueSection
 
 
 Route::middleware('auth:sanctum')->group(function () {
-Route::get('/vendor/attributes', [SettingsApiController::class, 'getVendorAttributes']);
+    Route::get('/vendor/attributes', [SettingsApiController::class, 'getVendorAttributes']);
 });
 
 
@@ -304,7 +309,6 @@ Route::prefix('firestore')->group(function () {
 });
 
 Route::middleware('auth:sanctum')->group(function () {
-
     Route::get('/products', [ProductController::class, 'getAllPublishedProducts']);
     Route::get('/order/{id}/tracking', [OrderApiController::class, 'track']);
 

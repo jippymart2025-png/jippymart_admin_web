@@ -12,6 +12,57 @@
 .table-danger {
     background-color: #f8d7da !important;
 }
+/* Publish toggle switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+}
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+input:checked + .slider {
+    background-color: #2196F3;
+}
+input:focus + .slider {
+    box-shadow: 0 0 1px #2196F3;
+}
+input:checked + .slider:before {
+    -webkit-transform: translateX(26px);
+    -ms-transform: translateX(26px);
+    transform: translateX(26px);
+}
+.slider.round {
+    border-radius: 34px;
+}
+.slider.round:before {
+    border-radius: 50%;
+}
 </style>
 <div class="page-wrapper">
     <div class="row page-titles">
@@ -114,14 +165,14 @@
                                     </a>
                                 </div>
                                 <div class="card-header-btn mr-3">
-                                    <select id="promotion_vtype_filter" class="form-control">
+                                    <select id="vtype_filter" class="form-control">
                                         <option value="">All Types</option>
                                         <option value="restaurant">Restaurant</option>
                                         <option value="mart">Mart</option>
                                     </select>
                                 </div>
                                 <div class="card-header-btn">
-                                    <select id="promotion_zone_filter" class="form-control">
+                                    <select id="zone_filter" class="form-control">
                                         <option value="">All Zones</option>
                                     </select>
                                 </div>
@@ -189,16 +240,18 @@ function isExpired(endTime) {
 }
 
 function renderTable(promotions) {
+    console.log('📊 Rendering ' + promotions.length + ' promotions');
+
     var tbody = '';
     var visibleCount = 0;
     promotions.forEach(function(promo) {
         var isExpiredPromo = promo.isExpired || false;
         var expiredText = isExpiredPromo ? '<br><span class="badge badge-danger">EXPIRED</span>' : '';
         var rowClass = isExpiredPromo ? 'table-danger' : '';
-        
+
         var typeText = promo.vType ? (promo.vType.charAt(0).toUpperCase() + promo.vType.slice(1)) : '-';
         var zoneText = promo.zone_name || '-';
-        
+
         tbody += '<tr class="' + rowClass + '">' +
             '<td class="delete-all"><input type="checkbox" id="is_open_' + promo.id + '" class="is_open" dataId="' + promo.id + '"><label class="col-3 control-label" for="is_open_' + promo.id + '"></label></td>' +
             '<td>' + typeText + '</td>' +
@@ -223,7 +276,8 @@ function renderTable(promotions) {
         visibleCount++;
     });
     $('#promotion-table-body').html(tbody);
-    $('.promotion_count').text(visibleCount);
+
+    console.log('✅ Table rendered with ' + visibleCount + ' rows');
 }
 
 function editUrl(id) {
@@ -231,8 +285,9 @@ function editUrl(id) {
 }
 
 function loadPromotions() {
+    console.log('📡 Loading promotions...', { vtype: selectedVTypeFilter, zone: selectedZoneFilter });
     jQuery('#data-table_processing').show();
-    
+
     $.ajax({
         url: '{{ route('promotions.data') }}',
         method: 'GET',
@@ -241,13 +296,24 @@ function loadPromotions() {
             zone_filter: selectedZoneFilter
         },
         success: function(response) {
+            console.log('📥 Promotions response:', response);
+
             if (response.success) {
                 renderTable(response.data);
                 jQuery('#data-table_processing').hide();
-                
+
+                // Update count display
+                if (response.stats && response.stats.total) {
+                    $('.promotion_count').text(response.stats.total);
+                    console.log('📊 Total promotions:', response.stats.total);
+                } else {
+                    $('.promotion_count').text(response.data.length);
+                }
+
                 $('#promotionsTable').DataTable({
                     destroy: true,
-                    pageLength: 10,
+                    pageLength: 30,
+                    lengthMenu: [[10, 25, 30, 50, 100, -1], [10, 25, 30, 50, 100]],
                     responsive: true,
                     searching: true,
                     ordering: true,
@@ -263,18 +329,36 @@ function loadPromotions() {
                 });
             } else {
                 jQuery('#data-table_processing').hide();
+                console.error('❌ Error loading promotions:', response.error);
                 alert('Error loading promotions: ' + response.error);
             }
         },
         error: function(xhr, status, error) {
             jQuery('#data-table_processing').hide();
-            console.error('Error loading promotions:', error);
+            console.error('❌ Error loading promotions:', xhr);
             alert('Error loading promotions');
         }
     });
 }
 
 $(document).ready(function() {
+    console.log('📡 Initializing Promotions page...');
+
+    // Check for flash messages
+    @if(session('success'))
+        console.log('✅ Success message:', '{{ session('success') }}');
+        if (typeof toastr !== 'undefined') {
+            toastr.success('{{ session('success') }}');
+        }
+    @endif
+
+    @if(session('error'))
+        console.log('❌ Error message:', '{{ session('error') }}');
+        if (typeof toastr !== 'undefined') {
+            toastr.error('{{ session('error') }}');
+        }
+    @endif
+
     loadPromotions();
 
     // Load zones for filter
@@ -284,20 +368,28 @@ $(document).ready(function() {
         success: function(response) {
             if (response.success) {
                 response.data.forEach(function(zone) {
-                    $('#promotion_zone_filter').append('<option value="'+zone.id+'">'+zone.name+'</option>');
+                    $('#zone_filter').append('<option value="'+zone.id+'">'+zone.name+'</option>');
                 });
+                console.log('✅ Loaded ' + response.data.length + ' zones for filter');
             }
+        },
+        error: function(xhr) {
+            console.error('❌ Error loading zones:', xhr);
         }
     });
 
-    $(document).on('change', '#promotion_vtype_filter', function() {
+    $(document).on('change', '#vtype_filter', function() {
         selectedVTypeFilter = ($(this).val() || '').toString().toLowerCase();
+        console.log('🔍 Type filter changed:', selectedVTypeFilter);
         loadPromotions();
     });
-    $(document).on('change', '#promotion_zone_filter', function() {
+
+    $(document).on('change', '#zone_filter', function() {
         selectedZoneFilter = ($(this).val() || '').toString();
+        console.log('🔍 Zone filter changed:', selectedZoneFilter);
         loadPromotions();
     });
+
 
     // Select all checkboxes
     $("#is_active").click(function () {
@@ -307,13 +399,18 @@ $(document).ready(function() {
     // Delete selected
     $("#deleteAll").click(function () {
         if ($('#promotionsTable .is_open:checked').length) {
+            var selectedCount = $('#promotionsTable .is_open:checked').length;
+
+            console.log('🗑️ Bulk delete promotions requested:', { count: selectedCount });
+
             if (confirm("Are you sure you want to delete selected promotions?")) {
                 jQuery("#data-table_processing").show();
+
                 var ids = [];
                 $('#promotionsTable .is_open:checked').each(function () {
                     ids.push($(this).attr('dataId'));
                 });
-                
+
                 $.ajax({
                     url: '{{ route('promotions.bulk-delete') }}',
                     method: 'POST',
@@ -322,16 +419,31 @@ $(document).ready(function() {
                         ids: ids
                     },
                     success: function(response) {
+                        console.log('✅ Bulk delete completed:', response);
+
                         if (response.success) {
+                            // Log activity
+                            if (typeof logActivity === 'function') {
+                                logActivity('promotions', 'bulk_deleted', 'Bulk deleted ' + (response.deleted || selectedCount) + ' promotions');
+                            }
+
+                            // Reload table
                             loadPromotions();
+
+                            if (typeof toastr !== 'undefined') {
+                                toastr.success('Deleted ' + (response.deleted || selectedCount) + ' promotions');
+                            } else {
+                                alert('Promotions deleted successfully');
+                            }
                         } else {
                             alert('Error deleting promotions: ' + response.error);
                         }
-                        jQuery("#data-table_processing").hide();
                     },
-                    error: function(xhr, status, error) {
-                        console.error('Error deleting promotions:', error);
-                        alert('Error deleting promotions');
+                    error: function(xhr) {
+                        console.error('❌ Bulk delete error:', xhr);
+                        alert('Error deleting promotions: ' + (xhr.responseJSON?.error || xhr.statusText));
+                    },
+                    complete: function() {
                         jQuery("#data-table_processing").hide();
                     }
                 });
@@ -342,10 +454,15 @@ $(document).ready(function() {
     });
 
     // Single delete
-    $(document).on("click", "a[name='promotion-delete']", function() {
-        var id = this.id;
+    $(document).on("click", "a[name='promotion-delete'], .delete-btn", function() {
+        var id = this.id || $(this).data('id');
+        var promotionName = $(this).closest('tr').find('td').eq(3).text().trim() + ' - ' + $(this).closest('tr').find('td').eq(4).text().trim();
+
+        console.log('🗑️ Delete promotion clicked:', { id: id, name: promotionName });
+
         if (confirm('Are you sure you want to delete this promotion?')) {
             jQuery('#data-table_processing').show();
+
             $.ajax({
                 url: '{{ route('promotions.destroy', ['id' => 'PROMOTION_ID']) }}'.replace('PROMOTION_ID', id),
                 method: 'DELETE',
@@ -353,16 +470,33 @@ $(document).ready(function() {
                     _token: '{{ csrf_token() }}'
                 },
                 success: function(response) {
+                    console.log('✅ Promotion deleted successfully:', response);
+
                     if (response.success) {
-                        loadPromotions();
+                        // Log activity
+                        if (typeof logActivity === 'function') {
+                            logActivity('promotions', 'deleted', 'Deleted promotion: ' + promotionName);
+                        }
+
+                        if (typeof toastr !== 'undefined') {
+                            toastr.success(response.message || 'Promotion deleted successfully');
+                        } else {
+                            alert('Promotion deleted successfully');
+                        }
+
+                        // ✅ Reload page after success
+                        setTimeout(function() {
+                            window.location.reload();
+                        }, 800);
                     } else {
                         alert('Error deleting promotion: ' + response.error);
                     }
-                    jQuery('#data-table_processing').hide();
                 },
-                error: function(xhr, status, error) {
-                    console.error('Error deleting promotion:', error);
-                    alert('Error deleting promotion');
+                error: function(xhr) {
+                    console.error('❌ Delete error:', xhr);
+                    alert('Error deleting promotion: ' + (xhr.responseJSON?.error || xhr.statusText));
+                },
+                complete: function() {
                     jQuery('#data-table_processing').hide();
                 }
             });
@@ -374,49 +508,57 @@ $(document).ready(function() {
         var checkbox = $(this);
         var ischeck = checkbox.is(':checked');
         var id = checkbox.attr('id');
-        
-        // Debug logging
-        console.log('Toggle clicked - ID:', id, 'Checked:', ischeck, 'Type:', typeof ischeck);
-        
+        var promotionName = checkbox.closest('tr').find('td').eq(3).text().trim() + ' - ' + checkbox.closest('tr').find('td').eq(4).text().trim();
+
+        console.log('🔄 Toggle promotion availability:', { id: id, checked: ischeck, name: promotionName });
+
         if (!id || id === '') {
             alert('Error: Promotion ID is missing');
             checkbox.prop('checked', !ischeck);
             return;
         }
-        
-        // Build URL manually to ensure it works
+
+        // Disable checkbox during update
+        checkbox.prop('disabled', true);
+
         var url = '{{ url("/promotions/toggle") }}/' + encodeURIComponent(id);
-        console.log('Toggle URL:', url);
-        console.log('Sending data:', {isAvailable: ischeck ? 1 : 0});
-        
+
         $.ajax({
             url: url,
             method: 'POST',
             data: {
                 _token: '{{ csrf_token() }}',
-                isAvailable: ischeck ? 1 : 0  // Send as integer
+                isAvailable: ischeck ? 1 : 0
             },
             success: function(response) {
-                console.log('Toggle response:', response);
+                console.log('✅ Promotion availability toggled:', response);
+
                 if (response.success) {
-                    console.log('✅ Successfully updated. Affected rows:', response.affected_rows);
-                    if (response.affected_rows === 0) {
-                        console.warn('⚠️ Warning: No rows were affected. Value might already be the same.');
+                    // Update checkbox to match server state
+                    checkbox.prop('checked', !!response.isAvailable);
+
+                    // Log activity
+                    var action = response.isAvailable ? 'activated' : 'deactivated';
+                    if (typeof logActivity === 'function') {
+                        logActivity('promotions', action, action.charAt(0).toUpperCase() + action.slice(1) + ' promotion: ' + promotionName);
                     }
-                    // Reload the table to reflect changes
-                    loadPromotions();
+
+                    if (typeof toastr !== 'undefined') {
+                        toastr.success(response.message || 'Promotion updated successfully');
+                    }
                 } else {
-                    alert('Error updating promotion availability: ' + (response.error || 'Unknown error'));
-                    // Revert checkbox state
+                    console.error('❌ Toggle failed:', response);
+                    alert('Error: ' + (response.error || 'Unknown error'));
                     checkbox.prop('checked', !ischeck);
                 }
             },
-            error: function(xhr, status, error) {
-                console.error('❌ Error updating promotion availability:', error);
-                console.error('Response:', xhr.responseText);
-                alert('Error updating promotion availability: ' + error);
-                // Revert checkbox state
+            error: function(xhr) {
+                console.error('❌ Toggle error:', xhr);
+                alert('Error updating promotion: ' + (xhr.responseJSON?.error || xhr.statusText));
                 checkbox.prop('checked', !ischeck);
+            },
+            complete: function() {
+                checkbox.prop('disabled', false);
             }
         });
     });

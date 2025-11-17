@@ -41,48 +41,42 @@ class PromotionController extends Controller
             $vtypeFilter = $request->input('vtype_filter', '');
             $zoneFilter = $request->input('zone_filter', '');
 
-            // Check if vType and zoneId columns exist
-            $columns = DB::getSchemaBuilder()->getColumnListing('promotions');
-            $hasVType = in_array('vType', $columns);
-            $hasZoneId = in_array('zoneId', $columns);
-
+            // ✅ Base query
             $query = DB::table('promotions as p')
-                ->leftJoin('vendors as v', 'v.id', '=', 'p.restaurant_id');
+                ->leftJoin('vendors as v', 'v.id', '=', 'p.restaurant_id')
+                ->leftJoin('zone as z', 'z.id', '=', 'p.zoneId')
+                ->select(
+                    'p.*',
+                    'v.title as vendor_name',
+                    'z.name as zone_name'
+                );
 
-            // Only join zone table if zoneId column exists
-            if ($hasZoneId) {
-                $query->leftJoin('zone as z', 'z.id', '=', 'p.zoneId');
-            }
-
-            // Select columns
-            $selectColumns = ['p.*', 'v.title as vendor_name'];
-            if ($hasZoneId) {
-                $selectColumns[] = 'z.name as zone_name';
-            }
-            $query->select($selectColumns);
-
-            // Apply filters only if columns exist
-            if (!empty($vtypeFilter) && $hasVType) {
+            // ✅ Apply filters directly on promotions table
+            if (!empty($vtypeFilter)) {
                 $query->where('p.vType', '=', $vtypeFilter);
             }
 
-            if (!empty($zoneFilter) && $hasZoneId) {
+            if (!empty($zoneFilter)) {
                 $query->where('p.zoneId', '=', $zoneFilter);
             }
 
+            // ✅ Count totals
+            $totalRecords = DB::table('promotions')->count();
+            $filteredRecords = (clone $query)->count();
+
+            // ✅ Fetch data
             $promotions = $query->orderBy('p.start_time', 'desc')->get();
 
-            // Process promotions to check expiry and format data
             $data = [];
             foreach ($promotions as $promo) {
                 $endTime = $this->parseDateTime($promo->end_time);
                 $isExpired = $endTime && $endTime < now();
 
-                $rowData = [
+                $data[] = [
                     'id' => $promo->id,
-                    'vType' => $hasVType ? ($promo->vType ?? '-') : '-',
-                    'zoneId' => $hasZoneId ? ($promo->zoneId ?? '') : '',
-                    'zone_name' => $hasZoneId ? ($promo->zone_name ?? '-') : '-',
+                    'vType' => $promo->vType ?? '-',
+                    'zoneId' => $promo->zoneId ?? '',
+                    'zone_name' => $promo->zone_name ?? '-',
                     'restaurant_id' => $promo->restaurant_id,
                     'restaurant_title' => $promo->restaurant_title ?? ($promo->vendor_name ?? '-'),
                     'product_id' => $promo->product_id,
@@ -95,25 +89,29 @@ class PromotionController extends Controller
                     'end_time' => $this->formatDateTime($promo->end_time),
                     'payment_mode' => $promo->payment_mode ?? 'prepaid',
                     'isAvailable' => $promo->isAvailable ? true : false,
-                    'isExpired' => $isExpired
+                    'isExpired' => $isExpired,
                 ];
-
-                $data[] = $rowData;
             }
 
             return response()->json([
                 'success' => true,
                 'data' => $data,
-                'count' => count($data)
+                'count' => count($data),
+                'stats' => [
+                    'total' => $totalRecords,
+                    'filtered' => $filteredRecords,
+                ],
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error fetching promotions: ' . $e->getMessage());
+            \Log::error('❌ Error fetching promotions: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
+
+
 
     /**
      * Get zones for dropdown
@@ -189,29 +187,37 @@ class PromotionController extends Controller
                 ], 400);
             }
 
+            \Log::info('🔍 Getting products for vendor:', ['vendor_id' => $vendorId, 'vType' => $vType]);
+
             $products = [];
 
             if (strtolower($vType) === 'mart') {
-                // Get mart items
+                // Get mart items - Fixed column names
                 $products = DB::table('mart_items')
                     ->where('vendorID', '=', $vendorId)
-                    ->select('id', 'item_name as name', 'item_price as price', 'dis_price as disPrice')
-                    ->orderBy('item_name', 'asc')
+                    ->where('publish', 1) // Only published items
+                    ->select('id', 'name', 'price', 'disPrice')
+                    ->orderBy('name', 'asc')
                     ->get();
+
+                \Log::info('📦 Found ' . count($products) . ' mart items');
             } else {
                 // Get restaurant products
                 $products = DB::table('vendor_products')
                     ->where('vendorID', '=', $vendorId)
+                    ->where('publish', 1) // Only published products
                     ->select('id', 'name', 'price', 'disPrice')
                     ->orderBy('name', 'asc')
                     ->get();
+
+                \Log::info('📦 Found ' . count($products) . ' restaurant products');
             }
 
             // Format products with display price
             $formattedProducts = $products->map(function ($product) {
-                $displayPrice = $product->disPrice && $product->disPrice > 0 
-                    ? $product->disPrice 
-                    : $product->price;
+                $displayPrice = $product->disPrice && $product->disPrice > 0
+                    ? $product->disPrice
+                    : ($product->price ?? 0);
 
                 return [
                     'id' => $product->id,
@@ -225,6 +231,7 @@ class PromotionController extends Controller
                 'data' => $formattedProducts
             ]);
         } catch (\Exception $e) {
+            \Log::error('❌ Error getting products:', ['error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
                 'error' => $e->getMessage()
@@ -267,7 +274,7 @@ class PromotionController extends Controller
             }
 
             $data = $request->validate($rules);
-            
+
             // Convert isAvailable to boolean before processing
             $data['isAvailable'] = filter_var($data['isAvailable'], FILTER_VALIDATE_BOOLEAN);
 
@@ -295,9 +302,12 @@ class PromotionController extends Controller
 
             // Insert promotion and get the auto-generated ID
             $insertedId = DB::table('promotions')->insertGetId($data);
-            
-            \Log::info('Promotion inserted successfully', [
-                'id' => $insertedId
+
+            // Log activity
+            \Log::info('✅ Promotion created:', [
+                'id' => $insertedId,
+                'restaurant' => $data['restaurant_title'],
+                'product' => $data['product_title']
             ]);
 
             return response()->json([
@@ -306,7 +316,7 @@ class PromotionController extends Controller
                 'id' => $insertedId
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error creating promotion: ' . $e->getMessage());
+            \Log::error('❌ Error creating promotion:', ['error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
                 'error' => $e->getMessage()
@@ -349,7 +359,7 @@ class PromotionController extends Controller
             }
 
             $data = $request->validate($rules);
-            
+
             // Convert isAvailable to boolean before processing
             $data['isAvailable'] = filter_var($data['isAvailable'], FILTER_VALIDATE_BOOLEAN);
 
@@ -378,12 +388,19 @@ class PromotionController extends Controller
             // Update promotion
             DB::table('promotions')->where('id', $id)->update($data);
 
+            // Log activity
+            \Log::info('✅ Promotion updated:', [
+                'id' => $id,
+                'restaurant' => $data['restaurant_title'],
+                'product' => $data['product_title']
+            ]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Promotion updated successfully'
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error updating promotion: ' . $e->getMessage());
+            \Log::error('❌ Error updating promotion:', ['id' => $id, 'error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
                 'error' => $e->getMessage()
@@ -392,26 +409,67 @@ class PromotionController extends Controller
     }
 
     /**
-     * Delete a promotion
+     * Delete a promotion (GET route - redirects to index)
+     */
+    public function delete($id)
+    {
+        try {
+            // Get promotion details before deleting
+            $promotion = DB::table('promotions')->where('id', $id)->first();
+
+            if (!$promotion) {
+                \Log::error('❌ Promotion not found for deletion:', ['id' => $id]);
+                return redirect()->route('promotions')->with('error', 'Promotion not found');
+            }
+
+            $deleted = DB::table('promotions')->where('id', $id)->delete();
+
+            // Log activity
+            \Log::info('✅ Promotion deleted:', [
+                'id' => $id,
+                'restaurant' => $promotion->restaurant_title ?? 'Unknown',
+                'product' => $promotion->product_title ?? 'Unknown'
+            ]);
+
+            return redirect()->route('promotions')->with('success', 'Promotion deleted successfully');
+        } catch (\Exception $e) {
+            \Log::error('❌ Error deleting promotion:', ['id' => $id, 'error' => $e->getMessage()]);
+            return redirect()->route('promotions')->with('error', 'Error deleting promotion: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Delete a promotion (DELETE route - returns JSON)
      */
     public function destroy($id)
     {
         try {
-            $deleted = DB::table('promotions')->where('id', $id)->delete();
+            // Get promotion details before deleting
+            $promotion = DB::table('promotions')->where('id', $id)->first();
 
-            if (!$deleted) {
+            if (!$promotion) {
+                \Log::error('❌ Promotion not found for deletion:', ['id' => $id]);
                 return response()->json([
                     'success' => false,
                     'error' => 'Promotion not found'
                 ], 404);
             }
 
+            $deleted = DB::table('promotions')->where('id', $id)->delete();
+
+            // Log activity
+            \Log::info('✅ Promotion deleted:', [
+                'id' => $id,
+                'restaurant' => $promotion->restaurant_title ?? 'Unknown',
+                'product' => $promotion->product_title ?? 'Unknown'
+            ]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Promotion deleted successfully'
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error deleting promotion: ' . $e->getMessage());
+            \Log::error('❌ Error deleting promotion:', ['id' => $id, 'error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
                 'error' => $e->getMessage()
@@ -434,14 +492,18 @@ class PromotionController extends Controller
                 ], 400);
             }
 
-            DB::table('promotions')->whereIn('id', $ids)->delete();
+            $deleted = DB::table('promotions')->whereIn('id', $ids)->delete();
+
+            // Log activity
+            \Log::info('✅ Promotions bulk deleted:', ['count' => $deleted, 'ids' => $ids]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Promotions deleted successfully'
+                'message' => 'Promotions deleted successfully',
+                'deleted' => $deleted
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error bulk deleting promotions: ' . $e->getMessage());
+            \Log::error('❌ Error bulk deleting promotions:', ['error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
                 'error' => $e->getMessage()
@@ -456,69 +518,58 @@ class PromotionController extends Controller
     {
         try {
             $isAvailable = $request->input('isAvailable');
-            
+
             // Convert ID to string to match varchar column
             $id = (string) $id;
-            
+
             // Get current value first
             $currentPromotion = DB::table('promotions')->where('id', $id)->first();
-            
+
             if (!$currentPromotion) {
-                \Log::error('Promotion not found', ['id' => $id]);
+                \Log::error('❌ Promotion not found for toggle:', ['id' => $id]);
                 return response()->json([
                     'success' => false,
                     'error' => 'Promotion not found with ID: ' . $id
                 ], 404);
             }
-            
-            // Log incoming data
-            \Log::info('Toggle availability request', [
-                'id' => $id,
-                'id_type' => gettype($id),
-                'current_isAvailable' => $currentPromotion->isAvailable,
-                'requested_isAvailable' => $isAvailable,
-                'isAvailable_type' => gettype($isAvailable)
-            ]);
-            
+
             // Convert to integer (0 or 1) for MySQL tinyint column
             $isAvailableInt = (int) ($isAvailable ? 1 : 0);
-            
-            \Log::info('Converted value', [
-                'isAvailableInt' => $isAvailableInt,
-                'current_value' => $currentPromotion->isAvailable
+
+            \Log::info('🔄 Toggling promotion availability:', [
+                'id' => $id,
+                'restaurant' => $currentPromotion->restaurant_title ?? 'Unknown',
+                'product' => $currentPromotion->product_title ?? 'Unknown',
+                'current' => $currentPromotion->isAvailable,
+                'new' => $isAvailableInt
             ]);
 
             // Perform update
             $affected = DB::table('promotions')
                 ->where('id', $id)
                 ->update(['isAvailable' => $isAvailableInt]);
-            
-            \Log::info('Update result', [
-                'affected_rows' => $affected,
-                'id' => $id,
-                'sql' => DB::getQueryLog()
-            ]);
-            
+
             // Verify the update
             $updatedPromotion = DB::table('promotions')->where('id', $id)->first();
-            \Log::info('After update verification', [
-                'new_isAvailable' => $updatedPromotion->isAvailable
+
+            // Log activity
+            $action = $isAvailableInt ? 'activated' : 'deactivated';
+            \Log::info('✅ Promotion availability toggled:', [
+                'id' => $id,
+                'action' => $action,
+                'affected_rows' => $affected
             ]);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Promotion availability updated',
-                'affected_rows' => $affected,
-                'current_value' => $currentPromotion->isAvailable,
-                'new_value' => $updatedPromotion->isAvailable,
-                'debug' => [
-                    'id' => $id,
-                    'requested' => $isAvailableInt
-                ]
+                'isAvailable' => $updatedPromotion->isAvailable,
+                'affected_rows' => $affected
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error toggling promotion availability: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
+            \Log::error('❌ Error toggling promotion availability:', [
+                'id' => $id,
+                'error' => $e->getMessage()
             ]);
             return response()->json([
                 'success' => false,

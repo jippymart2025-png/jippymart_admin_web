@@ -201,41 +201,50 @@
 
     var placeholderImage='';
     var zoneIdToName = {};
+    var zonesLoaded = false;
 
     // Load placeholder image from SQL
     placeholderImage = '{{ asset('images/placeholder.png') }}';
-
-    // Load zones from SQL
-    console.log('🌍 Loading zones from SQL...');
-    $.ajax({
-        url: '{{ route("vendors.zones") }}',
-        method: 'GET',
-        success: function(response) {
-            console.log('✅ Zones loaded from SQL:', response.data.length);
-            if (response.success && response.data) {
-                response.data.forEach(function(zone) {
-                    $('.zone_selector').append($("<option></option>")
-                        .attr("value", zone.id)
-                        .text(zone.name));
-                    zoneIdToName[zone.id] = zone.name;
-                    console.log('📍 Zone:', zone.name, 'ID:', zone.id);
-                });
-                window.zoneIdToName = zoneIdToName;
-                console.log('🗺️ Zone map created:', zoneIdToName);
-
-                // Initialize DataTable after zones are loaded
-                console.log('🚀 Initializing vendor DataTable...');
-                initializeVendorDataTable();
+        // Load zones from SQL and create mapping
+        var loadZonesPromise = new Promise(function(resolve){
+        console.log('🔄 Loading zones from SQL for restaurants...');
+        $.ajax({
+            url: '{{ route("zone.data") }}',
+            method: 'GET',
+            success: function(response) {
+                console.log('📊 Zones API response:', response);
+        if (response.data && response.data.length > 0) {
+                    response.data.forEach(function(zone) {
+                        console.log('Zone found:', zone.name, 'ID:', zone.id);
+                        // Store zone ID to name mapping (support numeric & string lookups)
+                        zoneIdToName[zone.id] = zone.name;
+                        zoneIdToName[String(zone.id)] = zone.name;
+                        // Add zone to selector
+                        $('.zone_selector').append($("<option></option>")
+                            .attr("value", zone.id)
+                            .text(zone.name));
+                    });
+                    console.log('✅ Zones loaded from SQL (' + response.data.length + ' zones):', zoneIdToName);
+                } else {
+                    console.warn('⚠️ No zones found in database');
+                }
+                // Enable the zone selector after zones are loaded
+                $('.zone_selector').prop('disabled', false);
+                zonesLoaded = true;
+                resolve(zoneIdToName);
+            },
+            error: function(error) {
+                console.error('❌ Error loading zones from SQL:', error);
+                $('.zone_selector').prop('disabled', false);
+                zonesLoaded = true;
+                resolve(zoneIdToName);
             }
-        },
-        error: function(error) {
-            console.error('❌ Error fetching zones:', error);
-            // Still initialize DataTable even if zones fail
-            console.log('🚀 Initializing vendor DataTable (without zones)...');
-            initializeVendorDataTable();
-        }
+        });
     });
-
+    loadZonesPromise.then(function(zoneIdToName) {
+        console.log('🗺️ Zone map created:', zoneIdToName);
+        initializeVendorDataTable();
+    });
     // Move DataTable initialization into a function
     function initializeVendorDataTable() {
         $(document.body).on('click','.redirecttopage',function() {
@@ -260,6 +269,8 @@
                 { key: 'fullName', header: "{{trans('lang.vendor_info')}}" },
                 { key: 'email', header: "{{trans('lang.email')}}" },
                 { key: 'phoneNumber', header: "{{trans('lang.phone_number')}}" },
+                { key: 'zone management', header: "{{ trans('lang.zone') }}"},
+                { key: 'vendor type', header: "{{ trans('lang.vendor_type') }}"},
                 { key: 'activePlanName', header: "{{trans('lang.active_subscription_plan')}}" },
                 { key: 'subscriptionExpiryDate', header: "{{trans('lang.plan_expire_at')}}" },
                 { key: 'createdAt', header: "{{trans('lang.created_at')}}" },
@@ -269,17 +280,19 @@
 
         try {
             const table=$('#userTable').DataTable({
-                pageLength: 10,
+                pageLength: 30,
+                lengthMenu: [[10,30, 50, 100], [10,30, 50, 100,]],
                 processing: false,
                 serverSide: true,
                 responsive: true,
                 searching: true,
+                searchDelay: 300,
                 info: true,
                 paging: true,
                 ajax: function(data,callback,settings) {
                     const start=data.start;
                     const length=data.length;
-                    const searchValue=data.search.value.toLowerCase();
+                    const searchValue=data.search.value;
 
                     if(searchValue.length>=3||searchValue.length===0) {
                         $('#data-table_processing').show();
@@ -314,15 +327,18 @@
                         success: function(response) {
                             console.log('📊 Found', response.data.length, 'vendors from SQL');
 
-                            if(response.data.length === 0) {
+                            const rawRecords = Array.isArray(response.data) ? response.data : [];
+
+                            if(rawRecords.length === 0) {
                                 $('.vendor_count').text(0);
                                 console.log("No vendors found in SQL database.");
                                 $('#data-table_processing').hide();
                                 callback({
                                     draw: data.draw,
-                                    recordsTotal: 0,
-                                    recordsFiltered: 0,
-                                    data: []
+                                    recordsTotal: response.recordsTotal || 0,
+                                    recordsFiltered: response.recordsFiltered || 0,
+                                    data: [],
+                                    filteredData: []
                                 });
                                 return;
                             }
@@ -330,7 +346,7 @@
                             let records = [];
 
                             // Process each vendor
-                            response.data.forEach(function(vendor) {
+                            rawRecords.forEach(function(vendor) {
                                 var rowData = buildHTML(vendor);
                                 records.push(rowData);
                             });
@@ -342,7 +358,8 @@
                                 draw: data.draw,
                                 recordsTotal: response.recordsTotal,
                                 recordsFiltered: response.recordsFiltered,
-                                data: records
+                                data: records,
+                                filteredData: rawRecords
                             });
                         },
                         error: function(error) {
@@ -352,7 +369,8 @@
                                 draw: data.draw,
                                 recordsTotal: 0,
                                 recordsFiltered: 0,
-                                data: []
+                                data: [],
+                                filteredData: []
                             });
                         }
                     });
@@ -386,23 +404,26 @@
                             {
                                 extend: 'excelHtml5',
                                 text: 'Export Excel',
-                                action: function (e, dt, button, config) {
-                                    exportData(dt, 'excel',fieldConfig);
-                                }
+                                exportOptions: {
+                                    columns: ':visible:not(:first-child):not(:last-child)'
+                                },
+                                title: 'vendors',
                             },
                             {
                                 extend: 'pdfHtml5',
                                 text: 'Export PDF',
-                                action: function (e, dt, button, config) {
-                                    exportData(dt, 'pdf',fieldConfig);
-                                }
+                                exportOptions: {
+                                    columns: ':visible:not(:first-child):not(:last-child)'
+                                },
+                                title: 'vendors',
                             },
                             {
                                 extend: 'csvHtml5',
                                 text: 'Export CSV',
-                                action: function (e, dt, button, config) {
-                                    exportData(dt, 'csv',fieldConfig);
-                                }
+                                exportOptions: {
+                                    columns: ':visible:not(:first-child):not(:last-child)'
+                                },
+                                title: 'vendors ',
                             }
                         ]
                     }
@@ -413,6 +434,14 @@
                     $('.dataTables_filter label').contents().filter(function() {
                         return this.nodeType === 3;
                     }).remove();
+                    // Ensure the built-in search input triggers server-side search with debounce
+                    const debounced = debounce(function(){
+                        const val = $('.dataTables_filter input').val();
+                        table.search(val).draw();
+                    }, 300);
+                    $('.dataTables_filter input').off('input.dtsearch').on('input.dtsearch', function() {
+                        debounced();
+                    });
                 },
                 error: function(xhr, error, thrown) {
                     console.error('DataTable error:', error);
@@ -435,16 +464,7 @@
             };
         }
 
-        $('#search-input').on('input',debounce(function() {
-            const searchValue=$(this).val();
-            if(searchValue.length>=3) {
-                $('#data-table_processing').show();
-                table.search(searchValue).draw();
-            } else if(searchValue.length===0) {
-                $('#data-table_processing').show();
-                table.search('').draw();
-            }
-        },300));
+        // Remove legacy custom input binding (no #search-input exists); handled via DataTables input above.
     }
 
     $('.vendor_type_selector').select2({
@@ -509,6 +529,7 @@
         console.log('  Status:', status);
         console.log('  Vendor Type:', vendorType);
         console.log('  Zone:', zone);
+        console.log('  Zone ID to Name:', zoneIdToName);
         console.log('  Zone Sort:', zoneSort);
 
         // Store filters for use in ajax function
@@ -553,12 +574,24 @@
         // Column 3: Phone Number
         html.push(val.phoneNumber || "");
 
-        // Column 4: Zone
-        if(val.zoneId && window.zoneIdToName && window.zoneIdToName[val.zoneId]) {
-            html.push(window.zoneIdToName[val.zoneId]);
+        // Column 4: Zone - Display zone name from backend response
+        var zoneInfo = '';
+        if (val.zoneName && val.zoneName.trim() !== '') {
+            // Zone name provided by backend
+            zoneInfo = '<span class="badge badge-info py-2 px-3">' + val.zoneName + '</span>';
+            console.log('✅ Zone:', val.zoneName, '(ID: ' + (val.zoneId || 'N/A') + ')');
+        } else if (val.zoneId && val.zoneId !== '' && val.zoneId !== 'null') {
+            // Zone ID exists but no name - fallback to showing ID
+            zoneInfo = '<span class="badge badge-warning py-2 px-3">Zone ID: ' + val.zoneId + '</span>';
+            console.warn('⚠️ Zone ID "' + val.zoneId + '" has no name');
         } else {
-            html.push('<span class="text-muted">No Zone</span>');
+            // No zone assigned
+            zoneInfo = '<span style="color: #999; font-style: italic;">Not Assigned</span>';
+            console.log('ℹ️ No zone assigned for vendor:', val.fullName);
         }
+        html.push(zoneInfo);
+
+
 
         // Column 5: Vendor Type
         if(val.vType) {

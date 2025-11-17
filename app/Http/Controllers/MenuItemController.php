@@ -40,10 +40,19 @@ class MenuItemController extends Controller
         $search = strtolower((string) data_get($request->input('search'), 'value', ''));
         $zoneFilter = (string) $request->input('zoneId', '');
 
+        // Base query
+        $baseQ = DB::table('menu_items');
+        $totalRecords = $baseQ->count();
+
+        // Filtered query
         $q = DB::table('menu_items');
+
+        // Apply zone filter
         if ($zoneFilter !== '') {
             $q->where('zoneId', $zoneFilter);
         }
+
+        // Apply search filter
         if ($search !== '') {
             $q->where(function($qq) use ($search){
                 $qq->where('title','like','%'.$search.'%')
@@ -51,8 +60,9 @@ class MenuItemController extends Controller
                    ->orWhere('zoneTitle','like','%'.$search.'%');
             });
         }
-        $total = (clone $q)->count();
-        $rows = $q->orderBy('title','asc')->offset($start)->limit($length)->get();
+
+        $filteredRecords = (clone $q)->count();
+        $rows = $q->orderBy('set_order','asc')->orderBy('title','asc')->offset($start)->limit($length)->get();
 
         $items = [];
         foreach ($rows as $r) {
@@ -60,16 +70,21 @@ class MenuItemController extends Controller
                 'id' => $r->id,
                 'title' => (string) ($r->title ?? ''),
                 'position' => (string) ($r->position ?? ''),
-                'zoneTitle' => (string) ($r->zoneTitle ?? ''),
+                'zoneTitle' => (string) ($r->zoneTitle ?? 'No Zone'),
                 'is_publish' => (bool) ($r->is_publish ?? 0),
                 'photo' => (string) ($r->photo ?? ''),
             ];
         }
+
         return response()->json([
             'draw' => $draw,
-            'recordsTotal' => $total,
-            'recordsFiltered' => $total,
+            'recordsTotal' => $totalRecords,
+            'recordsFiltered' => $filteredRecords,
             'data' => $items,
+            'stats' => [
+                'total' => $totalRecords,
+                'filtered' => $filteredRecords
+            ]
         ]);
     }
 
@@ -97,7 +112,8 @@ class MenuItemController extends Controller
         $id = (string) Str::uuid();
         $imageUrl = null;
         if ($request->hasFile('photo')) {
-            $imageUrl = Storage::url($request->file('photo')->store('public/uploads/menu-items'));
+            $path = $request->file('photo')->store('public/uploads/menu-items');
+            $imageUrl = asset('storage/' . str_replace('public/', '', $path));
         }
         MenuItem::create([
             'id' => $id,
@@ -111,6 +127,10 @@ class MenuItemController extends Controller
             'zoneId' => $request->input('zoneId'),
             'zoneTitle' => $request->input('zoneTitle'),
         ]);
+
+        // Log activity
+        \Log::info('✅ Menu item created:', ['id' => $id, 'title' => $request->input('title')]);
+
         return response()->json(['success'=>true,'id'=>$id]);
     }
 
@@ -129,7 +149,8 @@ class MenuItemController extends Controller
         ]);
         $imageUrl = $mi->photo;
         if ($request->hasFile('photo')) {
-            $imageUrl = Storage::url($request->file('photo')->store('public/uploads/menu-items'));
+            $path = $request->file('photo')->store('public/uploads/menu-items');
+            $imageUrl = asset('storage/' . str_replace('public/', '', $path));
         }
         $mi->update([
             'title' => $request->input('title',''),
@@ -142,6 +163,10 @@ class MenuItemController extends Controller
             'zoneId' => $request->input('zoneId'),
             'zoneTitle' => $request->input('zoneTitle'),
         ]);
+
+        // Log activity
+        \Log::info('✅ Menu item updated:', ['id' => $id, 'title' => $request->input('title')]);
+
         return response()->json(['success'=>true]);
     }
 
@@ -153,6 +178,11 @@ class MenuItemController extends Controller
         }
         $doc->is_publish = $doc->is_publish ? 0 : 1;
         $doc->save();
+
+        // Log activity
+        $action = $doc->is_publish ? 'published' : 'unpublished';
+        \Log::info('✅ Menu item ' . $action . ':', ['id' => $id, 'title' => $doc->title]);
+
         return response()->json(['success' => true, 'is_publish' => (bool) $doc->is_publish]);
     }
 
@@ -160,10 +190,16 @@ class MenuItemController extends Controller
     {
         $doc = MenuItem::find($id);
         if (!$doc) {
-            return response()->json(['success' => false], 404);
+            return response()->json(['success' => false, 'message' => 'Menu item not found'], 404);
         }
+
+        $title = $doc->title;
         $doc->delete();
-        return response()->json(['success' => true]);
+
+        // Log activity
+        \Log::info('✅ Menu item deleted:', ['id' => $id, 'title' => $title]);
+
+        return response()->json(['success' => true, 'message' => 'Menu item deleted successfully']);
     }
 
     public function bulkDelete(Request $request)
@@ -172,8 +208,13 @@ class MenuItemController extends Controller
         if (empty($ids)) {
             return response()->json(['success' => false, 'message' => 'No ids'], 400);
         }
-        MenuItem::whereIn('id', $ids)->delete();
-        return response()->json(['success' => true]);
+
+        $count = MenuItem::whereIn('id', $ids)->delete();
+
+        // Log activity
+        \Log::info('✅ Menu items bulk deleted:', ['count' => $count, 'ids' => $ids]);
+
+        return response()->json(['success' => true, 'message' => $count . ' menu items deleted successfully', 'count' => $count]);
     }
 
     /**
@@ -183,7 +224,7 @@ class MenuItemController extends Controller
     {
         try {
             $zoneId = $request->input('zoneId', '');
-            
+
             $query = DB::table('vendors')
                 ->select('id', 'title', 'zoneId')
                 ->where('reststatus', 1)
@@ -215,7 +256,7 @@ class MenuItemController extends Controller
     {
         try {
             $storeId = $request->input('storeId', '');
-            
+
             $query = DB::table('vendor_products')
                 ->select('id', 'name', 'vendorID')
                 ->where('publish', 1)
@@ -236,6 +277,30 @@ class MenuItemController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching products'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all zones for dropdown
+     */
+    public function getZones()
+    {
+        try {
+            $zones = DB::table('zone')
+                ->where('publish', 1)
+                ->orderBy('name', 'asc')
+                ->get(['id', 'name']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $zones
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching zones: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching zones'
             ], 500);
         }
     }

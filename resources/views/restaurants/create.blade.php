@@ -155,7 +155,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                             <div class="form-group row width-50">
                                 <label class="col-3 control-label">{{trans('lang.restaurant_latitude')}}</label>
                                 <div class="col-7">
-                                    <input class="form-control restaurant_latitude" type="number" min="-90" max="90">
+                                    <input class="form-control restaurant_latitude" type="number" min="-90" max="90" step="any">
                                     <div class="form-text text-muted">
                                         {{ trans("lang.restaurant_latitude_help") }}
                                     </div>
@@ -165,7 +165,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                             <div class="form-group row width-50">
                                 <label class="col-3 control-label">{{trans('lang.restaurant_longitude')}}</label>
                                 <div class="col-7">
-                                    <input class="form-control restaurant_longitude" type="number" min="-180" max="180">
+                                    <input class="form-control restaurant_longitude" type="number" min="-180" max="180" step="any">
                                     <div class="form-text text-muted">
                                         {{ trans("lang.restaurant_longitude_help") }}
                                     </div>
@@ -961,11 +961,11 @@ foreach ($countries as $keycountry => $valuecountry) {
     var story_thumbnail_filename='';
     var storyCount=0;
     var restaurant_id = 'rest_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    
+
     var specialDiscountOfferisEnable = false;
     var currentCurrency='';
     var currencyAtRight=false;
-    
+
     // Load admin commission from SQL
     $.ajax({
         url: '/api/settings/AdminCommission',
@@ -982,50 +982,101 @@ foreach ($countries as $keycountry => $valuecountry) {
         }
     });
 
-    // Load zones from SQL with area data
-    console.log('Loading zones from SQL...');
-    $.ajax({
-        url: '{{ route("vendors.zones") }}',
-        method: 'GET',
-        success: function(response) {
-            console.log('Zones loaded:', response.data);
-            if (response.success && response.data) {
-                // Get full zone data including area from database
-                response.data.forEach(function(zone) {
-                    // Fetch complete zone data with area
-                    $.ajax({
-                        url: '/api/zone/' + zone.id,
-                        method: 'GET',
-                        success: function(zoneData) {
-                            var area = [];
-                            if (zoneData.area) {
-                                try {
-                                    var areaData = typeof zoneData.area === 'string' ? JSON.parse(zoneData.area) : zoneData.area;
-                                    if (Array.isArray(areaData)) {
-                                        areaData.forEach((location) => {
-                                            area.push({'latitude': location.latitude, 'longitude': location.longitude});
-                                        });
-                                    }
-                                } catch(e) {
-                                    console.error('Error parsing zone area:', e);
+    {{--// Load zones from SQL with area data--}}
+    {{--console.log('Loading zones from SQL...');--}}
+    {{--$.ajax({--}}
+    {{--    url: '{{ route("vendors.zones") }}',--}}
+    {{--    method: 'GET',--}}
+    {{--    success: function(response) {--}}
+    {{--        console.log('Zones loaded:', response.data);--}}
+    {{--        if (response.success && response.data) {--}}
+    {{--            // Get full zone data including area from database--}}
+    {{--            response.data.forEach(function(zone) {--}}
+    {{--                // Fetch complete zone data with area--}}
+    {{--                $.ajax({--}}
+    {{--                    url: '/api/zone/' + zone.id,--}}
+    {{--                    method: 'GET',--}}
+    {{--                    success: function(zoneData) {--}}
+    {{--                        var area = [];--}}
+    {{--                        if (zoneData.area) {--}}
+    {{--                            try {--}}
+    {{--                                var areaData = typeof zoneData.area === 'string' ? JSON.parse(zoneData.area) : zoneData.area;--}}
+    {{--                                if (Array.isArray(areaData)) {--}}
+    {{--                                    areaData.forEach((location) => {--}}
+    {{--                                        area.push({'latitude': location.latitude, 'longitude': location.longitude});--}}
+    {{--                                    });--}}
+    {{--                                }--}}
+    {{--                            } catch(e) {--}}
+    {{--                                console.error('Error parsing zone area:', e);--}}
+    {{--                            }--}}
+    {{--                        }--}}
+    {{--                        $('#zone').append($("<option></option>")--}}
+    {{--                            .attr("value", zoneData.id)--}}
+    {{--                            .attr("data-area", JSON.stringify(area))--}}
+    {{--                            .text(zoneData.name));--}}
+    {{--                    },--}}
+    {{--                    error: function() {--}}
+    {{--                        // Fallback - add without area data--}}
+    {{--                        $('#zone').append($("<option></option>")--}}
+    {{--                            .attr("value", zone.id)--}}
+    {{--                            .attr("data-area", "[]")--}}
+    {{--                            .text(zone.name));--}}
+    {{--                    }--}}
+    {{--                });--}}
+    {{--            });--}}
+    {{--        }--}}
+    {{--    }--}}
+    {{--});--}}
+    $(document).ready(function () {
+
+        $.ajax({
+            url: '{{ route("vendors.zones") }}',
+            method: 'GET',
+            success: function(response) {
+
+                if(response.success && response.data.length > 0) {
+
+                    response.data.forEach(function(zone) {
+                        let area = [];
+                        if (zone.area) {
+                            try {
+                                let areaData = typeof zone.area === 'string' ? JSON.parse(zone.area) : zone.area;
+                                if (Array.isArray(areaData)) {
+                                    area = areaData.map(function(point) {
+                                        const latValue = point.latitude ?? point.lat ?? null;
+                                        const lngValue = point.longitude ?? point.lon ?? point.lng ?? null;
+                                        const lat = latValue !== null ? parseFloat(latValue) : null;
+                                        const lng = lngValue !== null ? parseFloat(lngValue) : null;
+                                        return {
+                                            latitude: !isNaN(lat) ? lat : null,
+                                            longitude: !isNaN(lng) ? lng : null
+                                        };
+                                    }).filter(function(point){
+                                        return point.latitude !== null && point.longitude !== null;
+                                    });
                                 }
+                            } catch (e) {
+                                console.error('Error parsing zone area data:', e);
                             }
-                            $('#zone').append($("<option></option>")
-                                .attr("value", zoneData.id)
-                                .attr("data-area", JSON.stringify(area))
-                                .text(zoneData.name));
-                        },
-                        error: function() {
-                            // Fallback - add without area data
-                            $('#zone').append($("<option></option>")
-                                .attr("value", zone.id)
-                                .attr("data-area", "[]")
-                                .text(zone.name));
                         }
+
+                        const option = $('<option>', {
+                            value: zone.id,
+                            text: zone.name
+                        });
+                        option.data('area', area);
+                        $('#zone').append(option);
                     });
-                });
+
+                } else {
+                    console.log("⚠️ No zones found.");
+                }
+            },
+            error: function(error) {
+                console.error("❌ Error loading zones:", error);
             }
-        }
+        });
+
     });
 
     // Load currency from SQL
@@ -1227,8 +1278,13 @@ foreach ($countries as $keycountry => $valuecountry) {
         var zoneId=$('#zone option:selected').val();
         var zoneArea=$('#zone option:selected').data('area');
         var isInZone=false;
-        if(zoneId&&zoneArea) {
-            isInZone=checkLocationInZone(zoneArea,longitude,latitude);
+        if(zoneId) {
+            if(Array.isArray(zoneArea) && zoneArea.length > 0) {
+                isInZone=checkLocationInZone(zoneArea,longitude,latitude);
+            } else {
+                // If zone has no defined area, skip polygon validation
+                isInZone = true;
+            }
         }
 
         var enabledDiveInFuture=$("#dine_in_feature").is(':checked');
@@ -1447,7 +1503,7 @@ foreach ($countries as $keycountry => $valuecountry) {
         };
 
         var vendorCuisine = $("#restaurant_vendor_cuisines option:selected").val();
-        
+
         // Debug logging
         console.log('Selected vendor cuisine value:', vendorCuisine);
         console.log('Selected vendor cuisine text:', $("#restaurant_vendor_cuisines option:selected").text());
@@ -1537,38 +1593,9 @@ foreach ($countries as $keycountry => $valuecountry) {
                 window.scrollTo(0,0);
             }, 60000); // 60 seconds timeout
 
-            if(story_vedios.length>0||story_thumbnail!='') {
-                if(story_vedios.length>0&&story_thumbnail=='') {
-                    $(".error_top").show();
-                    $(".error_top").html("");
-                    $(".error_top").append("<p>{{trans('lang.story_error')}}</p>");
-                    window.scrollTo(0,0);
-                    return false;
-                } else if(story_thumbnail&&story_vedios.length==0) {
-                    $(".error_top").show();
-                    $(".error_top").html("");
-                    $(".error_top").append("<p>{{trans('lang.story_error')}}</p>");
-                    window.scrollTo(0,0);
-                    return false;
-                } else {
-                    await storeStoryImageData().then(async (IMG) => {
-                        database.collection('story').doc(restaurant_id).set({
-                            'createdAt': new Date(),
-                            'vendorID': restaurant_id,
-                            'videoThumbnail': IMG.storyThumbnailImage,
-                            'videoUrl': story_vedios,
-                        });
-                    }).catch(err => {
-                        clearTimeout(saveTimeout);
-                        jQuery("#data-table_processing").hide();
-                        $(".error_top").show();
-                        $(".error_top").html("");
-                        $(".error_top").append("<p>"+err+"</p>");
-                        window.scrollTo(0,0);
-                    });
-
-                }
-            }
+            // Story upload disabled - requires Firebase
+            // Stories can be added later via restaurant edit page if needed
+            console.log('Story upload skipped (requires Firebase)');
 
             var delivery_charges_per_km=parseInt($("#delivery_charges_per_km").val());
             var minimum_delivery_charges=parseInt($("#minimum_delivery_charges").val());
@@ -1591,8 +1618,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                 const MenuIMG = await storeMenuImageData();
                 console.log('Menu images stored successfully:', MenuIMG);
 
-                // Create restaurant data
-                const coordinates = new firebase.firestore.GeoPoint(latitude, longitude);
+                // Create restaurant data (no Firebase GeoPoint needed)
                 const restaurantData = {
                     'title': restaurantname,
                     'description': description,
@@ -1605,7 +1631,6 @@ foreach ($countries as $keycountry => $valuecountry) {
                     'vendorCuisineID': vendorCuisine,
                     'countryCode': rescountry_code,
                     'phonenumber': phonenumber,
-                    'coordinates': coordinates,
                     'id': restaurant_id,
                     'filters': filters_new,
                     'photos': GalleryIMG,
@@ -1633,7 +1658,7 @@ foreach ($countries as $keycountry => $valuecountry) {
 
                 // Create restaurant via SQL API
                 console.log('Creating restaurant via SQL...', restaurantData);
-                
+
                 $.ajax({
                     url: '/api/restaurants/create',
                     method: 'POST',
@@ -1703,20 +1728,9 @@ foreach ($countries as $keycountry => $valuecountry) {
     });
 
     async function storeImageData() {
+        // Story upload disabled - returns empty
         var newPhoto=[];
         newPhoto['storyThumbnailImage']='';
-        try {
-            if(story_thumbnail!='') {
-                story_thumbnail=story_thumbnail.replace(/^data:image\/[a-z]+;base64,/,"")
-                var uploadTask=await storageRef.child(story_thumbnail_filename).putString(story_thumbnail,'base64',{
-                    contentType: 'image/jpg'
-                });
-                var downloadURL=await uploadTask.ref.getDownloadURL();
-                newPhoto['storyThumbnailImage']=downloadURL;
-            }
-        } catch(error) {
-            console.log("ERR ===",error);
-        }
         return newPhoto;
     }
 
@@ -1813,13 +1827,21 @@ foreach ($countries as $keycountry => $valuecountry) {
         var newPhoto=[];
         try {
             if(restaurnt_photos.length>0) {
+                // Upload to Laravel storage via API
                 const photoPromises=restaurnt_photos.map(async (resPhoto,index) => {
-                    resPhoto=resPhoto.replace(/^data:image\/[a-z]+;base64,/,"");
-                    const uploadTask=await storageRef.child(restaurant_photos_filename[index]).putString(resPhoto,'base64',{
-                        contentType: 'image/jpg'
+                    const response = await $.ajax({
+                        url: '/api/upload-image',
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                        },
+                        data: {
+                            image: resPhoto,
+                            folder: 'restaurants/gallery',
+                            filename: restaurant_photos_filename[index]
+                        }
                     });
-                    const downloadURL=await uploadTask.ref.getDownloadURL();
-                    return {index,downloadURL};
+                    return {index, downloadURL: response.url};
                 });
                 const photoResults=await Promise.all(photoPromises);
                 photoResults.sort((a,b) => a.index-b.index);
@@ -1872,84 +1894,10 @@ foreach ($countries as $keycountry => $valuecountry) {
 
 
     function handleStoryFileSelect(evt) {
-        var f=evt.target.files[0];
-        var reader=new FileReader();
-        var story_video_duration=$("#story_video_duration").val();
-        var isVideo=document.getElementById('video_file');
-        var videoValue=isVideo.value;
-        var allowedExtensions=/(\.mp4)$/i;;
-
-        if(!allowedExtensions.exec(videoValue)) {
-            $(".error_top").show();
-            $(".error_top").html("");
-            $(".error_top").append("<p>Error: Invalid video type</p>");
-            window.scrollTo(0,0);
-            isVideo.value='';
-            return false;
-        }
-
-        var video=document.createElement('video');
-
-
-        video.preload='metadata';
-
-        video.onloadedmetadata=function() {
-
-            window.URL.revokeObjectURL(video.src);
-
-
-            if(video.duration>storevideoDuration) {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>Error: Story video duration maximum allow to "+storevideoDuration+" seconds</p>");
-                window.scrollTo(0,0);
-                evt.target.value='';
-                return false;
-            }
-
-            reader.onload=(function(theFile) {
-                return function(e) {
-
-                    var filePayload=e.target.result;
-                    var val=f.name;
-                    var ext=val.split('.')[1];
-                    var docName=val.split('fakepath')[1];
-                    var filename=(f.name).replace(/C:\\fakepath\\/i,'')
-
-                    var timestamp=Number(new Date());
-                    var filename=filename.split('.')[0]+"_"+timestamp+'.'+ext;
-
-                    var uploadTask=storyRef.child(filename).put(theFile);
-                    uploadTask.on('state_changed',function(snapshot) {
-
-                        var progress=(snapshot.bytesTransferred/snapshot.totalBytes)*100;
-                        console.log('Upload is '+progress+'% done');
-                        jQuery("#uploding_story_video").text("video is uploading...");
-                    },function(error) {},function() {
-                        uploadTask.snapshot.ref.getDownloadURL().then(function(downloadURL) {
-                            jQuery("#uploding_story_video").text("Upload is completed");
-                            setTimeout(function() {
-                                jQuery("#uploding_story_video").empty();
-                            },3000);
-
-                            var nextCount=$("#story_vedios").children().length;
-                            html='<div class="col-md-3" id="story_div_'+nextCount+'">\n'+
-                                '<div class="video-inner"><video width="320px" height="240px"\n'+
-                                '                                   controls="controls">\n'+
-                                '                            <source src="'+downloadURL+'"\n'+
-                                '            type="video/mp4"></video><span class="remove-story-video" data-id="'+nextCount+'" data-img="'+downloadURL+'"><i class="fa fa-remove"></i></span></div></div>';
-
-                            jQuery("#story_vedios").append(html);
-                            story_vedios.push(downloadURL);
-                            $("#video_file").val('');
-                        });
-                    });
-
-                };
-            })(f);
-            reader.readAsDataURL(f);
-        }
-        video.src=URL.createObjectURL(f);
+        // Story upload disabled - Firebase not available
+        alert('Story upload is currently disabled. Stories can be added later via edit page.');
+        evt.target.value = '';
+        return false;
     }
 
 
@@ -1988,30 +1936,13 @@ foreach ($countries as $keycountry => $valuecountry) {
     });
 
     function deleteStoryfromCollection() {
-        if(story_vedios.length==0&&story_thumbnail=='') {
-            database.collection('story').where('vendorID','==',restaurant_id).get().then(async function(snapshot) {
-                if(snapshot.docs.length>0) {
-
-                    database.collection('story').doc(restaurant_id).delete();
-                }
-            });
-        }
+        // Story upload disabled - no Firebase operations
+        console.log('Story deletion skipped (Firebase disabled)');
     }
     async function storeStoryImageData() {
+        // Story upload disabled - returns empty
         var newPhoto=[];
         newPhoto['storyThumbnailImage']='';
-        try {
-            if(story_thumbnail!='') {
-                story_thumbnail=story_thumbnail.replace(/^data:image\/[a-z]+;base64,/,"")
-                var uploadTask=await storageRef.child(story_thumbnail_filename).putString(story_thumbnail,'base64',{
-                    contentType: 'image/jpg'
-                });
-                var downloadURL=await uploadTask.ref.getDownloadURL();
-                newPhoto['storyThumbnailImage']=downloadURL;
-            }
-        } catch(error) {
-            console.log("ERR ===",error);
-        }
         return newPhoto;
     }
 
@@ -2062,13 +1993,21 @@ foreach ($countries as $keycountry => $valuecountry) {
         var newPhoto=[];
         try {
             if(restaurant_menu_photos.length>0) {
+                // Upload to Laravel storage via API
                 await Promise.all(restaurant_menu_photos.map(async (menuPhoto,index) => {
-                    menuPhoto=menuPhoto.replace(/^data:image\/[a-z]+;base64,/,"");
-                    var uploadTask=await storageRef.child(restaurant_menu_filename[index]).putString(menuPhoto,'base64',{
-                        contentType: 'image/jpg'
+                    const response = await $.ajax({
+                        url: '/api/upload-image',
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                        },
+                        data: {
+                            image: menuPhoto,
+                            folder: 'restaurants/menu',
+                            filename: restaurant_menu_filename[index]
+                        }
                     });
-                    var downloadURL=await uploadTask.ref.getDownloadURL();
-                    newPhoto.push(downloadURL);
+                    newPhoto.push(response.url);
                 }));
             }
             return newPhoto;
@@ -2376,13 +2315,13 @@ foreach ($countries as $keycountry => $valuecountry) {
     async function getOwnerDetails(selectedOwnerId) {
         try {
             console.log('Fetching owner details for ID:', selectedOwnerId);
-            
+
             // Fetch from SQL API
             const response = await $.ajax({
                 url: '/vendors/' + selectedOwnerId + '/data',
                 method: 'GET'
             });
-            
+
             if (response.success && response.data) {
                 console.log('Owner details fetched from SQL:', response.data);
                 return response.data;

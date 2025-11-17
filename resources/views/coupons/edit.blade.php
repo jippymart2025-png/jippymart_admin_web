@@ -162,25 +162,66 @@
             });
         }
 
+        console.log('🔄 Loading coupon data for ID:', couponId);
+
         $.get('{{ url('coupons/json') }}/' + couponId, function(c){
+            console.log('✅ Coupon data loaded:', c);
+
             $(".coupon_code").val(c.code);
             $("#coupon_discount_type").val(c.discountType||'Fix Price');
             $(".coupon_discount").val(parseInt(c.discount||0));
             $(".coupon_description").val(c.description||'');
             $(".item_value").val(c.item_value||0);
             $(".usage_limit").val(c.usageLimit||0);
+
+            // Set coupon type FIRST
             $("#coupon_type").val(c.cType||'restaurant');
+
+            // Then render vendors with the selected restaurant
+            console.log('🔄 Rendering vendors for type:', c.cType, 'selected:', c.resturant_id);
             renderVendors(c.cType||'', c.resturant_id);
+
             if (c.isPublic) $(".coupon_public").prop('checked', true);
             if (c.isEnabled) $(".coupon_enabled").prop('checked', true);
-            if (c.expiresAt){ $('.date_picker').val(c.expiresAt.split(' ')[0]); }
-            if (c.image){ $(".coupon_image").append('<img class="rounded" style="width:50px" src="'+c.image+'" alt="image">'); }
+
+            // Parse and format date
+            if (c.expiresAt) {
+                try {
+                    // Handle various date formats
+                    var dateStr = c.expiresAt;
+                    // Extract just the date part if it has time
+                    if (dateStr.indexOf(' ') > 0) {
+                        dateStr = dateStr.split(' ')[0];
+                    }
+                    $('.date_picker').val(dateStr);
+                    console.log('📅 Date set to:', dateStr);
+                } catch(e) {
+                    console.error('❌ Error parsing date:', e);
+                }
+            }
+
+            if (c.image) {
+                var imgSrc = c.image;
+                if (c.image.indexOf('http') !== 0 && c.image.indexOf('storage/') !== 0) {
+                    imgSrc = '{{ asset('storage') }}/' + c.image;
+                } else if (c.image.indexOf('storage/') === 0) {
+                    imgSrc = '{{ asset('') }}' + c.image;
+                }
+                $(".coupon_image").append('<img class="rounded" style="width:50px" src="'+imgSrc+'" alt="image">');
+            }
+
+            console.log('📝 Form populated with coupon data');
+        })
+        .fail(function(xhr){
+            console.error('❌ Failed to load coupon data:', xhr);
+            $(".error_top").show().html('<p>Error loading coupon data</p>');
         });
 
         $('#coupon_type').on('change', function(){ renderVendors($(this).val(), $('#vendor_restaurant_select').val()); });
 
         $(".edit-form-btn").click(function(){
             $(".error_top").hide().html('');
+
             var code = $(".coupon_code").val();
             var discount = $(".coupon_discount").val();
             var description = $(".coupon_description").val();
@@ -188,11 +229,56 @@
             var usage_limit = parseInt($(".usage_limit").val()||'0',10);
             var couponType = $("#coupon_type").val();
             var selectedVendor = $('#vendor_restaurant_select').val();
-            var newdate = new Date($(".date_picker").val());
-            if(!code || !discount || !couponType || !selectedVendor || newdate.toString()==='Invalid Date'){
-                $(".error_top").show().html('<p>Please fill required fields correctly</p>'); window.scrollTo(0,0); return;
+            var dateValue = $(".date_picker").val();
+
+            console.log('💾 Updating coupon - Form values:', {
+                code: code,
+                discount: discount,
+                couponType: couponType,
+                selectedVendor: selectedVendor,
+                dateValue: dateValue
+            });
+
+            // Validation
+            if(!code) {
+                $(".error_top").show().html('<p>Coupon code is required</p>');
+                window.scrollTo(0,0);
+                return;
             }
+            if(!discount) {
+                $(".error_top").show().html('<p>Discount is required</p>');
+                window.scrollTo(0,0);
+                return;
+            }
+            if(!couponType) {
+                $(".error_top").show().html('<p>Coupon type is required</p>');
+                window.scrollTo(0,0);
+                return;
+            }
+            if(!selectedVendor) {
+                $(".error_top").show().html('<p>Please select a restaurant/mart</p>');
+                window.scrollTo(0,0);
+                return;
+            }
+            if(!dateValue) {
+                $(".error_top").show().html('<p>Expiry date is required</p>');
+                window.scrollTo(0,0);
+                return;
+            }
+
+            var newdate = new Date(dateValue);
+            if(newdate.toString()==='Invalid Date'){
+                $(".error_top").show().html('<p>Invalid expiry date format</p>');
+                window.scrollTo(0,0);
+                return;
+            }
+
             var expiresAt = (newdate.getMonth()+1).toString().padStart(2,'0') + '/' + newdate.getDate().toString().padStart(2,'0') + '/' + newdate.getFullYear() + ' 11:59:59 PM';
+
+            console.log('📅 Formatted expiry date:', expiresAt);
+
+            jQuery("#data-table_processing").show();
+
             var fd = new FormData();
             fd.append('code', code);
             fd.append('discount', discount);
@@ -205,10 +291,40 @@
             fd.append('resturant_id', selectedVendor);
             fd.append('isPublic', $(".coupon_public").is(":checked") ? 1 : 0);
             fd.append('isEnabled', $(".coupon_enabled").is(":checked") ? 1 : 0);
-            var f = document.querySelector('input[type=file]')?.files?.[0]; if(f){ fd.append('image', f); }
-            $.ajax({ url: '{{ url('coupons') }}' + '/' + couponId, method: 'POST', data: fd, processData: false, contentType: false, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-                .done(function(){ <?php if (isset($_GET['eid']) && $_GET['eid'] != '') { ?> window.location.href = "{{ route('restaurants.coupons', $_GET['eid']) }}"; <?php } else { ?> window.location.href='{{ route('coupons') }}'; <?php } ?> })
-                .fail(function(xhr){ $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>'); window.scrollTo(0,0); });
+            var f = document.querySelector('input[type=file]')?.files?.[0];
+            if(f){
+                fd.append('image', f);
+                console.log('📤 Including image file:', f.name);
+            }
+
+            $.ajax({
+                url: '{{ url('coupons') }}' + '/' + couponId,
+                method: 'POST',
+                data: fd,
+                processData: false,
+                contentType: false,
+                headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+            })
+            .done(function(response){
+                console.log('✅ Coupon updated successfully:', response);
+
+                // Log activity
+                if (typeof logActivity === 'function') {
+                    logActivity('coupons', 'updated', 'Updated coupon: ' + code);
+                }
+
+                <?php if (isset($_GET['eid']) && $_GET['eid'] != '') { ?>
+                    window.location.href = "{{ route('restaurants.coupons', $_GET['eid']) }}";
+                <?php } else { ?>
+                    window.location.href='{{ route('coupons') }}';
+                <?php } ?>
+            })
+            .fail(function(xhr){
+                console.error('❌ Update failed:', xhr);
+                jQuery("#data-table_processing").hide();
+                $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+(xhr.responseJSON?.message || xhr.statusText)+'</p>');
+                window.scrollTo(0,0);
+            });
         });
     });
 </script>

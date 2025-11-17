@@ -311,6 +311,8 @@
         }
         var note = $('#note').val();
 
+        console.log('💰 Adding wallet amount:', { user_id: id, amount: amount, note: note });
+
         // Add wallet amount via AJAX
         $.ajax({
             url: '{{url("/api/users/wallet/add")}}',
@@ -322,14 +324,21 @@
                 _token: '{{csrf_token()}}'
             },
             success: function(response) {
+                console.log('✅ Wallet add response:', response);
+
                 if(response.success) {
                     var amountFormatted, newWalletFormatted;
                     if(currencyAtRight) {
-                        amountFormatted = parseInt(amount).toFixed(decimal_degits) + currentCurrency;
+                        amountFormatted = parseFloat(amount).toFixed(decimal_degits) + currentCurrency;
                         newWalletFormatted = parseFloat(response.newWalletAmount).toFixed(decimal_degits) + currentCurrency;
                     } else {
-                        amountFormatted = currentCurrency + parseInt(amount).toFixed(decimal_degits);
+                        amountFormatted = currentCurrency + parseFloat(amount).toFixed(decimal_degits);
                         newWalletFormatted = currentCurrency + parseFloat(response.newWalletAmount).toFixed(decimal_degits);
+                    }
+
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        logActivity('drivers', 'wallet_added', 'Added ' + amountFormatted + ' to driver wallet (ID: ' + id + ')');
                     }
 
                     var formattedDate = new Date();
@@ -340,7 +349,7 @@
                     day = day < 10 ? '0' + day : day;
                     formattedDate = day + '-' + month + '-' + year;
 
-                    if(emailTemplatesData) {
+                    if(emailTemplatesData && response.user) {
                         var message = emailTemplatesData.message;
                         message = message.replace(/{username}/g, response.user.firstName + ' ' + response.user.lastName);
                         message = message.replace(/{date}/g, formattedDate);
@@ -353,17 +362,30 @@
                         sendEmail(url, emailTemplatesData.subject, message, [response.user.email]).then(function(sendEmailStatus) {
                             if(sendEmailStatus) {
                                 window.location.reload();
+                            } else {
+                                window.location.reload();
                             }
+                        }).catch(function() {
+                            window.location.reload();
                         });
                     } else {
+                        // Reload page even if email template not found
+                        alert('Wallet amount added successfully!');
                         window.location.reload();
                     }
                 } else {
-                    $('#user_account_not_found_error').text(response.message || '{{trans("lang.user_detail_not_found")}}');
+                    var errorMsg = response.message || '{{trans("lang.user_detail_not_found")}}';
+                    console.error('❌ Wallet add failed:', errorMsg);
+                    $('#user_account_not_found_error').text(errorMsg);
                 }
             },
-            error: function() {
-                $('#user_account_not_found_error').text('{{trans("lang.error_adding_wallet_amount")}}');
+            error: function(xhr, status, error) {
+                console.error('❌ AJAX Error adding wallet amount:', { status: status, error: error, response: xhr.responseText });
+                var errorMsg = '{{trans("lang.error_adding_wallet_amount")}}';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    errorMsg = xhr.responseJSON.message;
+                }
+                $('#user_account_not_found_error').text(errorMsg);
             }
         });
     });

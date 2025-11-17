@@ -103,9 +103,22 @@
             serverSide: true, // Enable server-side processing
             responsive: true,
             ajax: function (data, callback) {
-                const params = { start: data.start, length: data.length, draw: data.draw, search: data.search.value };
+                const params = { start: data.start, length: data.length, draw: data.draw,
+                    search: { value: data.search.value }
+                };
+                console.log('📡 Fetching mart banners:', params);
+
                 $.get('{{ route('mart.banners.data') }}', params, function(json){
-                    $('.total_count').text(json.recordsTotal || 0);
+                    console.log('📥 Mart banners response:', json);
+
+                    // Update count display
+                    if (json.stats && json.stats.total) {
+                        $('.total_count').text(json.stats.total);
+                        console.log('📊 Total mart banners:', json.stats.total);
+                    } else {
+                        $('.total_count').text(json.recordsTotal || 0);
+                    }
+
                     var rows = [];
                     var canDelete = (checkDeletePermission);
                     (json.data || []).forEach(function(item){
@@ -151,35 +164,117 @@
         var id = $(this).data('id');
         var $cb = $(this);
         var intended = $cb.is(':checked');
+        var bannerName = $cb.closest('tr').find('a').text().trim();
+        var action = intended ? 'published' : 'unpublished';
+
         $cb.prop('disabled', true);
         $.post({ url: '{{ url('mart-banners') }}' + '/' + id + '/toggle-publish', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-            .done(function(resp){ $cb.prop('checked', !!resp.is_publish); })
+            .done(function(resp){
+                $cb.prop('checked', !!resp.is_publish);
+                console.log('✅ Mart banner publish toggled:', resp);
+
+                // Log activity
+                if (typeof logActivity === 'function') {
+                    logActivity('mart_banners', action, action.charAt(0).toUpperCase() + action.slice(1) + ' mart banner: ' + bannerName);
+                }
+            })
             .fail(function(xhr){ $cb.prop('checked', !intended); alert('Failed to update ('+xhr.status+'): '+xhr.statusText); })
             .always(function(){ $cb.prop('disabled', false); });
     });
 
-    // Handle select all
+    // Handle select all - FIXED to target .is_open
     $('#select-all').on('change', function() {
-        $('.select-item').prop('checked', $(this).is(':checked'));
+        $('#martBannersTable .is_open').prop('checked', $(this).is(':checked'));
+        console.log('📋 Select all toggled:', $(this).is(':checked'));
     });
 
     // Bulk delete
     $(document).on('click', '#deleteAll', function(){
-        var ids = []; $('#martBannersTable .is_open:checked').each(function(){ ids.push($(this).attr('dataId')); });
-        if (ids.length === 0) { alert('Please select items to delete'); return; }
+        var ids = [];
+        $('#martBannersTable .is_open:checked').each(function(){
+            ids.push($(this).attr('dataId'));
+        });
+
+        console.log('🗑️ Bulk delete requested:', { count: ids.length, ids: ids });
+
+        if (ids.length === 0) {
+            alert('Please select items to delete');
+            return;
+        }
         if (!confirm('Are you sure you want to delete selected items?')) return;
-        $.post({ url: '{{ route('mart.banners.bulkDelete') }}', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }, data: { ids: ids } })
-            .done(function(){ $('#martBannersTable').DataTable().ajax.reload(null,false); })
-            .fail(function(xhr){ alert('Failed to delete ('+xhr.status+'): '+xhr.statusText); });
+
+        jQuery("#data-table_processing").show();
+
+        $.post({
+            url: '{{ route('mart.banners.bulkDelete') }}',
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+            data: { ids: ids }
+        })
+        .done(function(response){
+            console.log('✅ Bulk delete successful:', response);
+
+            // Log activity
+            if (typeof logActivity === 'function') {
+                logActivity('mart_banners', 'bulk_deleted', 'Bulk deleted ' + ids.length + ' mart banners');
+            }
+
+            jQuery("#data-table_processing").hide();
+            $('#martBannersTable').DataTable().ajax.reload(null,false);
+
+            if (typeof toastr !== 'undefined') {
+                toastr.success(response.message || 'Mart banners deleted successfully');
+            } else {
+                alert(response.message || 'Mart banners deleted successfully');
+            }
+        })
+        .fail(function(xhr){
+            console.error('❌ Bulk delete failed:', xhr);
+            jQuery("#data-table_processing").hide();
+            alert('Failed to delete ('+xhr.status+'): '+xhr.statusText);
+        });
     });
 
     // Single delete
     $('#martBannersTable').on('click', '.delete-banner', function(){
         var id = $(this).data('id');
+        var bannerName = $(this).closest('tr').find('a').text().trim();
+
+        console.log('🗑️ Delete clicked:', { id: id, name: bannerName });
+
         if(!confirm('Are you sure you want to delete this banner item?')) return;
-        $.ajax({ url: '{{ url('mart-banners') }}' + '/' + id, method: 'DELETE', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-            .done(function(){ $('#martBannersTable').DataTable().ajax.reload(null,false); })
-            .fail(function(xhr){ alert('Failed to delete ('+xhr.status+'): '+xhr.statusText); });
+
+        jQuery("#data-table_processing").show();
+
+        $.ajax({
+            url: '{{ url('mart-banners') }}' + '/' + id,
+            method: 'DELETE',
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+        })
+        .done(function(response){
+            console.log('✅ Delete successful:', response);
+
+            // Log activity
+            if (typeof logActivity === 'function') {
+                logActivity('mart_banners', 'deleted', 'Deleted mart banner: ' + bannerName);
+            }
+
+            jQuery("#data-table_processing").hide();
+            $('#martBannersTable').DataTable().ajax.reload(null,false);
+
+            if (typeof toastr !== 'undefined') {
+                toastr.success(response.message || 'Mart banner deleted successfully');
+            }
+        })
+        .fail(function(xhr){
+            console.error('❌ Delete failed:', xhr);
+            jQuery("#data-table_processing").hide();
+
+            var errorMsg = xhr.responseJSON && xhr.responseJSON.message
+                ? xhr.responseJSON.message
+                : 'Failed to delete ('+xhr.status+'): '+xhr.statusText;
+
+            alert(errorMsg);
+        });
     });
 </script>
 

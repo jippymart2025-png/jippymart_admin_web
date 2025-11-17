@@ -39,16 +39,25 @@ class MartBannerController extends Controller
         $length = (int) $request->input('length', 10);
         $search = strtolower((string) data_get($request->input('search'), 'value', ''));
 
+        // Base query for total records
+        $baseQ = DB::table('mart_banners');
+        $totalRecords = $baseQ->count();
+
+        // Filtered query
         $q = DB::table('mart_banners');
+
+        // Apply search filter
         if ($search !== '') {
             $q->where(function($qq) use ($search){
                 $qq->where('title','like','%'.$search.'%')
                    ->orWhere('position','like','%'.$search.'%')
-                   ->orWhere('zoneTitle','like','%'.$search.'%');
+                   ->orWhere('zoneTitle','like','%'.$search.'%')
+                   ->orWhere('screen','like','%'.$search.'%');
             });
         }
-        $total = (clone $q)->count();
-        $rows = $q->orderBy('set_order','asc')->offset($start)->limit($length)->get();
+
+        $filteredRecords = (clone $q)->count();
+        $rows = $q->orderBy('set_order','asc')->orderBy('title','asc')->offset($start)->limit($length)->get();
 
         $items = [];
         foreach ($rows as $r) {
@@ -56,13 +65,23 @@ class MartBannerController extends Controller
                 'id' => $r->id,
                 'title' => (string) ($r->title ?? ''),
                 'position' => (string) ($r->position ?? ''),
-                'zoneTitle' => (string) ($r->zoneTitle ?? ''),
+                'zoneTitle' => (string) ($r->zoneTitle ?? 'No Zone'),
                 'set_order' => (int) ($r->set_order ?? 0),
                 'is_publish' => (bool) ($r->is_publish ?? 0),
                 'photo' => (string) ($r->photo ?? ''),
             ];
         }
-        return response()->json(['draw'=>$draw,'recordsTotal'=>$total,'recordsFiltered'=>$total,'data'=>$items]);
+
+        return response()->json([
+            'draw' => $draw,
+            'recordsTotal' => $totalRecords,
+            'recordsFiltered' => $filteredRecords,
+            'data' => $items,
+            'stats' => [
+                'total' => $totalRecords,
+                'filtered' => $filteredRecords
+            ]
+        ]);
     }
 
     // JSON for single banner
@@ -86,13 +105,14 @@ class MartBannerController extends Controller
             'external_link' => 'nullable|string|max:2000',
             'ads_link' => 'nullable|string|max:2000',
         ]);
-        $id = (string) Str::uuid();
+//        $id = (string) Str::uuid();
         $imageUrl = null;
         if ($request->hasFile('photo')) {
-            $imageUrl = Storage::url($request->file('photo')->store('public/uploads/mart-banners'));
+            $path = $request->file('photo')->store('public/uploads/mart-banners');
+            $imageUrl = asset('storage/' . str_replace('public/', '', $path));
         }
         MartBanner::create([
-            'id' => $id,
+//            'id' => $id,
             'title' => $request->input('title',''),
             'description' => $request->input('description',''),
             'text' => $request->input('text',''),
@@ -112,7 +132,11 @@ class MartBannerController extends Controller
             'created_at' => date('Y-m-d H:i:s'),
             'updated_at' => date('Y-m-d H:i:s'),
         ]);
-        return response()->json(['success'=>true,'id'=>$id]);
+
+        // Log activity
+        \Log::info('✅ Mart banner created:', ['title' => $request->input('title')]);
+
+        return response()->json(['success'=>true]);
     }
 
     // Update (SQL)
@@ -131,7 +155,8 @@ class MartBannerController extends Controller
         ]);
         $imageUrl = $b->photo;
         if ($request->hasFile('photo')) {
-            $imageUrl = Storage::url($request->file('photo')->store('public/uploads/mart-banners'));
+            $path = $request->file('photo')->store('public/uploads/mart-banners');
+            $imageUrl = asset('storage/' . str_replace('public/', '', $path));
         }
         $b->update([
             'title' => $request->input('title',''),
@@ -152,6 +177,10 @@ class MartBannerController extends Controller
             'zoneTitle' => $request->input('zoneTitle') ?? '',
             'updated_at' => date('Y-m-d H:i:s'),
         ]);
+
+        // Log activity
+        \Log::info('✅ Mart banner updated:', ['id' => $id, 'title' => $request->input('title')]);
+
         return response()->json(['success'=>true]);
     }
 
@@ -163,6 +192,11 @@ class MartBannerController extends Controller
         $b->is_publish = $b->is_publish ? 0 : 1;
         $b->updated_at = date('Y-m-d H:i:s');
         $b->save();
+
+        // Log activity
+        $action = $b->is_publish ? 'published' : 'unpublished';
+        \Log::info('✅ Mart banner ' . $action . ':', ['id' => $id, 'title' => $b->title]);
+
         return response()->json(['success'=>true,'is_publish'=>(bool)$b->is_publish]);
     }
 
@@ -170,9 +204,15 @@ class MartBannerController extends Controller
     public function destroy($id)
     {
         $b = MartBanner::find($id);
-        if(!$b) return response()->json(['success'=>false],404);
+        if(!$b) return response()->json(['success'=>false,'message'=>'Mart banner not found'],404);
+
+        $title = $b->title;
         $b->delete();
-        return response()->json(['success'=>true]);
+
+        // Log activity
+        \Log::info('✅ Mart banner deleted:', ['id' => $id, 'title' => $title]);
+
+        return response()->json(['success'=>true,'message'=>'Mart banner deleted successfully']);
     }
 
     // Bulk delete
@@ -182,7 +222,149 @@ class MartBannerController extends Controller
         if (empty($ids)) {
             return response()->json(['success'=>false,'message'=>'No ids'],400);
         }
-        MartBanner::whereIn('id',$ids)->delete();
-        return response()->json(['success'=>true]);
+
+        $count = MartBanner::whereIn('id',$ids)->delete();
+
+        // Log activity
+        \Log::info('✅ Mart banners bulk deleted:', ['count' => $count, 'ids' => $ids]);
+
+        return response()->json(['success'=>true,'message'=>$count.' mart banners deleted successfully','count'=>$count]);
+    }
+
+    /**
+     * Get all zones for dropdown
+     */
+    public function getZones()
+    {
+        try {
+            $zones = DB::table('zone')
+                ->where('publish', 1)
+                ->orderBy('name', 'asc')
+                ->get(['id', 'name']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $zones
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching zones: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching zones'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get mart stores (vendors with vType='mart')
+     */
+    public function getStores()
+    {
+        try {
+            $stores = DB::table('vendors')
+                ->where('vType', 'mart')
+                ->orderBy('title', 'asc')
+                ->get(['id', 'title']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $stores
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching mart stores: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching stores'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get mart products
+     */
+    public function getProducts(Request $request)
+    {
+        try {
+            $storeId = $request->input('storeId');
+            $search  = trim((string) $request->input('q', ''));
+
+            // Debug helper: detect products without a valid vendor mapping
+            $orphanedProductIds = DB::table('vendor_products')
+                ->leftJoin('vendors', 'vendor_products.vendorID', '=', 'vendors.id')
+                ->whereNull('vendors.id')
+                ->pluck('vendor_products.id')
+                ->toArray();
+
+            if (!empty($orphanedProductIds)) {
+                \Log::warning('⚠️ Orphaned mart products detected (no vendor match)', [
+                    'count' => count($orphanedProductIds),
+                    'ids' => $orphanedProductIds,
+                ]);
+            }
+
+            $productsQuery = DB::table('vendor_products')
+                ->join('vendors', 'vendor_products.vendorID', '=', 'vendors.id')
+                ->where('vendors.vType', 'mart')
+                ->where(function ($q) {
+                    $q->whereNull('vendor_products.publish')
+                      ->orWhere('vendor_products.publish', '=', 1)
+                      ->orWhere('vendor_products.publish', '=', true);
+                });
+
+            if ($storeId) {
+                $productsQuery->where('vendor_products.vendorID', $storeId);
+            }
+
+            if ($search !== '') {
+                $productsQuery->where(function ($q) use ($search) {
+                    $q->where('vendor_products.name', 'like', '%' . $search . '%')
+                      ->orWhere('vendors.title', 'like', '%' . $search . '%');
+                });
+            }
+
+            $products = $productsQuery
+                ->orderBy('vendor_products.name', 'asc')
+                ->get([
+                    'vendor_products.id',
+                    'vendor_products.name',
+                    'vendor_products.vendorID',
+                    'vendors.title as vendorTitle',
+                ]);
+
+            return response()->json([
+                'success' => true,
+                'data' => $products
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching mart products: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching products'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get mart categories
+     */
+    public function getCategories()
+    {
+        try {
+            $categories = DB::table('mart_categories')
+                ->where('publish', 1)
+                ->orderBy('title', 'asc')
+                ->get(['id', 'title']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $categories
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching mart categories: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching categories'
+            ], 500);
+        }
     }
 }

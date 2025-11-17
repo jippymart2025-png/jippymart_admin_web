@@ -124,12 +124,12 @@
         }
     }
     $(document).on('change', "input[name='redirect_type']:radio", toggleRedirectUI);
-    
+
     // Load zones from SQL database
     function loadZones() {
         console.log('✅ Loading zones from SQL');
         $.ajax({
-            url: '{{ url('/zone/data') }}',
+            url: '{{ route("menu-items.zones") }}',
             method: 'GET',
             success: function(response) {
                 if (response.success && response.data) {
@@ -141,7 +141,8 @@
                 }
             },
             error: function(xhr) {
-                console.error('Error loading zones:', xhr);
+                console.error('❌ Error loading zones:', xhr);
+                alert('Failed to load zones. Please refresh the page.');
             }
         });
     }
@@ -150,9 +151,9 @@
     function loadStores() {
         console.log('✅ Loading stores from SQL');
         var zoneId = $('#zoneId').val();
-        
+
         $.ajax({
-            url: '{{ route('menu-items.stores') }}',
+            url: '{{ route('menu-items.store') }}',
             method: 'GET',
             data: { zoneId: zoneId },
             success: function(response) {
@@ -174,7 +175,7 @@
     function loadProducts() {
         console.log('✅ Loading products from SQL');
         var storeId = $('#storeId').val();
-        
+
         $.ajax({
             url: '{{ route('menu-items.products') }}',
             method: 'GET',
@@ -193,7 +194,7 @@
             }
         });
     }
-    
+
     // Zone change handler - reload stores
     $('#zoneId').on('change', function() {
         if ($("input[name=redirect_type][value=store]").is(':checked')) {
@@ -207,11 +208,11 @@
             loadProducts();
         }
     });
-    
+
     $(document).ready(function(){
         console.log('✅ Initializing Menu Items Create page');
         toggleRedirectUI();
-        
+
         // Load zones from SQL
         loadZones();
     });
@@ -236,9 +237,32 @@
         fd.append('redirect_id', redirect_id);
         var fileInput = $("input[type='file']")[0];
         if (fileInput && fileInput.files && fileInput.files[0]) { fd.append('photo', fileInput.files[0]); }
-        $.ajax({ url: '{{ route('menu-items.store') }}', method: 'POST', data: fd, processData: false, contentType: false, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-            .done(function(){ window.location.href = '{{ route('setting.banners') }}'; })
-            .fail(function(xhr){ $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>'); window.scrollTo(0,0); });
+
+        jQuery("#data-table_processing").show();
+
+        $.ajax({
+            url: '{{ route('banners.store') }}',
+            method: 'POST',
+            data: fd,
+            processData: false,
+            contentType: false,
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+        })
+        .done(function(response){
+            console.log('✅ Menu item created:', response);
+
+            // Log activity
+            if (typeof logActivity === 'function') {
+                logActivity('menu_items', 'created', 'Created menu item: ' + title);
+            }
+
+            window.location.href = '{{ route('setting.banners') }}';
+        })
+        .fail(function(xhr){
+            jQuery("#data-table_processing").hide();
+            $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>');
+            window.scrollTo(0,0);
+        });
     });
 </script>
 @endsection

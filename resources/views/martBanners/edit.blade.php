@@ -167,9 +167,98 @@
         else if (type === 'external_link') { $('#external_link_div').show(); }
     }
 
-    $(document).ready(function(){
-        // Load existing via backend JSON
+    // Load zones from SQL
+    function loadZones() {
+        console.log('🔄 Loading zones from SQL');
+        $.ajax({
+            url: '{{ route("mart.banners.zones") }}',
+            method: 'GET',
+            success: function(response) {
+                if (response.success && response.data) {
+                    console.log('✅ Zones loaded:', response.data.length);
+                    $('#zone_select').html('<option value="">Select Zone (Optional)</option>');
+                    response.data.forEach(function(zone) {
+                        $('#zone_select').append('<option value="' + zone.id + '">' + zone.name + '</option>');
+                    });
+
+                    // After zones loaded, load banner data
+                    loadBannerData();
+                }
+            },
+            error: function(xhr) {
+                console.error('❌ Error loading zones:', xhr);
+                alert('Failed to load zones. Please refresh the page.');
+            }
+        });
+    }
+
+    // Load stores (mart vendors)
+    function loadStores() {
+        console.log('🔄 Loading mart stores from SQL');
+        $.ajax({
+            url: '{{ route("mart.banners.stores") }}',
+            method: 'GET',
+            success: function(response) {
+                if (response.success && response.data) {
+                    console.log('✅ Stores loaded:', response.data.length);
+                    $('#storeId').html('<option value="">Select Store</option>');
+                    response.data.forEach(function(store) {
+                        $('#storeId').append('<option value="' + store.id + '">' + store.title + '</option>');
+                    });
+                }
+            },
+            error: function(xhr) {
+                console.error('❌ Error loading stores:', xhr);
+            }
+        });
+    }
+
+    // Load products (mart products)
+    function loadProducts() {
+        console.log('🔄 Loading mart products from SQL');
+        $.ajax({
+            url: '{{ route("mart.banners.products") }}',
+            method: 'GET',
+            success: function(response) {
+                if (response.success && response.data) {
+                    console.log('✅ Products loaded:', response.data.length);
+                    $('#productId').html('<option value="">Select Product</option>');
+                    response.data.forEach(function(product) {
+                        $('#productId').append('<option value="' + product.id + '">' + product.name + '</option>');
+                    });
+                }
+            },
+            error: function(xhr) {
+                console.error('❌ Error loading products:', xhr);
+            }
+        });
+    }
+
+    // Load mart categories
+    function loadCategories() {
+        console.log('🔄 Loading mart categories from SQL');
+        $.ajax({
+            url: '{{ route("mart.banners.categories") }}',
+            method: 'GET',
+            success: function(response) {
+                if (response.success && response.data) {
+                    console.log('✅ Categories loaded:', response.data.length);
+                    $('#martCategoryId').html('<option value="">Select Mart Category</option>');
+                    response.data.forEach(function(category) {
+                        $('#martCategoryId').append('<option value="' + category.id + '">' + category.title + '</option>');
+                    });
+                }
+            },
+            error: function(xhr) {
+                console.error('❌ Error loading categories:', xhr);
+            }
+        });
+    }
+
+    // Load banner data
+    function loadBannerData() {
         $.get('{{ route('mart.banners.json', ['id'=>':id']) }}'.replace(':id', id), function(data){
+            console.log('✅ Mart banner data loaded:', data);
             $('.title').val(data.title || '');
             $('.set_order').val(data.set_order || 0);
             $('#is_publish').prop('checked', !!data.is_publish);
@@ -185,6 +274,16 @@
             if (data.photo) { $(".user_image").html('<img src="'+data.photo+'" style="max-width:100px;max-height:100px;border-radius:4px;">'); }
             toggleRedirectUI();
         });
+    }
+
+    $(document).ready(function(){
+        console.log('✅ Initializing Mart Banner Edit page');
+
+        // Load all dropdowns
+        loadZones(); // This will call loadBannerData() after zones are loaded
+        loadStores();
+        loadProducts();
+        loadCategories();
 
         $('.redirect_type').on('change', toggleRedirectUI);
 
@@ -209,9 +308,32 @@
             fd.append('external_link', $('#external_link').val() || '');
             var fileInput = $("input[type='file']")[0];
             if (fileInput && fileInput.files && fileInput.files[0]) { fd.append('photo', fileInput.files[0]); }
-            $.ajax({ url: '{{ url('mart-banners') }}' + '/' + id, method: 'POST', data: fd, processData: false, contentType: false, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-                .done(function(){ window.location.href = '{{ route('mart.banners') }}'; })
-                .fail(function(xhr){ $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>'); window.scrollTo(0,0); });
+
+            jQuery("#data-table_processing").show();
+
+            $.ajax({
+                url: '{{ url('mart-banners') }}' + '/' + id,
+                method: 'POST',
+                data: fd,
+                processData: false,
+                contentType: false,
+                headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+            })
+            .done(function(response){
+                console.log('✅ Mart banner updated:', response);
+
+                // Log activity
+                if (typeof logActivity === 'function') {
+                    logActivity('mart_banners', 'updated', 'Updated mart banner: ' + title);
+                }
+
+                window.location.href = '{{ route('mart.banners') }}';
+            })
+            .fail(function(xhr){
+                jQuery("#data-table_processing").hide();
+                $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>');
+                window.scrollTo(0,0);
+            });
         });
     });
 </script>

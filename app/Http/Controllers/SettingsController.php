@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\Request;
 use App\Models\Vendor;
@@ -237,21 +238,36 @@ class SettingsController extends Controller
             'message'=>'required|string',
             'isSendToAdmin'=>'nullable'
         ]);
+
+        // Check if email template exists
+        $template = DB::table('email_templates')->where('id',$id)->first();
+        if (!$template) {
+            return response()->json(['success'=>false, 'message'=>'Email template not found'], 404);
+        }
+
         $updated = DB::table('email_templates')->where('id',$id)->update([
             'subject'=>request('subject'),
             'message'=>request('message'),
             'isSendToAdmin'=>request()->boolean('isSendToAdmin') ? 1 : 0,
         ]);
+
+        // Log activity
+        \Log::info('✅ Email template updated:', ['id' => $id, 'type' => $template->type, 'subject' => request('subject')]);
+
         if ($updated === false) return response()->json(['success'=>false],500);
-        return response()->json(['success'=>true]);
+        return response()->json(['success'=>true, 'message'=>'Email template updated successfully']);
     }
 
     public function emailTemplatesDelete($id)
     {
-        $exists = DB::table('email_templates')->where('id',$id)->exists();
-        if(!$exists) return response()->json(['success'=>false],404);
+        $template = DB::table('email_templates')->where('id',$id)->first();
+        if(!$template) return response()->json(['success'=>false, 'message'=>'Email template not found'],404);
+
+        // Log activity
+        \Log::info('✅ Email template deleted:', ['id' => $id, 'type' => $template->type]);
+
         DB::table('email_templates')->where('id',$id)->delete();
-        return response()->json(['success'=>true]);
+        return response()->json(['success'=>true, 'message'=>'Email template deleted successfully']);
     }
 
     /**
@@ -2152,6 +2168,65 @@ class SettingsController extends Controller
                 'success' => false,
                 'message' => 'Error fetching settings'
             ], 500);
+        }
+    }
+    /**
+     * Get driver nearby settings
+     */
+    public function getDriverSettings()
+    {
+        try {
+            $setting = DB::table('settings')
+                ->where('document_name', 'DriverNearBy')
+                ->first();
+
+            if ($setting && !empty($setting->fields)) {
+                $data = json_decode($setting->fields, true);
+                return response()->json($data ?? []);
+            }
+
+            return response()->json([
+                'driverRadios' => '5',
+                'mapType' => 'inappmap',
+                'selectedMapType' => 'google'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching driver settings: ' . $e->getMessage());
+            return response()->json([]);
+        }
+    }
+    /**
+     * Get map settings
+     */
+    public function getMapSettings()
+    {
+        try {
+            $driverNearBy = DB::table('settings')
+                ->where('document_name', 'DriverNearBy')
+                ->first();
+
+            $googleMapKey = DB::table('settings')
+                ->where('document_name', 'googleMapKey')
+                ->first();
+
+            $data = [];
+
+            if ($driverNearBy && !empty($driverNearBy->fields)) {
+                $driverData = json_decode($driverNearBy->fields, true);
+                $data['selectedMapType'] = $driverData['selectedMapType'] ?? 'google';
+            }
+
+            if ($googleMapKey && !empty($googleMapKey->fields)) {
+                $keyData = json_decode($googleMapKey->fields, true);
+                $data['googleMapKey'] = $keyData['key'] ?? '';
+            }
+
+            return $data;
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching map settings: ' . $e->getMessage());
+            return ['selectedMapType' => 'google'];
         }
     }
 }

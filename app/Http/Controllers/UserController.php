@@ -3,8 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Mail\DynamicEmail;
+use App\Models\admin_users;
+use App\Models\AppUser;
 use App\Models\User;
-use App\Models\AdminUser;
 use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use PaypalPayoutsSDK\Core\PayPalHttpClient;
 use PaypalPayoutsSDK\Core\SandboxEnvironment;
 use PaypalPayoutsSDK\Core\ProductionEnvironment;
@@ -20,24 +22,18 @@ use Razorpay\Api\Api;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
-use App\Models\AppUser;
 
 class UserController extends Controller
 {
-
     public function __construct()
     {
         $this->middleware('auth');
     }
 
-
     public function index()
     {
-
         return view("settings.users.index");
-
     }
-
 
     public function edit($id)
     {
@@ -46,7 +42,7 @@ class UserController extends Controller
 
     public function adminUsers()
     {
-        $users = AdminUser::join('role', 'role.id', '=', 'admin_users.role_id')
+        $users = admin_users::join('role', 'role.id', '=', 'admin_users.role_id')
             ->select('admin_users.*', 'role.role_name as roleName')
             ->where('admin_users.id', '!=', 1)
             ->get();
@@ -72,7 +68,7 @@ class UserController extends Controller
             return redirect()->back()->with(['message' => $errorMessage])->withInput();
         }
 
-        AdminUser::create([
+        admin_users::create([
             'name' => $request->input('name'),
             'email' => $request->input('email'),
             'password' => Hash::make($request->input('password')),
@@ -92,7 +88,7 @@ class UserController extends Controller
     }
     public function editAdminUsers($id)
     {
-        $user = AdminUser::join('role', 'role.id', '=', 'admin_users.role_id')
+        $user = admin_users::join('role', 'role.id', '=', 'admin_users.role_id')
             ->select('admin_users.*', 'role.role_name as roleName')
             ->where('admin_users.id', $id)
             ->first();
@@ -112,7 +108,7 @@ class UserController extends Controller
                 'email' => 'required|email'
             ]);
         } else {
-            $user = AdminUser::find($id);
+            $user = admin_users::find($id);
             if (password_verify($old_password, $user->password)) {
                 $validator = Validator::make($request->all(), [
                     'name' => 'required|max:255',
@@ -130,7 +126,7 @@ class UserController extends Controller
             return Redirect()->back()->with(['message' => $error]);
         }
 
-        $user = AdminUser::find($id);
+        $user = admin_users::find($id);
 
         if ($user) {
             $oldName = $user->name;
@@ -161,7 +157,7 @@ class UserController extends Controller
         if (is_array($id)) {
             $deletedUsers = [];
             for ($i = 0; $i < count($id); $i++) {
-                $users = AdminUser::find($id[$i]);
+                $users = admin_users::find($id[$i]);
                 if ($users) {
                     $deletedUsers[] = $users->name;
                     $users->delete();
@@ -179,7 +175,7 @@ class UserController extends Controller
                 );
             }
         } else {
-            $user = AdminUser::find($id);
+            $user = admin_users::find($id);
             if ($user) {
                 $userName = $user->name;
                 $user->delete();
@@ -709,7 +705,7 @@ class UserController extends Controller
         ]);
 
         $spreadsheet = IOFactory::load($request->file('file'));
-        $rows = $spreadsheet->getActiveSheet()->toArray();
+        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
 
         if (empty($rows) || count($rows) < 2) {
             return back()->withErrors(['file' => 'The uploaded file is empty or missing data.']);
@@ -728,18 +724,25 @@ class UserController extends Controller
                 'email' => $data['email'],
                 'password' => Hash::make($data['password']),
                 'zoneId' => $data['zone'] ?? null,
-                'active' => $data['active'] ?? null,
+//                'active' => $data['active'] ?? null,
+                'active' => isset($data['active'])
+                    ? (int) filter_var($data['active'], FILTER_VALIDATE_BOOLEAN)
+                    : 0,
                 'role' => $data['role'] ?? 'customer',
                 'profilePictureURL' => $data['profilePictureURL'] ?? null,
                 'migratedBy' => 'migrate:users',
             ];
+
+            // Generate a random unique Firebase ID if missing
+            $userData['firebase_id'] = $data['firebase_id'] ?? Str::uuid()->toString();
+
             // createdAt column is text in provided schema; store as string (Y-m-d H:i:s)
             $userData['createdAt'] = !empty($data['createdAt'])
                 ? (string) Carbon::parse($data['createdAt'])->format('Y-m-d H:i:s')
                 : (string) now()->format('Y-m-d H:i:s');
 
             // Upsert by email if present, otherwise insert
-            AppUser::updateOrCreate(
+            User::updateOrCreate(
                 ['email' => $userData['email']],
                 $userData
             );
@@ -788,7 +791,7 @@ class UserController extends Controller
                 'C1' => 'email',
                 'D1' => 'password',
                 'E1' => 'zone',
-                'F1' => 'active',
+                'F1' => 'active (1=active, 0=inactive)',
                 'G1' => 'role',
                 'H1' => 'profilePictureURL',
                 'I1' => 'createdAt'
@@ -806,18 +809,36 @@ class UserController extends Controller
                 'john.doe@example.com',
                 'password123',
                 'zoneId123',
-                'true',
+                1,
                 'customer',
                 'https://example.com/profile.jpg',
                 date('Y-m-d H:i:s')
             ];
-
-            $sheet->fromArray([$sampleData], null, 'A2');
+//
+//            $sheet->fromArray([$sampleData], null, 'A2');
+//
+//
+//            // Force F2 (active) to be numeric/text, not boolean
+//            $sheet->setCellValueExplicit('F2', '1', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
+// Add sample data manually to control types
+            $row = 2;
+            $sheet->setCellValueExplicit("A{$row}", 'John', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit("B{$row}", 'Doe', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit("C{$row}", 'john.doe@example.com', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit("D{$row}", 'password123', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit("E{$row}", 'zoneId123', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit("F{$row}", '1', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC); // ✅ force as number
+            $sheet->setCellValueExplicit("G{$row}", 'customer', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit("H{$row}", 'https://example.com/profile.jpg', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit("I{$row}", date('Y-m-d H:i:s'), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
 
             // Auto-size columns
             foreach (range('A', 'I') as $col) {
                 $sheet->getColumnDimension($col)->setAutoSize(true);
             }
+
+            // Apply formatting for date column
+            $sheet->getStyle('I2')->getNumberFormat()->setFormatCode('yyyy-mm-dd hh:mm:ss');
 
             // Save the file
             $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
@@ -835,7 +856,7 @@ class UserController extends Controller
     public function getUserData($id)
     {
         try {
-            $user = AppUser::where('firebase_id', $id)
+            $user = User::where('firebase_id', $id)
                 ->orWhere('id', $id)
                 ->orWhere('_id', $id)
                 ->first();
@@ -858,6 +879,9 @@ class UserController extends Controller
                 $shippingAddress = json_decode($user->shippingAddress, true);
             }
 
+            // Extract zoneId from shippingAddress
+            $zoneId = self::extractZoneFromShippingAddress($user->shippingAddress);
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -870,6 +894,7 @@ class UserController extends Controller
                     'wallet_amount' => $user->wallet_amount ?? 0,
                     'profilePictureURL' => $user->profilePictureURL,
                     'shippingAddress' => $shippingAddress,
+                    'zoneId' => $zoneId,
                     'isActive' => $user->isActive,
                     'createdAt' => $user->createdAt,
                     'totalOrders' => $totalOrders,
@@ -895,7 +920,7 @@ class UserController extends Controller
                 'note' => 'nullable|string'
             ]);
 
-            $user = AppUser::where('firebase_id', $id)
+            $user = User::where('firebase_id', $id)
                 ->orWhere('id', $id)
                 ->orWhere('_id', $id)
                 ->first();
@@ -958,5 +983,193 @@ class UserController extends Controller
                 'message' => 'Error adding wallet amount: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Extract zoneId from shippingAddress JSON
+     * @param string|null $shippingAddress JSON string
+     * @return string zoneId or empty string
+     */
+    public static function extractZoneFromShippingAddress($shippingAddress)
+    {
+        $zoneId = '';
+        if ($shippingAddress) {
+            try {
+                $addresses = json_decode($shippingAddress, true);
+                if (is_array($addresses)) {
+                    // Find default address first
+                    $defaultAddress = collect($addresses)->firstWhere('isDefault', 1);
+                    if ($defaultAddress && isset($defaultAddress['zoneId'])) {
+                        $zoneId = $defaultAddress['zoneId'];
+                    } else {
+                        // If no default, get zoneId from first address
+                        $firstAddress = reset($addresses);
+                        if ($firstAddress && isset($firstAddress['zoneId'])) {
+                            $zoneId = $firstAddress['zoneId'];
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                // If JSON parsing fails, leave zoneId empty
+            }
+        }
+        return $zoneId;
+    }
+
+    /**
+     * Get a single user by ID (for edit page)
+     */
+    public function showUser(Request $request, $id)
+    {
+        $isActive = $request->input('isActive');
+
+        $user = User::where('firebase_id', $id)
+            ->orWhere('id', $id)
+            ->orWhere('_id', $id)
+            ->first();
+
+        if (!$user) {
+            return response()->json([
+                'status' => false,
+                'message' => 'User not found'
+            ], 404);
+        }
+        $query = AppUser::query();
+
+        if ($isActive !== null && $isActive !== '') {
+            $query->where('active', $isActive == '1' ? '1' : '0');
+        }
+
+        // Get total orders count
+        $totalOrders = \DB::table('restaurant_orders')
+            ->where('authorID', $id)
+            ->count();
+
+        $fullName = trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? ''));
+
+        // Extract zoneId from shippingAddress
+        $zoneId = self::extractZoneFromShippingAddress($user->shippingAddress);
+
+        $totalDrivers   = $query->count();
+        $activeDrivers  = $query->clone()->where('active', 1)->count();
+        $inactiveDrivers = $query->clone()->where('active', 0)->count();
+
+
+        return response()->json([
+            'status' => true,
+            'data' => [
+                'id' => (string) ($user->firebase_id ?: $user->_id ?: $user->id),
+                'firebase_id' => (string) ($user->firebase_id ?: $user->_id ?: $user->id),
+                '_id' => (string) ($user->_id ?: $user->firebase_id ?: $user->id),
+                'firstName' => $user->firstName,
+                'lastName' => $user->lastName,
+                'fullName' => $fullName,
+                'email' => $user->email,
+                'phoneNumber' => $user->phoneNumber,
+                'countryCode' => $user->countryCode,
+                'wallet_amount' => $user->wallet_amount ?? 0,
+                'profilePictureURL' => $user->profilePictureURL,
+                'shippingAddress' => $user->shippingAddress ? json_decode($user->shippingAddress, true) : null,
+                'zoneId' => $zoneId,
+//                'active' => in_array((string) $user->active, ['1','true'], true) || (bool) ($user->isActive ?? 0),
+//                'isActive' => in_array((string) $user->active, ['1','true'], true) || (bool) ($user->isActive ?? 0),
+                'active' => ($user->active == 1 || $user->isActive == 1) ? 1 : 0,
+                'createdAt' => $user->createdAt,
+                'totalOrders' => $totalOrders,
+                'provider' => $user->provider ?? 'email',
+                'role' => $user->role ?? 'customer',
+            ],
+            'stats' => [
+                'total' => $totalDrivers,
+                'active' => $activeDrivers,
+                'inactive' => $inactiveDrivers
+            ]
+        ]);
+    }
+
+    /**
+     * Update user (for edit page)
+     */
+    public function updateUser(Request $request, $id)
+    {
+        $user = User::where('firebase_id', $id)
+            ->orWhere('id', $id)
+            ->orWhere('_id', $id)
+            ->first();
+
+        if (!$user) {
+            return response()->json([
+                'status' => false,
+                'message' => 'User not found'
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'firstName' => 'required|string|max:255',
+            'lastName' => 'required|string|max:255',
+            'countryCode' => 'nullable|string|max:10',
+            'phoneNumber' => 'nullable|string|max:30',
+            'active' => 'nullable',
+            'photo' => 'nullable|string', // base64 data URL (optional)
+            'fileName' => 'nullable|string',
+        ]);
+
+        // Handle profile picture upload
+        if (!empty($validated['photo'])) {
+            // Delete old image if exists
+            if ($user->profilePictureURL && strpos($user->profilePictureURL, 'storage/users/') !== false) {
+                $oldPath = str_replace(asset('storage/'), '', $user->profilePictureURL);
+                Storage::disk('public')->delete($oldPath);
+            }
+
+            $data = $validated['photo'];
+            $data = preg_replace('#^data:image/\w+;base64,#i', '', $data);
+            $binary = base64_decode($data, true);
+            if ($binary !== false) {
+                $name = $validated['fileName'] ?? ('user_' . time() . '.jpg');
+                $path = 'users/' . $name;
+                Storage::disk('public')->put($path, $binary);
+                $user->profilePictureURL = asset('storage/' . $path);
+            }
+        }
+
+        // Determine active status
+        $isActive = false;
+        if (isset($validated['active'])) {
+            if (is_bool($validated['active'])) {
+                $isActive = $validated['active'];
+            } else {
+                $isActive = ($validated['active'] === 'true' || $validated['active'] === true || $validated['active'] === 1);
+            }
+        }
+
+        // Update user fields
+        $user->firstName = $validated['firstName'];
+        $user->lastName = $validated['lastName'];
+        $user->countryCode = $validated['countryCode'] ?? $user->countryCode;
+        $user->phoneNumber = $validated['phoneNumber'] ?? $user->phoneNumber;
+        $user->active = $isActive ? 1 : 0;
+        $user->isActive = $isActive ? 1 : 0;
+        $user->save();
+
+        // Log activity
+        app(\App\Services\ActivityLogger::class)->log(
+            auth()->user(),
+            'users',
+            'updated',
+            'Updated user: ' . $user->firstName . ' ' . $user->lastName,
+            $request
+        );
+
+        return response()->json([
+            'status' => true,
+            'message' => 'User updated successfully',
+            'data' => [
+                'id' => (string) ($user->firebase_id ?: $user->id),
+                'firstName' => $user->firstName,
+                'lastName' => $user->lastName,
+                'email' => $user->email,
+            ]
+        ]);
     }
 }

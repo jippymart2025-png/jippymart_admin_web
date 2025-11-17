@@ -25,6 +25,7 @@ class Vendor extends Model
         'description',
         'reviewsCount',
         'categoryPhoto',
+        'zoneID',
         'photos',
         'createdAt',
         'location',

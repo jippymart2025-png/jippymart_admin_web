@@ -568,7 +568,8 @@
             });
 
             const table=$('#foodTable').DataTable({
-                pageLength: 10, // Number of rows per page
+                pageLength: 30, // Number of rows per page
+                lengthMenu: [[30, 50, 75, 100], [30, 50, 75, 100]],
                 processing: false, // Show processing indicator
                 serverSide: true, // Enable server-side processing
                 responsive: true,
@@ -705,23 +706,26 @@
                             {
                                 extend: 'excelHtml5',
                                 text: 'Export Excel',
-                                action: function (e, dt, button, config) {
-                                    exportData(dt, 'excel',fieldConfig);
-                                }
+                                exportOptions: {
+                                    columns: ':visible:not(:first-child):not(:last-child)'
+                                },
+                                title: 'Mart items',
                             },
                             {
                                 extend: 'pdfHtml5',
                                 text: 'Export PDF',
-                                action: function (e, dt, button, config) {
-                                    exportData(dt, 'pdf',fieldConfig);
-                                }
+                                exportOptions: {
+                                    columns: ':visible:not(:first-child):not(:last-child)'
+                                },
+                                title: 'mart items',
                             },
                             {
                                 extend: 'csvHtml5',
                                 text: 'Export CSV',
-                                action: function (e, dt, button, config) {
-                                    exportData(dt, 'csv',fieldConfig);
-                                }
+                                exportOptions: {
+                                    columns: ':visible:not(:first-child):not(:last-child)'
+                                },
+                                title: 'mart items',
                             }
                         ]
                     }

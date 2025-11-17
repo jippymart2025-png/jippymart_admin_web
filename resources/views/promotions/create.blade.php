@@ -189,9 +189,11 @@ function populateProducts(restaurantId) {
     productSelect.append('<option value="">Select Product</option>');
     $('#actual_price_display').hide();
     if (!restaurantId) return;
-    
+
     var selectedOption = restaurantSelect.find('option:selected');
     var vendorType = (selectedOption.data('vtype') || vtypeSelect.val() || '').toString().toLowerCase();
+
+    console.log('📦 Loading products for:', { restaurantId: restaurantId, vType: vendorType });
 
     $.ajax({
         url: '{{ route('promotions.products') }}',
@@ -201,16 +203,27 @@ function populateProducts(restaurantId) {
             vType: vendorType
         },
         success: function(response) {
+            console.log('📥 Products response:', response);
+
             if (response.success) {
                 productList = response.data;
                 if (response.data.length === 0) {
                     productSelect.append('<option value="">No products found</option>');
+                    console.warn('⚠️ No products found for vendor:', restaurantId);
                 } else {
                     response.data.forEach(function(product) {
                         productSelect.append('<option value="' + product.id + '" data-price="' + product.price + '">' + product.name + '</option>');
                     });
+                    console.log('✅ Loaded ' + response.data.length + ' products');
                 }
+            } else {
+                console.error('❌ Error loading products:', response.error);
+                alert('Error loading products: ' + response.error);
             }
+        },
+        error: function(xhr) {
+            console.error('❌ Products AJAX error:', xhr);
+            alert('Error loading products: ' + (xhr.responseJSON?.error || xhr.statusText));
         }
     });
 }
@@ -276,7 +289,8 @@ $(document).ready(function () {
         var payment_mode = 'prepaid';
         var vType = (vtypeSelect.val() || '').toString().toLowerCase();
         var zoneId = zoneSelect.val() || '';
-        var isAvailable = $('#promotion_is_available').is(':checked');
+        var isAvailable = $('#promotion_is_available').is(':checked') ? 1 : 0;
+        console.log('✅ Checkbox value:', isAvailable ? 'Checked (1)' : 'Unchecked (0)');
 
         if (!restaurant_id || !product_id || !start_time || !end_time) {
             $('.error_top').show().html('<p>Please fill all required fields.</p>');
@@ -297,6 +311,13 @@ $(document).ready(function () {
 
         $('.error_top').hide();
         jQuery('#data-table_processing').show();
+
+        console.log('💾 Creating promotion:', {
+            restaurant: restaurant_title,
+            product: product_title,
+            vType: vType,
+            special_price: special_price
+        });
 
         $.ajax({
             url: '{{ route('promotions.store') }}',
@@ -319,17 +340,26 @@ $(document).ready(function () {
                 isAvailable: isAvailable
             },
             success: function(response) {
+                console.log('✅ Promotion created successfully:', response);
+
                 jQuery('#data-table_processing').hide();
+
                 if (response.success) {
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        logActivity('promotions', 'created', 'Created promotion: ' + restaurant_title + ' - ' + product_title);
+                    }
+
                     window.location.href = '{!! route('promotions') !!}';
                 } else {
                     $('.error_top').show().html('<p>' + response.error + '</p>');
                     window.scrollTo(0, 0);
                 }
             },
-            error: function(xhr, status, error) {
+            error: function(xhr) {
+                console.error('❌ Create error:', xhr);
                 jQuery('#data-table_processing').hide();
-                $('.error_top').show().html('<p>Error creating promotion: ' + error + '</p>');
+                $('.error_top').show().html('<p>Error creating promotion: ' + (xhr.responseJSON?.error || xhr.statusText) + '</p>');
                 window.scrollTo(0, 0);
             }
         });

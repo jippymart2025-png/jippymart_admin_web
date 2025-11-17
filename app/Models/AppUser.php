@@ -11,7 +11,7 @@ class AppUser extends Model
     public $timestamps = false;
     protected $casts = [
         'isActive' => 'boolean',
-        'active' => 'string',
+        'active' => 'integer',
         'isDocumentVerify' => 'string',
         'wallet_amount' => 'integer',
         'rotation' => 'float',

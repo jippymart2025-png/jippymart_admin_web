@@ -7,7 +7,6 @@ use App\Models\MartCategory;
 use App\Models\MartSubcategory;
 use Illuminate\Http\Request;
 use App\Models\MartItem;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -930,7 +929,7 @@ class MartItemController extends Controller
     }
 
 
-    public function getSubcategories_home(Request $request)
+        public function getSubcategories_home(Request $request)
     {
         try {
             $validator = Validator::make($request->all(), [
@@ -983,12 +982,10 @@ class MartItemController extends Controller
                     'last_page' => $items->lastPage(),
                 ]
             ]);
-
         } catch (\Exception $e) {
             Log::error('Failed to fetch trending mart items', [
                 'error' => $e->getMessage(),
             ]);
-
             return response()->json([
                 'status' => false,
                 'message' => 'Error fetching trending items',
@@ -996,6 +993,7 @@ class MartItemController extends Controller
             ], 500);
         }
     }
+
 
 
     public function searchSubcategories(Request $request): \Illuminate\Http\JsonResponse
@@ -1243,48 +1241,6 @@ class MartItemController extends Controller
 //            ], 500);
 //        }
 //    }
-    public function getMartVendors(Request $request)
-    {
-        try {
-            $search = $request->input('search');
-
-            $limit = $request->input('limit', 20);
-
-            // Base query
-            $query = DB::table('vendors')
-                ->where('publish',true)
-                ->where('vType','mart')
-                ->where('isOpen',true);
-
-
-            // Apply limit
-            $query->limit($limit);
-
-            // Fetch vendors
-            $vendors = $query->get();
-
-            // Client-side search (same as Flutter)
-            if ($search) {
-                $searchLower = strtolower($search);
-
-                $vendors = $vendors->filter(function ($vendor) use ($searchLower) {
-                    return isset($vendor->title) &&
-                        str_contains(strtolower($vendor->title), $searchLower);
-                })->values();
-            }
-
-            return response()->json([
-                'success' => true,
-                'data' => $vendors,
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage(),
-            ], 500);
-        }
-    }
 
 
 }

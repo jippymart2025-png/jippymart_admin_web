@@ -37,7 +37,8 @@ class restaurant_orders extends Model
 
         $query = DB::table('restaurant_orders as ro')
             ->leftJoin('vendors as v', 'v.id', '=', 'ro.vendorID')
-            ->leftJoin('users as u', 'u.id', '=', 'ro.authorID')
+            ->leftJoin('users as u_client', 'u_client.id', '=', 'ro.authorID')   // 👤 client
+            ->leftJoin('users as u_driver', 'u_driver.id', '=', 'ro.driverID')   // 🚗 driver
             ->select(
                 'ro.id',
                 'ro.status',
@@ -57,22 +58,24 @@ class restaurant_orders extends Model
                 'v.title as vendor_title',
                 'v.vType as vendor_type',
                 'v.zoneId as vendor_zone_id',
-                'u.firstName as user_first_name',
-                'u.lastName as user_last_name'
+                'u_client.firstName as client_first_name',
+                'u_client.lastName as client_last_name',
+                'u_client.phoneNumber as client_phone',
+                'u_client.email as client_email',
+                'u_driver.firstName as driver_first_name',
+                'u_driver.lastName as driver_last_name',
+                'u_driver.phoneNumber as driver_phone',
+                'u_driver.email as driver_email'
             );
 
-        if ($vendorId !== '') {
-            $query->where('ro.vendorID', $vendorId);
-        }
-        if ($userId !== '') {
-            $query->where('ro.authorID', $userId);
-        }
-        if ($driverId !== '') {
-            $query->where('ro.driverID', $driverId);
-        }
-        if ($status !== '' && strtolower($status) !== 'all') {
-            $query->where('ro.status', $status);
-        }
+        // ✅ Filters
+        if ($vendorId !== '') $query->where('ro.vendorID', $vendorId);
+        if ($userId !== '') $query->where('ro.authorID', $userId);
+        if ($driverId !== '') $query->where('ro.driverID', $driverId);
+        if ($status !== '' && strtolower($status) !== 'all') $query->where('ro.status', $status);
+        if ($zoneId !== '') $query->where('v.zoneId', $zoneId);
+
+        // ✅ Order Type
         if ($orderType === 'takeaway') {
             $query->where('ro.takeAway', '1');
         } elseif ($orderType === 'delivery') {
@@ -80,27 +83,54 @@ class restaurant_orders extends Model
                 $q->whereNull('ro.takeAway')->orWhere('ro.takeAway', '0');
             });
         }
-        if ($zoneId !== '') {
-            $query->where('v.zoneId', $zoneId);
-        }
+
+        // ✅ Date Filter
         if ($dateFrom !== '' && $dateTo !== '') {
             try {
-                $from = Carbon::parse($dateFrom)->startOfDay();
-                $to = Carbon::parse($dateTo)->endOfDay();
-                // createdAt is an ISO string in this DB; compare lexicographically
-                $query->whereBetween('ro.createdAt', [$from->toIso8601ZuluString(), $to->toIso8601ZuluString()]);
+                $from = \Carbon\Carbon::parse($dateFrom)->startOfDay();
+                $to = \Carbon\Carbon::parse($dateTo)->endOfDay();
+
+                $patterns = [];
+                $current = $from->copy();
+                while ($current->lte($to)) {
+                    $patterns[] = $current->format('Y-m-d');
+                    $current->addDay();
+                }
+
+                $query->where(function ($q) use ($patterns) {
+                    foreach ($patterns as $pattern) {
+                        $q->orWhere('ro.createdAt', 'LIKE', "%$pattern%");
+                    }
+                });
             } catch (\Throwable $e) {
-                // ignore
+                \Log::error('❌ Date parsing failed', ['error' => $e->getMessage()]);
             }
         }
+
+        // ✅ Universal Search
         if ($searchValue !== '') {
             $query->where(function ($q) use ($searchValue) {
                 $q->orWhereRaw('LOWER(ro.id) LIKE ?', ["%{$searchValue}%"])
-                  ->orWhereRaw('LOWER(v.title) LIKE ?', ["%{$searchValue}%"])
-                  ->orWhereRaw('LOWER(ro.status) LIKE ?', ["%{$searchValue}%"]);
+                    ->orWhereRaw('LOWER(v.title) LIKE ?', ["%{$searchValue}%"])
+                    ->orWhereRaw('LOWER(ro.status) LIKE ?', ["%{$searchValue}%"])
+
+                    // 👤 Client Search
+                    ->orWhereRaw('LOWER(CONCAT(u_client.firstName, " ", u_client.lastName)) LIKE ?', ["%{$searchValue}%"])
+                    ->orWhereRaw('LOWER(u_client.firstName) LIKE ?', ["%{$searchValue}%"])
+                    ->orWhereRaw('LOWER(u_client.lastName) LIKE ?', ["%{$searchValue}%"])
+                    ->orWhereRaw('LOWER(u_client.email) LIKE ?', ["%{$searchValue}%"])
+                    ->orWhereRaw('u_client.phoneNumber LIKE ?', ["%{$searchValue}%"])
+
+                    // 🚗 Driver Search
+                    ->orWhereRaw('LOWER(CONCAT(u_driver.firstName, " ", u_driver.lastName)) LIKE ?', ["%{$searchValue}%"])
+                    ->orWhereRaw('LOWER(u_driver.firstName) LIKE ?', ["%{$searchValue}%"])
+                    ->orWhereRaw('LOWER(u_driver.lastName) LIKE ?', ["%{$searchValue}%"])
+                    ->orWhereRaw('LOWER(u_driver.email) LIKE ?', ["%{$searchValue}%"])
+                    ->orWhereRaw('u_driver.phoneNumber LIKE ?', ["%{$searchValue}%"]);
             });
         }
 
+        // ✅ Count & Paginate
         $recordsFiltered = (clone $query)->count();
         $rows = $query->orderBy($orderBy, $orderDir)
             ->skip($start)
@@ -112,4 +142,5 @@ class restaurant_orders extends Model
             'recordsFiltered' => $recordsFiltered,
         ];
     }
+
 }

@@ -96,14 +96,24 @@ var isUploading = false;
 
 $(document).ready(function () {
     // Load existing media data
+    console.log('🔄 Loading media data for ID:', id);
+
     $.get('{{ route('media.json', ['id'=>':id']) }}'.replace(':id', id), function(media){
+        console.log('✅ Media data loaded:', media);
+
         $('#media_name').val(media.name || '');
         $('#media_slug').val(media.slug || '');
         $('#media_image_path').val(media.image_path || '');
         oldImagePath = media.image_path || '';
         oldImageName = media.image_name || '';
         $('.media_image_preview').html(media.image_path ? '<img class="rounded" style="width:70px; height:70px; object-fit: cover;" src="' + media.image_path + '" alt="current image">' : '');
-    }).fail(function(){ $('.error_top').show().html('<p>Error: Media not found for the given ID.</p>'); });
+
+        console.log('📝 Form populated with media data');
+    })
+    .fail(function(xhr, status, error){
+        console.error('❌ Failed to load media data:', xhr);
+        $('.error_top').show().html('<p>Error: Media not found for the given ID.</p>');
+    });
 
     // Generate slug when name changes
     $('#media_name').on('input', function () {
@@ -169,10 +179,36 @@ $(document).ready(function () {
         fd.append('name', name);
         fd.append('slug', slug);
         if (photoFile) fd.append('image', photoFile);
-        $.ajax({ url: '{{ url('media') }}' + '/' + id, method: 'POST', data: fd, processData: false, contentType: false, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-            .done(function(){ window.location.href = '{{ route('media.index') }}'; })
-            .fail(function(xhr){ $('.error_top').show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>'); window.scrollTo(0,0); })
-            .always(function(){ isUploading = false; $('.save-media-btn').prop('disabled', false).html('<i class="fa fa-save"></i> Update'); });
+
+        console.log('💾 Updating media:', { id: id, name: name, slug: slug, hasNewImage: !!photoFile });
+
+        $.ajax({
+            url: '{{ route('media.update', ['id'=>':id']) }}'.replace(':id', id),
+            method: 'POST',
+            data: fd,
+            processData: false,
+            contentType: false,
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+        })
+        .done(function(response){
+            console.log('✅ Media updated successfully:', response);
+
+            // Log activity
+            if (typeof logActivity === 'function') {
+                logActivity('media', 'updated', 'Updated media: ' + name);
+            }
+
+            window.location.href = '{{ route('media.index') }}';
+        })
+        .fail(function(xhr){
+            console.error('❌ Update failed:', xhr);
+            $('.error_top').show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>');
+            window.scrollTo(0,0);
+        })
+        .always(function(){
+            isUploading = false;
+            $('.save-media-btn').prop('disabled', false).html('<i class="fa fa-save"></i> Update');
+        });
     });
 });
 </script>

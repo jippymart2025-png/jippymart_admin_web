@@ -77,33 +77,83 @@
 <script>
     var id = "{{$id}}";
     $(document).ready(function(){
+        console.log('🔄 Loading document data for ID:', id);
+
         jQuery("#data-table_processing").show();
+
         $.get('{{ url('documents/json') }}/' + id, function(data){
+            console.log('✅ Document data loaded:', data);
+
             $(".title").val(data.title || '');
             $("#document_for").val(data.type || 'restaurant');
             if (data.enable) $(".enable").prop('checked', true);
             if (data.frontSide) $(".frontside").prop('checked', true);
             if (data.backSide) $(".backside").prop('checked', true);
+
+            console.log('📝 Form populated with document data');
             jQuery("#data-table_processing").hide();
+        })
+        .fail(function(xhr){
+            console.error('❌ Failed to load document data:', xhr);
+            jQuery("#data-table_processing").hide();
+            $(".error_top").show().html('<p>Error loading document data</p>');
         });
+
         $(".edit-setting-btn").click(function(){
             $(".error_top").hide().html('');
+
             var title = $(".title").val();
             var document_for = $("#document_for").val();
             var isEnabled = $(".enable").is(":checked");
             var forntend = $(".frontside").is(":checked");
             var backend = $(".backside").is(":checked");
-            if(!title){ $(".error_top").show().html('<p>{{trans('lang.document_title_help')}}</p>'); window.scrollTo(0,0); return; }
-            if(!forntend && !backend){ $(".error_top").show().html('<p>{{trans('lang.check_atleast_one_side_of_document_from_front_or_back')}}</p>'); window.scrollTo(0,0); return; }
+
+            console.log('💾 Updating document:', { title: title, type: document_for });
+
+            if(!title){
+                $(".error_top").show().html('<p>{{trans('lang.document_title_help')}}</p>');
+                window.scrollTo(0,0);
+                return;
+            }
+            if(!forntend && !backend){
+                $(".error_top").show().html('<p>{{trans('lang.check_atleast_one_side_of_document_from_front_or_back')}}</p>');
+                window.scrollTo(0,0);
+                return;
+            }
+
+            jQuery("#data-table_processing").show();
+
             var fd = new FormData();
             fd.append('title', title);
             fd.append('type', document_for);
             fd.append('enable', isEnabled ? 1 : 0);
             fd.append('frontSide', forntend ? 1 : 0);
             fd.append('backSide', backend ? 1 : 0);
-            $.ajax({ url: '{{ url('documents') }}' + '/' + id, method: 'POST', data: fd, processData: false, contentType: false, headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-                .done(function(){ window.location.href = '{{ route('documents') }}'; })
-                .fail(function(xhr){ $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+xhr.responseText+'</p>'); window.scrollTo(0,0); });
+
+            $.ajax({
+                url: '{{ url('documents') }}' + '/' + id,
+                method: 'POST',
+                data: fd,
+                processData: false,
+                contentType: false,
+                headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+            })
+            .done(function(response){
+                console.log('✅ Document updated successfully:', response);
+
+                // Log activity
+                if (typeof logActivity === 'function') {
+                    logActivity('documents', 'updated', 'Updated document: ' + title);
+                }
+
+                window.location.href = '{{ route('documents') }}';
+            })
+            .fail(function(xhr){
+                console.error('❌ Update failed:', xhr);
+                jQuery("#data-table_processing").hide();
+                $(".error_top").show().html('<p>Failed ('+xhr.status+'): '+(xhr.responseJSON?.message || xhr.statusText)+'</p>');
+                window.scrollTo(0,0);
+            });
         });
     });
 </script>

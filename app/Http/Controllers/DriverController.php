@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use Google\Cloud\Firestore\FirestoreClient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\AppUser;
@@ -45,41 +44,34 @@ class DriverController extends Controller
     public function clearOrderRequestData($id)
     {
         try {
-            // Initialize Firestore client
-            $firestore = new FirestoreClient([
-                'projectId' => config('firestore.project_id'),
-                'keyFilePath' => config('firestore.credentials'),
-            ]);
+            $driver = AppUser::query()
+                ->where('role', 'driver')
+                ->where(function ($query) use ($id) {
+                    $query->where('firebase_id', $id)
+                        ->orWhere('_id', $id)
+                        ->orWhere('id', $id);
+                })
+                ->first();
 
-            // Reference to the driver document
-            $driverRef = $firestore->collection('users')->document($id);
-
-            // Get the current driver data to check if it exists and get driver name for logging
-            $driverDoc = $driverRef->snapshot();
-
-            if (!$driverDoc->exists()) {
+            if (!$driver) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Driver not found'
                 ], 404);
             }
 
-            $driverData = $driverDoc->data();
-            $driverName = ($driverData['firstName'] ?? '') . ' ' . ($driverData['lastName'] ?? 'Unknown');
+            $driver->orderRequestData = json_encode([]);
+            $driver->save();
 
-            // Clear the orderRequestData array by setting it to an empty array
-            $driverRef->update([
-                ['path' => 'orderRequestData', 'value' => []]
-            ]);
+            $driverName = trim(($driver->firstName ?? '') . ' ' . ($driver->lastName ?? ''));
 
-            // Log the activity if the function exists
             if (function_exists('logActivity')) {
-                logActivity('drivers', 'clear_order_request_data', 'Cleared order request data for driver: ' . $driverName);
+                logActivity('drivers', 'clear_order_request_data', 'Cleared order request data for driver: ' . ($driverName ?: $driver->firebase_id ?? $driver->id));
             }
 
             return response()->json([
                 'success' => true,
-                'message' => 'restaurantorders request data cleared successfully for driver: ' . $driverName
+                'message' => 'Order request data cleared successfully for driver: ' . ($driverName ?: $driver->firebase_id ?? $driver->id)
             ]);
 
         } catch (\Exception $e) {
@@ -93,54 +85,41 @@ class DriverController extends Controller
     public function clearAllOrderRequestData()
     {
         try {
-            // Initialize Firestore client
-            $firestore = new FirestoreClient([
-                'projectId' => config('firestore.project_id'),
-                'keyFilePath' => config('firestore.credentials'),
-            ]);
+            $drivers = AppUser::query()
+                ->where('role', 'driver')
+                ->get();
 
-            // Get all drivers
-            $driversQuery = $firestore->collection('users')->where('role', '=', 'driver');
-            $driversSnapshot = $driversQuery->documents();
+            if ($drivers->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No drivers found.'
+                ], 404);
+            }
 
             $clearedCount = 0;
             $errors = [];
 
-            foreach ($driversSnapshot as $driverDoc) {
+            foreach ($drivers as $driver) {
                 try {
-                    $driverData = $driverDoc->data();
-                    $driverName = ($driverData['firstName'] ?? '') . ' ' . ($driverData['lastName'] ?? 'Unknown');
-
-                    // Clear the orderRequestData array for this driver
-                    $firestore->collection('users')->document($driverDoc->id())->update([
-                        ['path' => 'orderRequestData', 'value' => []]
-                    ]);
-
+                    $driver->orderRequestData = json_encode([]);
+                    $driver->save();
                     $clearedCount++;
 
-                    // Log the activity if the function exists
                     if (function_exists('logActivity')) {
-                        logActivity('drivers', 'clear_order_request_data', 'Cleared order request data for driver: ' . $driverName);
+                        $driverName = trim(($driver->firstName ?? '') . ' ' . ($driver->lastName ?? ''));
+                        logActivity('drivers', 'clear_order_request_data', 'Cleared order request data for driver: ' . ($driverName ?: $driver->firebase_id ?? $driver->id));
                     }
-
                 } catch (\Exception $e) {
-                    $errors[] = 'Driver ' . ($driverData['firstName'] ?? 'Unknown') . ': ' . $e->getMessage();
+                    $errors[] = 'Driver ' . ($driver->firstName ?? 'Unknown') . ': ' . $e->getMessage();
                 }
             }
 
-            if ($clearedCount > 0) {
-                return response()->json([
-                    'success' => true,
-                    'message' => "Successfully cleared order request data for {$clearedCount} drivers.",
-                    'cleared_count' => $clearedCount,
-                    'errors' => $errors
-                ]);
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No drivers found or no data was cleared.'
-                ], 404);
-            }
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully cleared order request data for {$clearedCount} drivers.",
+                'cleared_count' => $clearedCount,
+                'errors' => $errors
+            ]);
 
         } catch (\Exception $e) {
             return response()->json([
@@ -149,7 +128,6 @@ class DriverController extends Controller
             ], 500);
         }
     }
-
     // ==================== SQL-BASED API ENDPOINTS ====================
 
     /**
@@ -162,17 +140,17 @@ class DriverController extends Controller
             $start = $request->input('start', 0);
             $length = $request->input('length', 10);
             $searchValue = $request->input('search.value');
-            
+
             // Filters
             $zone = $request->input('zone');
             $isActive = $request->input('isActive');
             $isDocumentVerify = $request->input('isDocumentVerify');
             $startDate = $request->input('startDate');
             $endDate = $request->input('endDate');
-            
+
             // Query from users table where role = 'driver'
             $query = AppUser::where('role', 'driver');
-            
+
             // Use subquery to get unique drivers by firebase_id
             $query->whereIn('id', function($subQuery) {
                 $subQuery->select(DB::raw('MAX(id)'))
@@ -181,27 +159,27 @@ class DriverController extends Controller
                     ->whereNotNull('firebase_id')
                     ->groupBy('firebase_id');
             });
-            
+
             // Apply filters
             if (!empty($zone)) {
                 $query->where('zoneId', $zone);
             }
-            
+
             if ($isActive !== null && $isActive !== '') {
                 $query->where('active', $isActive == '1' ? '1' : '0');
             }
-            
+
             if ($isDocumentVerify !== null && $isDocumentVerify !== '') {
                 $query->where('isDocumentVerify', $isDocumentVerify == '1' ? '1' : '0');
             }
-            
+
             if (!empty($startDate) && !empty($endDate)) {
-                $query->whereRaw("DATE(REPLACE(REPLACE(createdAt, '\"', ''), 'T', ' ')) BETWEEN ? AND ?", 
+                $query->whereRaw("DATE(REPLACE(REPLACE(createdAt, '\"', ''), 'T', ' ')) BETWEEN ? AND ?",
                     [$startDate, $endDate]);
             }
-            
+
             $totalRecords = $query->count();
-            
+
             // Apply search filter
             if (!empty($searchValue)) {
                 $query->where(function($q) use ($searchValue) {
@@ -211,20 +189,25 @@ class DriverController extends Controller
                       ->orWhere('phoneNumber', 'like', "%{$searchValue}%");
                 });
             }
-            
+
             $filteredRecords = $query->count();
-            
-            // Get counts for statistics
-            $totalDrivers = AppUser::where('role', 'driver')->count();
-            $activeDrivers = AppUser::where('role', 'driver')->where('active', '1')->count();
-            $inactiveDrivers = AppUser::where('role', 'driver')->where('active', '0')->count();
-            
+
+//            // Get counts for statistics
+//            $totalDrivers = AppUser::where('role', 'driver')->count();
+//            $activeDrivers = AppUser::where('role', 'driver')->where('active', '1')->count();
+//            $inactiveDrivers = AppUser::where('role', 'driver')->where('active', '0')->count();
+
+            // Now compute filtered stats
+            $totalDrivers   = $query->count();
+            $activeDrivers  = $query->clone()->where('active', 1)->count();
+            $inactiveDrivers = $query->clone()->where('active', 0)->count();
+
             // Apply ordering - descending by createdAt
             $drivers = $query->orderByRaw("REPLACE(REPLACE(createdAt, '\"', ''), 'T', ' ') DESC")
                            ->skip($start)
                            ->take($length)
                            ->get();
-            
+
             // Build response data
             $data = [];
             foreach ($drivers as $driver) {
@@ -239,7 +222,7 @@ class DriverController extends Controller
                         $createdAtFormatted = $driver->createdAt;
                     }
                 }
-                
+
                 // Parse location if it's JSON
                 $latitude = 0;
                 $longitude = 0;
@@ -254,7 +237,7 @@ class DriverController extends Controller
                         }
                     }
                 }
-                
+
                 $driverData = [
                     'id' => $driver->id ?? '',
                     'firebase_id' => $driver->firebase_id ?? $driver->id,
@@ -280,10 +263,10 @@ class DriverController extends Controller
                     'createdAt' => $createdAtFormatted,
                     'createdAtRaw' => $driver->createdAt ?? '',
                 ];
-                
+
                 $data[] = $driverData;
             }
-            
+
             return response()->json([
                 'draw' => $draw,
                 'recordsTotal' => $totalRecords,
@@ -295,7 +278,7 @@ class DriverController extends Controller
                     'inactive' => $inactiveDrivers
                 ]
             ]);
-            
+
         } catch (\Exception $e) {
             \Log::error('Error fetching drivers data: ' . $e->getMessage());
             return response()->json([
@@ -315,28 +298,28 @@ class DriverController extends Controller
     {
         try {
             \Log::info('=== Looking for driver with ID: ' . $id);
-            
+
             // Try to find by string ID column first (Firebase-style ID), then by numeric primary key
             $driver = AppUser::where('firebase_id', $id)
                           ->where('role', 'driver')
                           ->first();
-            
+
             \Log::info('Search by firebase_id: ' . ($driver ? 'FOUND' : 'NOT FOUND'));
-            
+
             if (!$driver) {
                 $driver = AppUser::where('_id', $id)
                               ->where('role', 'driver')
                               ->first();
                 \Log::info('Search by _id: ' . ($driver ? 'FOUND' : 'NOT FOUND'));
             }
-            
+
             if (!$driver && is_numeric($id)) {
                 $driver = AppUser::where('id', $id)
                               ->where('role', 'driver')
                               ->first();
                 \Log::info('Search by numeric id: ' . ($driver ? 'FOUND' : 'NOT FOUND'));
             }
-            
+
             if (!$driver) {
                 // Try one more search with partial match
                 \Log::warning('Driver not found with exact match. Trying LIKE search...');
@@ -348,16 +331,16 @@ class DriverController extends Controller
                               ->first();
                 \Log::info('Search by LIKE: ' . ($driver ? 'FOUND' : 'NOT FOUND'));
             }
-            
+
             if (!$driver) {
                 \Log::warning('Driver not found with ID: ' . $id);
-                
+
                 // Get sample drivers for debugging
                 $sampleDrivers = AppUser::where('role', 'driver')
                                       ->limit(5)
                                       ->get(['id', 'firebase_id', '_id', 'firstName', 'lastName']);
                 \Log::info('Sample drivers in database: ' . json_encode($sampleDrivers));
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Driver not found with ID: ' . $id,
@@ -365,9 +348,9 @@ class DriverController extends Controller
                     'sample_drivers' => $sampleDrivers
                 ], 404);
             }
-            
+
             \Log::info('Driver found: ' . ($driver->firstName ?? '') . ' ' . ($driver->lastName ?? '') . ' (firebase_id: ' . $driver->firebase_id . ')');
-            
+
             // Parse location
             $location = null;
             if ($driver->location) {
@@ -381,7 +364,7 @@ class DriverController extends Controller
                     $location = $driver->location;
                 }
             }
-            
+
             // Parse and format data
             $driverData = [
                 'id' => $driver->id ?? '',
@@ -412,7 +395,7 @@ class DriverController extends Controller
                 'orderRequestData' => $driver->orderRequestData ? json_decode($driver->orderRequestData, true) : [],
                 'userBankDetails' => $driver->userBankDetails ? json_decode($driver->userBankDetails, true) : null,
             ];
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $driverData
@@ -433,10 +416,10 @@ class DriverController extends Controller
     {
         try {
             $driverData = $request->all();
-            
+
             // Generate unique firebase_id if not provided
             $firebase_id = $driverData['firebase_id'] ?? 'driver_' . time() . '_' . uniqid();
-            
+
             // Helper function to convert boolean values
             $toBool = function($value) {
                 if (is_bool($value)) return $value ? '1' : '0';
@@ -446,7 +429,7 @@ class DriverController extends Controller
                 }
                 return $value ? '1' : '0';
             };
-            
+
             // Create driver user
             $driver = new AppUser();
             $driver->firebase_id = $firebase_id;
@@ -466,27 +449,27 @@ class DriverController extends Controller
             $driver->isActive = $toBool($driverData['isActive'] ?? 1);
             $driver->isDocumentVerify = $toBool($driverData['isDocumentVerify'] ?? 0);
             $driver->wallet_amount = floatval($driverData['wallet_amount'] ?? 0);
-            
+
             // Store location as JSON
             if (isset($driverData['location'])) {
                 $driver->location = is_string($driverData['location']) ? $driverData['location'] : json_encode($driverData['location']);
             }
-            
+
             $driver->createdAt = '"' . gmdate('Y-m-d\TH:i:s.u\Z') . '"';
             $driver->fcmToken = $driverData['fcmToken'] ?? '';
             $driver->rotation = $driverData['rotation'] ?? 0;
             $driver->appIdentifier = $driverData['appIdentifier'] ?? 'web';
             $driver->provider = $driverData['provider'] ?? 'email';
             $driver->vendorID = $driverData['vendorID'] ?? '';
-            
+
             $driver->save();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Driver created successfully',
                 'driver_id' => $firebase_id
             ]);
-            
+
         } catch (\Exception $e) {
             \Log::error('Error creating driver: ' . $e->getMessage());
             return response()->json([
@@ -506,21 +489,21 @@ class DriverController extends Controller
             $driver = AppUser::where('firebase_id', $id)
                           ->where('role', 'driver')
                           ->first();
-            
+
             if (!$driver) {
                 $driver = AppUser::where('_id', $id)
                               ->where('role', 'driver')
                               ->first();
             }
-            
+
             if (!$driver && is_numeric($id)) {
                 $driver = AppUser::where('id', $id)
                               ->where('role', 'driver')
                               ->first();
             }
-            
+
             \Log::info('Updating driver with ID: ' . $id);
-            
+
             if (!$driver) {
                 \Log::warning('Driver not found for update with ID: ' . $id);
                 return response()->json([
@@ -528,7 +511,7 @@ class DriverController extends Controller
                     'message' => 'Driver not found with ID: ' . $id
                 ], 404);
             }
-            
+
             // Helper function to convert boolean values
             $toBool = function($value) {
                 if (is_bool($value)) return $value ? '1' : '0';
@@ -538,7 +521,7 @@ class DriverController extends Controller
                 }
                 return $value ? '1' : '0';
             };
-            
+
             // Update driver fields
             if ($request->has('firstName')) $driver->firstName = $request->firstName;
             if ($request->has('lastName')) $driver->lastName = $request->lastName;
@@ -554,17 +537,17 @@ class DriverController extends Controller
             if ($request->has('isActive')) $driver->isActive = $toBool($request->isActive);
             if ($request->has('isDocumentVerify')) $driver->isDocumentVerify = $toBool($request->isDocumentVerify);
             if ($request->has('wallet_amount')) $driver->wallet_amount = floatval($request->wallet_amount);
-            
+
             if ($request->has('location')) {
                 $driver->location = is_string($request->location) ? $request->location : json_encode($request->location);
             }
-            
+
             if ($request->has('userBankDetails')) {
                 $driver->userBankDetails = is_string($request->userBankDetails) ? $request->userBankDetails : json_encode($request->userBankDetails);
             }
-            
+
             $driver->save();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Driver updated successfully'
@@ -587,23 +570,23 @@ class DriverController extends Controller
             $driver = AppUser::where('firebase_id', $id)
                           ->where('role', 'driver')
                           ->first();
-            
+
             if (!$driver) {
                 $driver = AppUser::where('_id', $id)
                               ->where('role', 'driver')
                               ->first();
             }
-            
+
             if (!$driver) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Driver not found with ID: ' . $id
                 ], 404);
             }
-            
+
             $driver->active = $driver->active == '1' ? '0' : '1';
             $driver->save();
-            
+
             return response()->json([
                 'success' => true,
                 'active' => $driver->active == '1'
@@ -620,28 +603,28 @@ class DriverController extends Controller
     /**
      * Delete driver (SQL)
      */
-    public function deleteDriver($id)
+    public function destroy($id)
     {
         try {
             $driver = AppUser::where('firebase_id', $id)
                           ->where('role', 'driver')
                           ->first();
-            
+
             if (!$driver) {
                 $driver = AppUser::where('_id', $id)
                               ->where('role', 'driver')
                               ->first();
             }
-            
+
             if (!$driver) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Driver not found with ID: ' . $id
                 ], 404);
             }
-            
+
             $driver->delete();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Driver deleted successfully'
@@ -664,7 +647,7 @@ class DriverController extends Controller
             $documents = DB::table('driver_documents')
                 ->where('driver_id', $id)
                 ->get();
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $documents
@@ -688,7 +671,7 @@ class DriverController extends Controller
                 ->where('driverID', $id)
                 ->orderBy('paidDate', 'desc')
                 ->get();
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $payouts
@@ -736,7 +719,7 @@ class DriverController extends Controller
             $driver = AppUser::where('firebase_id', $id)
                           ->where('role', 'driver')
                           ->first();
-            
+
             if (!$driver) {
                 $driver = AppUser::where('_id', $id)
                               ->where('role', 'driver')
@@ -771,13 +754,13 @@ class DriverController extends Controller
             $driver = AppUser::where('firebase_id', $id)
                           ->where('role', 'driver')
                           ->first();
-            
+
             if (!$driver) {
                 $driver = AppUser::where('_id', $id)
                               ->where('role', 'driver')
                               ->first();
             }
-            
+
             if (!$driver) {
                 return response()->json([
                     'success' => false,
@@ -811,7 +794,7 @@ class DriverController extends Controller
     {
         try {
             $drivers = AppUser::where('role', 'driver')->get();
-            
+
             $clearedCount = 0;
             $errors = [];
 
@@ -857,19 +840,19 @@ class DriverController extends Controller
             $allZones = DB::table('zone')
                       ->orderBy('name', 'asc')
                       ->get();
-            
+
             \Log::info('Total zones found: ' . $allZones->count());
-            
+
             // Filter for published zones (handle different data types)
             $zones = $allZones->filter(function($zone) {
-                return $zone->publish == 1 || 
-                       $zone->publish === '1' || 
-                       $zone->publish === true || 
+                return $zone->publish == 1 ||
+                       $zone->publish === '1' ||
+                       $zone->publish === true ||
                        $zone->publish === 'true';
             })->values();
-            
+
             \Log::info('Published zones: ' . $zones->count());
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $zones,
@@ -895,7 +878,7 @@ class DriverController extends Controller
                 ->where('enable', 1)
                 ->where('type', 'driver')
                 ->get();
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $documents
@@ -918,14 +901,14 @@ class DriverController extends Controller
             $verification = DB::table('documents_verify')
                 ->where('id', $id)
                 ->first();
-            
+
             if (!$verification) {
                 return response()->json([
                     'success' => true,
                     'data' => null
                 ]);
             }
-            
+
             // Parse JSON fields if they exist
             $verificationData = (array) $verification;
             foreach ($verificationData as $key => $value) {
@@ -937,7 +920,7 @@ class DriverController extends Controller
                     }
                 }
             }
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $verificationData
@@ -959,10 +942,10 @@ class DriverController extends Controller
         try {
             $documentData = $request->all();
             unset($documentData['_token']);
-            
+
             // Check if record exists
             $exists = DB::table('documents_verify')->where('id', $id)->exists();
-            
+
             if ($exists) {
                 // Update existing record
                 DB::table('documents_verify')
@@ -973,10 +956,10 @@ class DriverController extends Controller
                 $documentData['id'] = $id;
                 DB::table('documents_verify')->insert($documentData);
             }
-            
+
             // Check if all required documents are verified
             $this->checkAndUpdateDriverVerificationStatus($id);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Document verification updated successfully'
@@ -991,6 +974,392 @@ class DriverController extends Controller
     }
 
     /**
+     * Get driver document data for document list page (SQL-based)
+     */
+    public function getDriverDocumentData($id)
+    {
+        try {
+            // Get driver info
+            $driver = DB::table('users')
+                ->where('id', $id)
+                ->orWhere('firebase_id', $id)
+                ->orWhere('_id', $id)
+                ->first();
+
+            if (!$driver) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Driver not found'
+                ], 404);
+            }
+
+            // Get enabled driver documents
+            $documents = DB::table('documents')
+                ->where('enable', 1)
+                ->where('type', 'driver')
+                ->orderBy('title', 'asc')
+                ->get();
+
+            // Get document verification status
+            $verification = DB::table('documents_verify')
+                ->where('id', $id)
+                ->first();
+
+            $verificationData = [];
+            if ($verification && $verification->documents) {
+                $docs = is_string($verification->documents)
+                    ? json_decode($verification->documents, true)
+                    : $verification->documents;
+
+                if (is_array($docs)) {
+                    $verificationData = $docs;
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'driver' => [
+                    'id' => $driver->id,
+                    'firstName' => $driver->firstName ?? '',
+                    'lastName' => $driver->lastName ?? '',
+                    'fcmToken' => $driver->fcmToken ?? ''
+                ],
+                'documents' => $documents,
+                'verification' => $verificationData
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching driver document data: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching driver document data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update driver document status (approve/reject)
+     */
+    public function updateDriverDocumentStatus(Request $request, $driverId, $docId)
+    {
+        try {
+            $status = $request->input('status'); // 'approved' or 'rejected'
+            $docTitle = $request->input('docTitle', '');
+
+            // Get current verification record
+            $verification = DB::table('documents_verify')
+                ->where('id', $driverId)
+                ->first();
+
+            $documents = [];
+            if ($verification && $verification->documents) {
+                $documents = is_string($verification->documents)
+                    ? json_decode($verification->documents, true)
+                    : $verification->documents;
+            }
+
+            // Find and update the document status
+            $documentIndex = -1;
+            foreach ($documents as $index => $doc) {
+                if ($doc['documentId'] == $docId) {
+                    $documentIndex = $index;
+                    break;
+                }
+            }
+
+            if ($documentIndex >= 0) {
+                $documents[$documentIndex]['status'] = $status;
+            } else {
+                // Document not found in verification, add it
+                $documents[] = [
+                    'documentId' => $docId,
+                    'status' => $status
+                ];
+            }
+
+            // Update or insert verification record
+            if ($verification) {
+                DB::table('documents_verify')
+                    ->where('id', $driverId)
+                    ->update(['documents' => json_encode($documents)]);
+            } else {
+                DB::table('documents_verify')->insert([
+                    'id' => $driverId,
+                    'documents' => json_encode($documents)
+                ]);
+            }
+
+            // Update driver verification status
+            $this->updateDriverVerificationStatus($driverId);
+
+            // Send notification if rejected
+            if ($status == 'rejected') {
+                // TODO: Implement notification system
+                \Log::info("Rejected document notification should be sent to driver: $driverId");
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Document status updated successfully'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error updating driver document status: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating document status: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update driver's overall verification status based on documents
+     */
+    private function updateDriverVerificationStatus($driverId)
+    {
+        try {
+            // Get all required documents
+            $requiredDocs = DB::table('documents')
+                ->where('enable', 1)
+                ->where('type', 'driver')
+                ->pluck('id')
+                ->toArray();
+
+            // Get driver's verification data
+            $verification = DB::table('documents_verify')
+                ->where('id', $driverId)
+                ->first();
+
+            $approvedDocs = [];
+            if ($verification && $verification->documents) {
+                $docs = is_string($verification->documents)
+                    ? json_decode($verification->documents, true)
+                    : $verification->documents;
+
+                if (is_array($docs)) {
+                    foreach ($docs as $doc) {
+                        if (isset($doc['status']) && $doc['status'] == 'approved') {
+                            $approvedDocs[] = $doc['documentId'];
+                        }
+                    }
+                }
+            }
+
+            // Check if all required documents are approved
+            $allApproved = count($requiredDocs) > 0 && count($approvedDocs) >= count($requiredDocs);
+
+            // Update driver's isDocumentVerify status
+            DB::table('users')
+                ->where('id', $driverId)
+                ->update([
+                    'isDocumentVerify' => $allApproved ? 1 : 0
+                ]);
+
+            return $allApproved;
+        } catch (\Exception $e) {
+            \Log::error('Error updating driver verification status: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Get data for document upload page (SQL-based)
+     */
+    public function getDocumentUploadData($driverId, $docId)
+    {
+        try {
+            // Get document definition
+            $document = DB::table('documents')
+                ->where('id', $docId)
+                ->first();
+
+            if (!$document) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Document not found'
+                ], 404);
+            }
+
+            // Get driver's verification data for this document
+            $verification = DB::table('documents_verify')
+                ->where('id', $driverId)
+                ->first();
+
+            $documentVerification = null;
+            $keyData = 0;
+
+            if ($verification && $verification->documents) {
+                $docs = is_string($verification->documents)
+                    ? json_decode($verification->documents, true)
+                    : $verification->documents;
+
+                if (is_array($docs)) {
+                    foreach ($docs as $index => $doc) {
+                        if (isset($doc['documentId']) && $doc['documentId'] == $docId) {
+                            $documentVerification = $doc;
+                            $keyData = $index;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'document' => $document,
+                'verification' => $documentVerification,
+                'keyData' => $keyData,
+                'isAdd' => $documentVerification ? false : true
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching document upload data: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching document data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Upload driver document (SQL-based with Laravel storage)
+     */
+    public function uploadDriverDocument(Request $request, $driverId, $docId)
+    {
+        try {
+            $frontImage = $request->input('frontImage');
+            $backImage = $request->input('backImage');
+            $frontFilename = $request->input('frontFilename');
+            $backFilename = $request->input('backFilename');
+            $isAdd = $request->input('isAdd') === 'true';
+            $keyData = $request->input('keyData', 0);
+
+            \Log::info('📤 Driver document upload request:', [
+                'driverId' => $driverId,
+                'docId' => $docId,
+                'frontFilename' => $frontFilename,
+                'backFilename' => $backFilename,
+                'isAdd' => $isAdd,
+                'keyData' => $keyData
+            ]);
+
+            $frontUrl = null;
+            $backUrl = null;
+
+            // Upload front image if provided
+            if ($frontImage && $frontFilename) {
+                $frontUrl = $this->uploadBase64Image($frontImage, 'drivers/documents', $frontFilename);
+                \Log::info('✅ Front image uploaded:', ['url' => $frontUrl]);
+            }
+
+            // Upload back image if provided
+            if ($backImage && $backFilename) {
+                $backUrl = $this->uploadBase64Image($backImage, 'drivers/documents', $backFilename);
+                \Log::info('✅ Back image uploaded:', ['url' => $backUrl]);
+            }
+
+            // Get current verification record
+            $verification = DB::table('documents_verify')
+                ->where('id', $driverId)
+                ->first();
+
+            $documents = [];
+            if ($verification && $verification->documents) {
+                $documents = is_string($verification->documents)
+                    ? json_decode($verification->documents, true)
+                    : $verification->documents;
+            }
+
+            // Get existing images if updating
+            $existingFrontImage = '';
+            $existingBackImage = '';
+            if (!$isAdd && isset($documents[$keyData])) {
+                $existingFrontImage = $documents[$keyData]['frontImage'] ?? '';
+                $existingBackImage = $documents[$keyData]['backImage'] ?? '';
+            }
+
+            // Prepare document data
+            $docData = [
+                'documentId' => $docId,
+                'status' => 'uploaded',
+                'frontImage' => $frontUrl ?: $existingFrontImage,
+                'backImage' => $backUrl ?: $existingBackImage
+            ];
+
+            \Log::info('📝 Document data prepared:', $docData);
+
+            if ($isAdd) {
+                // Add new document
+                $documents[] = $docData;
+            } else {
+                // Update existing document, ensuring we don't lose data
+                if (!isset($documents[$keyData])) {
+                    $documents[$keyData] = [];
+                }
+                $documents[$keyData] = array_merge($documents[$keyData], $docData);
+            }
+
+            // Update or insert verification record
+            if ($verification) {
+                DB::table('documents_verify')
+                    ->where('id', $driverId)
+                    ->update(['documents' => json_encode($documents)]);
+                \Log::info('✅ Updated existing verification record for driver:', ['driverId' => $driverId]);
+            } else {
+                DB::table('documents_verify')->insert([
+                    'id' => $driverId,
+                    'type' => 'driver',
+                    'documents' => json_encode($documents)
+                ]);
+                \Log::info('✅ Created new verification record for driver:', ['driverId' => $driverId]);
+            }
+
+            // Update driver verification status
+            $isVerified = $this->updateDriverVerificationStatus($driverId);
+            \Log::info('📋 Driver verification status updated:', ['driverId' => $driverId, 'isVerified' => $isVerified]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Document uploaded successfully',
+                'frontUrl' => $frontUrl,
+                'backUrl' => $backUrl,
+                'docData' => $docData // Include for debugging
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error uploading driver document: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error uploading document: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Upload base64 image to Laravel storage
+     */
+    private function uploadBase64Image($base64Data, $folder, $filename)
+    {
+        // Remove data URL prefix if present
+        if (strpos($base64Data, 'data:image') === 0) {
+            $base64Data = preg_replace('/^data:image\/\w+;base64,/', '', $base64Data);
+        }
+
+        // Decode base64
+        $imageData = base64_decode($base64Data);
+
+        // Ensure filename has extension
+        if (!preg_match('/\.(jpg|jpeg|png|gif)$/i', $filename)) {
+            $filename .= '.jpg';
+        }
+
+        // Store in Laravel storage (public disk)
+        $path = $folder . '/' . $filename;
+        \Storage::disk('public')->put($path, $imageData);
+
+        // Return correct public URL (without 'public/' prefix since Storage::url handles it)
+        // Storage::disk('public') already points to storage/app/public
+        // So we just need the path relative to that
+        return asset('storage/' . $path);
+    }
+
+    /**
      * Check if all documents are verified and update driver status
      */
     private function checkAndUpdateDriverVerificationStatus($driverId)
@@ -1001,16 +1370,16 @@ class DriverController extends Controller
                 ->where('enable', 1)
                 ->where('type', 'driver')
                 ->pluck('id');
-            
+
             if ($requiredDocs->isEmpty()) {
                 return;
             }
-            
+
             // Get driver's verification record
             $verification = DB::table('documents_verify')
                 ->where('id', $driverId)
                 ->first();
-            
+
             if (!$verification) {
                 // No documents verified yet
                 DB::table('users')
@@ -1023,20 +1392,20 @@ class DriverController extends Controller
                     ]);
                 return;
             }
-            
+
             // Check if all required documents are verified
             $allVerified = true;
             $verificationArray = (array) $verification;
-            
+
             foreach ($requiredDocs as $docId) {
-                if (!isset($verificationArray[$docId]) || 
+                if (!isset($verificationArray[$docId]) ||
                     (is_array($verificationArray[$docId]) && (!isset($verificationArray[$docId]['status']) || $verificationArray[$docId]['status'] != 'approved')) ||
                     (is_string($verificationArray[$docId]) && $verificationArray[$docId] != 'approved')) {
                     $allVerified = false;
                     break;
                 }
             }
-            
+
             // Update driver verification status
             if ($allVerified) {
                 DB::table('users')
@@ -1072,10 +1441,10 @@ class DriverController extends Controller
             $byFirebaseId = AppUser::where('firebase_id', $id)->where('role', 'driver')->first();
             $byUnderscoreId = AppUser::where('_id', $id)->where('role', 'driver')->first();
             $byNumericId = is_numeric($id) ? AppUser::where('id', $id)->where('role', 'driver')->first() : null;
-            
+
             // Get sample drivers
             $sampleDrivers = AppUser::where('role', 'driver')->limit(5)->get(['id', 'firebase_id', '_id', 'firstName', 'lastName', 'email']);
-            
+
             return response()->json([
                 'search_id' => $id,
                 'found_by_firebase_id' => $byFirebaseId ? true : false,

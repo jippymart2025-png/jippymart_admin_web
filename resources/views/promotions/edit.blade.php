@@ -1,4 +1,4 @@
-    @extends('layouts.app')
+@extends('layouts.app')
 @section('content')
     <div class="page-wrapper">
         <div class="row page-titles">
@@ -193,15 +193,17 @@ function populateRestaurants(selectedId, selectedVType, selectedZoneId) {
 }
 
 function populateProducts(restaurantId, selectedProductId) {
-    console.log('Populating products for restaurant:', restaurantId, 'with selected product:', selectedProductId);
+    console.log('📦 Loading products for restaurant:', restaurantId, 'with selected product:', selectedProductId);
     productSelect.empty();
     productSelect.append('<option value="">Select Product</option>');
     $('#actual_price_display').hide();
     if (!restaurantId) return;
-    
+
     var selectedOption = restaurantSelect.find('option:selected');
     var vendorType = (selectedOption.data('vtype') || vtypeSelect.val() || '').toString().toLowerCase();
-    
+
+    console.log('🔍 Fetching products with vType:', vendorType);
+
     $.ajax({
         url: '{{ route('promotions.products') }}',
         method: 'GET',
@@ -210,17 +212,21 @@ function populateProducts(restaurantId, selectedProductId) {
             vType: vendorType
         },
         success: function(response) {
+            console.log('📥 Products response:', response);
+
             if (response.success) {
-                console.log('Found', response.data.length, 'products');
                 productList = response.data;
                 if (response.data.length === 0) {
                     productSelect.append('<option value="">No products found</option>');
+                    console.warn('⚠️ No products found for vendor:', restaurantId);
                 } else {
                     response.data.forEach(function(product) {
                         var selected = (selectedProductId && product.id === selectedProductId) ? 'selected' : '';
                         productSelect.append('<option value="' + product.id + '" data-price="' + product.price + '" ' + selected + '>' + product.name + '</option>');
                     });
-                    
+
+                    console.log('✅ Loaded ' + response.data.length + ' products');
+
                     if (selectedProductId) {
                         var selectedProduct = response.data.find(function(p) { return p.id === selectedProductId; });
                         if (selectedProduct && selectedProduct.price > 0) {
@@ -228,36 +234,40 @@ function populateProducts(restaurantId, selectedProductId) {
                         }
                     }
                 }
+            } else {
+                console.error('❌ Error loading products:', response.error);
+                alert('Error loading products: ' + response.error);
             }
         },
-        error: function(xhr, status, error) {
-            console.error('Error loading products:', error);
+        error: function(xhr) {
+            console.error('❌ Products AJAX error:', xhr);
+            alert('Error loading products: ' + (xhr.responseJSON?.error || xhr.statusText));
         }
     });
 }
 
 function formatDateTimeForInput(timestamp) {
     if (!timestamp) return '';
-    
+
     try {
         // Remove quotes if present
         timestamp = timestamp.toString().replace(/"/g, '');
-        
+
         let date = new Date(timestamp);
-        
+
         console.log('Original timestamp:', timestamp);
         console.log('Parsed date:', date);
-        
+
         // Format for datetime-local input (YYYY-MM-DDTHH:MM)
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         const hours = String(date.getHours()).padStart(2, '0');
         const minutes = String(date.getMinutes()).padStart(2, '0');
-        
+
         const formatted = `${year}-${month}-${day}T${hours}:${minutes}`;
         console.log('Formatted for input:', formatted);
-        
+
         return formatted;
     } catch (e) {
         console.error('Error formatting date:', e);
@@ -270,16 +280,18 @@ function loadPromotionData() {
         console.log('No promotion ID provided');
         return;
     }
-    console.log('Loading promotion data for ID:', promotionId);
+    console.log('🔄 Loading promotion data for ID:', promotionId);
 
     $.ajax({
         url: '{{ route('promotions.show', ['id' => 'PROMOTION_ID']) }}'.replace('PROMOTION_ID', promotionId),
         method: 'GET',
         success: function(response) {
+            console.log('📥 Promotion data response:', response);
+
             if (response.success) {
                 var data = response.data;
-                console.log('Promotion data loaded:', data);
-                
+                console.log('✅ Promotion data loaded:', data);
+
                 // Pre-fill fields
                 if (data.vType) {
                     vtypeSelect.val((data.vType || '').toString().toLowerCase());
@@ -287,40 +299,42 @@ function loadPromotionData() {
                 if (data.zoneId) {
                     zoneSelect.val(data.zoneId);
                 }
-                
+
                 populateRestaurants(data.restaurant_id, (data.vType || '').toString().toLowerCase(), data.zoneId || '');
-                
+
                 setTimeout(function() {
                     populateProducts(data.restaurant_id, data.product_id);
                 }, 500); // Wait for restaurant dropdown to populate
-                
+
                 $('#promotion_special_price').val(data.special_price || 0);
                 $('#promotion_item_limit').val(data.item_limit || 2);
                 $('#promotion_extra_km_charge').val(data.extra_km_charge || 7);
                 $('#promotion_free_delivery_km').val(data.free_delivery_km || 3);
                 $('#promotion_is_available').prop('checked', data.isAvailable ? true : false);
-                
+
                 if (data.start_time) {
                     $('#promotion_start_time').val(formatDateTimeForInput(data.start_time));
                 }
                 if (data.end_time) {
                     $('#promotion_end_time').val(formatDateTimeForInput(data.end_time));
                 }
+
+                console.log('📝 Form populated with promotion data');
             } else {
-                console.log('Promotion not found:', response.error);
-                alert('Promotion not found');
+                console.error('❌ Promotion not found:', response.error);
+                $('.error_top').show().html('<p>Promotion not found</p>');
             }
         },
-        error: function(xhr, status, error) {
-            console.error('Error loading promotion data:', error);
-            alert('Error loading promotion data');
+        error: function(xhr) {
+            console.error('❌ Error loading promotion data:', xhr);
+            $('.error_top').show().html('<p>Error loading promotion data: ' + (xhr.responseJSON?.error || xhr.statusText) + '</p>');
         }
     });
 }
 
 $(document).ready(function () {
     console.log('Document ready, promotionId:', promotionId);
-    
+
     // Input validation for numeric fields
     $('#promotion_special_price, #promotion_item_limit, #promotion_extra_km_charge, #promotion_free_delivery_km').on('input', function() {
         var value = $(this).val();
@@ -333,7 +347,7 @@ $(document).ready(function () {
         }
         $(this).val(value);
     });
-    
+
     populateZones('');
 
     if (promotionId) {
@@ -384,7 +398,7 @@ $(document).ready(function () {
         var end_time = $('#promotion_end_time').val();
         var payment_mode = 'prepaid';
         var isAvailable = $('#promotion_is_available').is(':checked');
-        
+
         // Resolve vType and zone to save on document
         var selectedVendorOption = restaurantSelect.find('option:selected');
         var vType = (vtypeSelect.val() || selectedVendorOption.data('vtype') || '').toString().toLowerCase();
@@ -410,6 +424,13 @@ $(document).ready(function () {
         $('.error_top').hide();
         jQuery('#data-table_processing').show();
 
+        console.log('💾 Updating promotion:', {
+            id: promotionId,
+            restaurant: restaurant_title,
+            product: product_title,
+            vType: vType
+        });
+
         $.ajax({
             url: '{{ route('promotions.update', ['id' => 'PROMOTION_ID']) }}'.replace('PROMOTION_ID', promotionId),
             method: 'PUT',
@@ -431,17 +452,26 @@ $(document).ready(function () {
                 isAvailable: isAvailable
             },
             success: function(response) {
+                console.log('✅ Promotion updated successfully:', response);
+
                 jQuery('#data-table_processing').hide();
+
                 if (response.success) {
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        logActivity('promotions', 'updated', 'Updated promotion: ' + restaurant_title + ' - ' + product_title);
+                    }
+
                     window.location.href = '{!! route('promotions') !!}';
                 } else {
                     $('.error_top').show().html('<p>' + response.error + '</p>');
                     window.scrollTo(0, 0);
                 }
             },
-            error: function(xhr, status, error) {
+            error: function(xhr) {
+                console.error('❌ Update error:', xhr);
                 jQuery('#data-table_processing').hide();
-                $('.error_top').show().html('<p>Error updating promotion: ' + error + '</p>');
+                $('.error_top').show().html('<p>Error updating promotion: ' + (xhr.responseJSON?.error || xhr.statusText) + '</p>');
                 window.scrollTo(0, 0);
             }
         });

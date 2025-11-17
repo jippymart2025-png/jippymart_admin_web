@@ -69,6 +69,9 @@ class BrandController extends Controller
                 'updated_at' => $now,
             ]);
 
+            // Log activity
+            \Log::info('✅ Brand created:', ['id' => $id, 'name' => $request->name]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Brand created successfully!',
@@ -76,6 +79,7 @@ class BrandController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            \Log::error('❌ Error creating brand:', ['error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
                 'message' => 'Error creating brand: ' . $e->getMessage()
@@ -127,12 +131,16 @@ class BrandController extends Controller
                 'updated_at' => now()->format('Y-m-d H:i:s'),
             ]);
 
+            // Log activity
+            \Log::info('✅ Brand updated:', ['id' => $id, 'name' => $request->name]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Brand updated successfully!'
             ]);
 
         } catch (\Exception $e) {
+            \Log::error('❌ Error updating brand:', ['id' => $id, 'error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
                 'message' => 'Error updating brand: ' . $e->getMessage()
@@ -143,7 +151,7 @@ class BrandController extends Controller
     public function delete($id)
     {
         try {
-            $inUse = DB::table('mart_items')->where('brand_id', $id)->exists();
+            $inUse = DB::table('mart_items')->where('brandID', $id)->exists();
             if ($inUse) {
                 return redirect()->route('brands')->with('error', 'Cannot delete brand. It is being used by one or more items.');
             }
@@ -163,6 +171,11 @@ class BrandController extends Controller
             $search = strtolower((string) data_get($request->input('search'), 'value', ''));
             $withDelete = (bool) $request->boolean('withDelete');
 
+            // Base query for total
+            $baseQ = DB::table('brands');
+            $totalRecords = $baseQ->count();
+
+            // Filtered query
             $q = DB::table('brands');
             if ($search !== '') {
                 $q->where(function($qq) use ($search){
@@ -172,7 +185,7 @@ class BrandController extends Controller
                 });
             }
 
-            $total = (clone $q)->count();
+            $filteredRecords = (clone $q)->count();
             $rows = $q->orderBy('name','asc')->offset($start)->limit($length)->get();
 
             $placeholder = asset('images/placeholder.png');
@@ -204,9 +217,13 @@ class BrandController extends Controller
 
             return response()->json([
                 'draw' => $draw,
-                'recordsTotal' => $total,
-                'recordsFiltered' => $total,
+                'recordsTotal' => $totalRecords,
+                'recordsFiltered' => $filteredRecords,
                 'data' => $data,
+                'stats' => [
+                    'total' => $totalRecords,
+                    'filtered' => $filteredRecords
+                ]
             ]);
 
         } catch (\Exception $e) {
@@ -226,9 +243,11 @@ class BrandController extends Controller
             'file' => 'required|mimes:xlsx,xls,csv',
         ]);
 
+        \Log::info('🔄 Starting brand import...');
+
         $file = $request->file('file');
         $extension = $file->getClientOriginalExtension();
-        
+
         if ($extension === 'csv') {
             // Handle CSV files
             $rows = [];
@@ -256,23 +275,22 @@ class BrandController extends Controller
         }
 
         $headers = array_map('trim', array_shift($rows));
-        
+
         // Validate headers
         $requiredHeaders = ['name'];
         $missingHeaders = array_diff($requiredHeaders, $headers);
-        
+
         if (!empty($missingHeaders)) {
-            return back()->withErrors(['file' => 'Missing required columns: ' . implode(', ', $missingHeaders) . 
+            return back()->withErrors(['file' => 'Missing required columns: ' . implode(', ', $missingHeaders) .
                 '. Please use the template provided by the "Download Template" button.']);
         }
 
-        // Initialize Firestore client using helper function (uses REST transport)
-        $firestore = firestore();
+        \Log::info('📊 Processing ' . count($rows) . ' rows from import file');
 
-        $collection = $firestore->collection('brands');
         $imported = 0;
         $updated = 0;
         $errors = [];
+        $now = now()->format('Y-m-d H:i:s');
 
         foreach ($rows as $index => $row) {
             $rowNumber = $index + 2; // +2 because we removed header and arrays are 0-indexed
@@ -287,55 +305,74 @@ class BrandController extends Controller
                 // Validate required fields
                 if (empty($data['name'])) {
                     $errors[] = "Row $rowNumber: Missing required field (name)";
+                    \Log::warning("⚠️ Row $rowNumber: Missing name field");
                     continue;
                 }
 
+                $name = trim($data['name']);
+
                 // Generate slug if not provided
-                $slug = $data['slug'] ?? '';
+                $slug = trim($data['slug'] ?? '');
                 if (empty($slug)) {
-                    $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $data['name'])));
+                    $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $name)));
                 }
 
-                // Prepare brand data
+                // Parse status (handle various formats)
+                $statusValue = strtolower(trim($data['status'] ?? 'true'));
+                $status = in_array($statusValue, ['true', '1', 'yes', 'active']) ? 1 : 0;
+
+                // Prepare brand data for MySQL
                 $brandData = [
-                    'name' => trim($data['name']),
+                    'name' => $name,
                     'slug' => $slug,
                     'description' => trim($data['description'] ?? ''),
-                    'status' => strtolower($data['status'] ?? 'true') === 'true',
+                    'status' => $status,
                     'logo_url' => trim($data['logo_url'] ?? ''),
-                    'created_at' => new \Google\Cloud\Core\Timestamp(new \DateTime()),
-                    'updated_at' => new \Google\Cloud\Core\Timestamp(new \DateTime()),
+                    'updated_at' => $now,
                 ];
 
-                // Check if brand already exists by name
-                $existingBrands = $collection->where('name', '=', trim($data['name']))->documents();
-                $action = 'created';
-                
-                if (!$existingBrands->isEmpty()) {
+                // Check if brand already exists by name (MySQL)
+                $existingBrand = DB::table('brands')->where('name', $name)->first();
+
+                if ($existingBrand) {
                     // Update existing brand
-                    $existingDoc = $existingBrands->rows()[0];
-                    $existingDoc->reference()->set($brandData, ['merge' => true]);
+                    DB::table('brands')->where('id', $existingBrand->id)->update($brandData);
                     $updated++;
+                    \Log::info("✅ Row $rowNumber: Updated brand '$name'");
                 } else {
                     // Create new brand
-                    $docRef = $collection->add($brandData);
-                    // Set the internal 'id' field to match the Firestore document ID
-                    $docRef->set(['id' => $docRef->id()], ['merge' => true]);
+                    $brandData['id'] = (string) Str::uuid();
+                    $brandData['created_at'] = $now;
+                    DB::table('brands')->insert($brandData);
                     $imported++;
+                    \Log::info("✅ Row $rowNumber: Created brand '$name'");
                 }
             } catch (\Exception $e) {
-                $errors[] = "Row $rowNumber: " . $e->getMessage();
+                $errorMsg = "Row $rowNumber: " . $e->getMessage();
+                $errors[] = $errorMsg;
+                \Log::error("❌ $errorMsg");
             }
         }
 
         if ($imported === 0 && $updated === 0) {
+            \Log::warning('⚠️ No valid rows were imported');
             return back()->withErrors(['file' => 'No valid rows were found to import.']);
         }
 
         $message = "Brands processed successfully! Created: $imported, Updated: $updated";
         if (!empty($errors)) {
             $message .= " Errors: " . count($errors) . " rows failed.";
+            \Log::warning("⚠️ Import completed with errors: " . count($errors) . " rows failed");
+        } else {
+            \Log::info("✅ Import completed successfully: $imported created, $updated updated");
         }
+
+        // Log activity
+        \Log::info('✅ Brand import completed:', [
+            'imported' => $imported,
+            'updated' => $updated,
+            'errors' => count($errors)
+        ]);
 
         return back()->with('success', $message);
     }
@@ -343,29 +380,29 @@ class BrandController extends Controller
     public function downloadTemplate(Request $request)
     {
         $format = $request->get('format', 'excel'); // Default to Excel format
-        
+
         if ($format === 'csv') {
             return $this->downloadCsvTemplate();
         } else {
             return $this->downloadExcelTemplate();
         }
     }
-    
+
     private function downloadCsvTemplate()
     {
         $filePath = storage_path('app/templates/brands_import_template.csv');
         $templateDir = dirname($filePath);
-        
+
         // Create template directory if it doesn't exist
         if (!is_dir($templateDir)) {
             mkdir($templateDir, 0755, true);
         }
-        
+
         // Generate CSV template
         $csvContent = "name,slug,description,status,logo_url\n";
         $csvContent .= "Nike,nike,Sportswear and footwear brand,true,https://example.com/nike-logo.png\n";
         $csvContent .= "Adidas,adidas,German sportswear brand,true,https://example.com/adidas-logo.png\n";
-        
+
         file_put_contents($filePath, $csvContent);
 
         return response()->download($filePath, 'brands_import_template.csv', [
@@ -373,17 +410,17 @@ class BrandController extends Controller
             'Content-Disposition' => 'attachment; filename="brands_import_template.csv"'
         ]);
     }
-    
+
     private function downloadExcelTemplate()
     {
         $filePath = storage_path('app/templates/brands_import_template.xlsx');
         $templateDir = dirname($filePath);
-        
+
         // Create template directory if it doesn't exist
         if (!is_dir($templateDir)) {
             mkdir($templateDir, 0755, true);
         }
-        
+
         // Generate template if it doesn't exist
         if (!file_exists($filePath)) {
             $this->generateTemplate($filePath);
@@ -403,16 +440,16 @@ class BrandController extends Controller
         try {
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
-            
+
             // Set headers with proper styling
             $headers = [
                 'A1' => 'name',
-                'B1' => 'slug', 
+                'B1' => 'slug',
                 'C1' => 'description',
                 'D1' => 'status',
                 'E1' => 'logo_url'
             ];
-            
+
             // Set header values and styling
             foreach ($headers as $cell => $value) {
                 $sheet->setCellValue($cell, $value);
@@ -421,14 +458,14 @@ class BrandController extends Controller
                     ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
                     ->getStartColor()->setARGB('FFE0E0E0');
             }
-            
+
             // Add sample data with multiple examples
             $sampleData = [
                 ['Nike', 'nike', 'Sportswear and footwear brand', 'true', 'https://example.com/nike-logo.png'],
                 ['Adidas', 'adidas', 'German sportswear brand', 'true', 'https://example.com/adidas-logo.png'],
                 ['Puma', 'puma', 'Sports and lifestyle brand', 'false', 'https://example.com/puma-logo.png']
             ];
-            
+
             $row = 2;
             foreach ($sampleData as $data) {
                 $col = 'A';
@@ -438,12 +475,12 @@ class BrandController extends Controller
                 }
                 $row++;
             }
-            
+
             // Add instructions in a separate section
             $instructionRow = $row + 2;
             $sheet->setCellValue('A' . $instructionRow, 'Instructions:');
             $sheet->getStyle('A' . $instructionRow)->getFont()->setBold(true);
-            
+
             $instructions = [
                 'name' => 'Required: Brand name (e.g., Nike, Adidas)',
                 'slug' => 'Optional: URL-friendly version (auto-generated if empty)',
@@ -451,29 +488,29 @@ class BrandController extends Controller
                 'status' => 'Required: true/false (active/inactive)',
                 'logo_url' => 'Optional: Full URL to brand logo image'
             ];
-            
+
             $row = $instructionRow + 1;
             foreach ($instructions as $field => $instruction) {
                 $sheet->setCellValue('A' . $row, $field . ': ' . $instruction);
                 $row++;
             }
-            
+
             // Auto-size columns
             foreach (range('A', 'E') as $column) {
                 $sheet->getColumnDimension($column)->setAutoSize(true);
             }
-            
+
             // Set column widths for better readability
             $sheet->getColumnDimension('A')->setWidth(20); // name
             $sheet->getColumnDimension('B')->setWidth(15); // slug
             $sheet->getColumnDimension('C')->setWidth(40); // description
             $sheet->getColumnDimension('D')->setWidth(10); // status
             $sheet->getColumnDimension('E')->setWidth(50); // logo_url
-            
+
             // Save the file
             $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
             $writer->save($filePath);
-            
+
         } catch (\Exception $e) {
             throw new \Exception('Failed to generate template: ' . $e->getMessage());
         }
@@ -487,17 +524,17 @@ class BrandController extends Controller
         try {
             // Generate unique filename
             $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            
+
             // Store file in public storage
             $path = $file->storeAs('brands/logos', $filename, 'public');
-            
+
             // Return full URL
             return asset('storage/' . $path);
         } catch (\Exception $e) {
             throw new \Exception('Failed to upload logo: ' . $e->getMessage());
         }
     }
-    
+
     public function json($id)
     {
         $row = DB::table('brands')->where('id', $id)->first();
@@ -511,27 +548,51 @@ class BrandController extends Controller
         if (!$row) return response()->json(['success' => false], 404);
         $new = $row->status ? 0 : 1;
         DB::table('brands')->where('id', $id)->update(['status' => $new, 'updated_at' => now()->format('Y-m-d H:i:s')]);
+
+        // Log activity
+        $action = $new ? 'activated' : 'deactivated';
+        \Log::info("✅ Brand $action:", ['id' => $id, 'name' => $row->name, 'status' => $new]);
+
         return response()->json(['success' => true, 'status' => $new]);
     }
 
     public function destroy($id)
     {
-        $inUse = DB::table('mart_items')->where('brand_id', $id)->exists();
-        if ($inUse) return response()->json(['success' => false, 'message' => 'Brand is used by items'], 422);
+        $brand = DB::table('brands')->where('id', $id)->first();
+        if (!$brand) {
+            \Log::error('❌ Brand not found for deletion:', ['id' => $id]);
+            return response()->json(['success' => false, 'message' => 'Brand not found'], 404);
+        }
+
+        $inUse = DB::table('mart_items')->where('brandID', $id)->exists();
+        if ($inUse) {
+            \Log::warning('⚠️ Cannot delete brand (in use):', ['id' => $id, 'name' => $brand->name]);
+            return response()->json(['success' => false, 'message' => 'Brand is used by items'], 422);
+        }
+
+        $brandName = $brand->name;
         DB::table('brands')->where('id', $id)->delete();
-        return response()->json(['success' => true]);
+
+        // Log activity
+        \Log::info('✅ Brand deleted:', ['id' => $id, 'name' => $brandName]);
+
+        return response()->json(['success' => true, 'message' => 'Brand deleted successfully']);
     }
 
     public function bulkDelete(Request $request)
     {
         $ids = (array) $request->input('ids', []);
         if (empty($ids)) return response()->json(['success' => false, 'message' => 'No brands selected'], 422);
+
         // Exclude brands that are in use
-        $inUseIds = DB::table('mart_items')->whereIn('brand_id', $ids)->distinct()->pluck('brand_id')->all();
+        $inUseIds = DB::table('mart_items')->whereIn('brandID', $ids)->distinct()->pluck('brandID')->all();
         $deletable = array_values(array_diff($ids, $inUseIds));
+
         if (!empty($deletable)) {
             DB::table('brands')->whereIn('id', $deletable)->delete();
+            \Log::info('✅ Brands bulk deleted:', ['count' => count($deletable), 'blocked' => count($inUseIds)]);
         }
+
         return response()->json(['success' => true, 'deleted' => count($deletable), 'blocked' => $inUseIds]);
     }
     /**

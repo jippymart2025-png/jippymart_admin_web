@@ -101,10 +101,29 @@
         checkDeletePermission = true;
     }
     $(document).ready(function() {
-        // Load zones first via backend if available (fallback to static options already present)
+        // Load zones from SQL for filter
+        console.log('🔄 Loading zones for filter...');
+        $.ajax({
+            url: '{{ route("menu-items.zones") }}',
+            method: 'GET',
+            success: function(response) {
+                console.log('✅ Zones loaded:', response);
+                if (response.success && response.data) {
+                    response.data.forEach(function(zone) {
+                        $('#zoneFilter').append($('<option></option>').val(zone.id).text(zone.name));
+                    });
+                    console.log('📦 Added ' + response.data.length + ' zones to filter');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('❌ Error loading zones:', error);
+            }
+        });
+
         // Zone filter change handler
         $('#zoneFilter').on('change', function() {
             zoneFilter = $(this).val();
+            console.log('🔍 Zone filter changed to:', zoneFilter);
             $('#bannerItemsTable').DataTable().ajax.reload();
         });
 
@@ -115,9 +134,20 @@
             serverSide: true, // Enable server-side processing
             responsive: true,
             ajax: function (data, callback) {
-                const params = { start: data.start, length: data.length, draw: data.draw, search: data.search.value, zoneId: zoneFilter };
+                const params = { start: data.start, length: data.length, draw: data.draw, search: { value: data.search.value }, zoneId: zoneFilter };
+                console.log('📡 Fetching menu items:', params);
+
                 $.get('{{ route('menu-items.data') }}', params, function(json){
-                    $('.total_count').text(json.recordsTotal || 0);
+                    console.log('📥 Menu items response:', json);
+
+                    // Update count display
+                    if (json.stats && json.stats.total) {
+                        $('.total_count').text(json.stats.total);
+                        console.log('📊 Total menu items:', json.stats.total);
+                    } else {
+                        $('.total_count').text(json.recordsTotal || 0);
+                    }
+
                     var rows = [];
                     var canDelete = (checkDeletePermission);
                     (json.data || []).forEach(function(item){
@@ -160,32 +190,116 @@
         var id = $(this).data('id');
         var $cb = $(this);
         var intended = $cb.is(':checked');
+        var itemName = $cb.closest('tr').find('a').text().trim();
+        var action = intended ? 'published' : 'unpublished';
+
         $cb.prop('disabled', true);
-        $.post({ url: '{{ url('menu-items') }}' + '/' + id + '/toggle', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-            .done(function(resp){ $cb.prop('checked', !!resp.is_publish); })
+        $.post({ url: '{{ url('menu-items') }}/' + 'toggle/' + id,
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
+            .done(function(resp){
+                $cb.prop('checked', !!resp.is_publish);
+                console.log('✅ Menu item publish toggled:', resp);
+
+                // Log activity
+                if (typeof logActivity === 'function') {
+                    logActivity('menu_items', action, action.charAt(0).toUpperCase() + action.slice(1) + ' menu item: ' + itemName);
+                }
+            })
             .fail(function(xhr){ $cb.prop('checked', !intended); alert('Failed to update ('+xhr.status+'): '+xhr.statusText); })
             .always(function(){ $cb.prop('disabled', false); });
     });
     $('#select-all').change(function() {
         var isChecked = $(this).prop('checked');
-        $('input[type="checkbox"][name="record"]').prop('checked', isChecked);
+        $('#bannerItemsTable .is_open').prop('checked', isChecked);
+        console.log('📋 Select all toggled:', isChecked);
     });
+
     // Bulk delete
     $(document).on('click', '#deleteAll', function(){
-        var ids = []; $('#bannerItemsTable .is_open:checked').each(function(){ ids.push($(this).attr('dataId')); });
-        if (ids.length === 0) { alert("{{trans('lang.select_delete_alert')}}"); return; }
+        var ids = [];
+        $('#bannerItemsTable .is_open:checked').each(function(){
+            ids.push($(this).attr('dataId'));
+        });
+
+        console.log('🗑️ Bulk delete requested:', { count: ids.length, ids: ids });
+
+        if (ids.length === 0) {
+            alert("{{trans('lang.select_delete_alert')}}");
+            return;
+        }
         if (!confirm("{{trans('lang.selected_delete_alert')}}")) return;
-        $.post({ url: '{{ route('menu-items.bulkDelete') }}', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }, data: { ids: ids } })
-            .done(function(){ $('#bannerItemsTable').DataTable().ajax.reload(null,false); })
-            .fail(function(xhr){ alert('Failed to delete ('+xhr.status+'): '+xhr.statusText); });
+
+        jQuery("#data-table_processing").show();
+
+        $.post({
+            url: '{{ route('menu-items.bulkDelete') }}',
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+            data: { ids: ids }
+        })
+        .done(function(response){
+            console.log('✅ Bulk delete successful:', response);
+
+            // Log activity
+            if (typeof logActivity === 'function') {
+                logActivity('menu_items', 'bulk_deleted', 'Bulk deleted ' + ids.length + ' menu items');
+            }
+
+            jQuery("#data-table_processing").hide();
+            $('#bannerItemsTable').DataTable().ajax.reload(null,false);
+
+            if (typeof toastr !== 'undefined') {
+                toastr.success(response.message || 'Menu items deleted successfully');
+            } else {
+                alert(response.message || 'Menu items deleted successfully');
+            }
+        })
+        .fail(function(xhr){
+            console.error('❌ Bulk delete failed:', xhr);
+            jQuery("#data-table_processing").hide();
+            alert('Failed to delete ('+xhr.status+'): '+xhr.statusText);
+        });
     });
+
     // Single delete
     $('#bannerItemsTable').on('click', '.delete-item', function(){
         var id = $(this).data('id');
+        var itemName = $(this).closest('tr').find('a').text().trim();
+
+        console.log('🗑️ Delete clicked:', { id: id, name: itemName });
+
         if(!confirm("{{trans('lang.selected_delete_alert')}}")) return;
-        $.post({ url: '{{ url('menu-items') }}' + '/' + id + '/delete', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-            .done(function(){ $('#bannerItemsTable').DataTable().ajax.reload(null,false); })
-            .fail(function(xhr){ alert('Failed to delete ('+xhr.status+'): '+xhr.statusText); });
+
+        jQuery("#data-table_processing").show();
+
+        $.post({
+            url: '{{ url('menu-items') }}/' + id + '/delete',
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+        })
+        .done(function(response){
+            console.log('✅ Delete successful:', response);
+
+            // Log activity
+            if (typeof logActivity === 'function') {
+                logActivity('menu_items', 'deleted', 'Deleted menu item: ' + itemName);
+            }
+
+            jQuery("#data-table_processing").hide();
+            $('#bannerItemsTable').DataTable().ajax.reload(null,false);
+
+            if (typeof toastr !== 'undefined') {
+                toastr.success(response.message || 'Menu item deleted successfully');
+            }
+        })
+        .fail(function(xhr){
+            console.error('❌ Delete failed:', xhr);
+            jQuery("#data-table_processing").hide();
+
+            var errorMsg = xhr.responseJSON && xhr.responseJSON.message
+                ? xhr.responseJSON.message
+                : 'Failed to delete ('+xhr.status+'): '+xhr.statusText;
+
+            alert(errorMsg);
+        });
     });
 </script>
 @endsection

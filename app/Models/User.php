@@ -13,13 +13,13 @@ class User extends Authenticatable
 
     protected $table = 'users';
     protected $guarded = [];
-
-    // Disable Laravel's automatic timestamp management
     public $timestamps = false;
-
     protected $casts = [
         'isActive' => 'boolean',
+        'active' => 'integer',
+        'isDocumentVerify' => 'string',
         'wallet_amount' => 'integer',
+        'rotation' => 'float',
         'orderCompleted' => 'integer',
     ];
 }

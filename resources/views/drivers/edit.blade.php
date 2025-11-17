@@ -1,66 +1,66 @@
 @extends('layouts.app')
 @section('content')
-<?php
-$countries = file_get_contents(public_path('countriesdata.json'));
-$countries = json_decode($countries);
-$countries = (array)$countries;
-$newcountries = array();
-$newcountriesjs = array();
-foreach ($countries as $keycountry => $valuecountry) {
-    $newcountries[$valuecountry->phoneCode] = $valuecountry;
-    $newcountriesjs[$valuecountry->phoneCode] = $valuecountry->code;
-}
-?>
-<div class="page-wrapper">
-    <div class="row page-titles">
-        <div class="col-md-5 align-self-center">
-            <h3 class="text-themecolor">{{trans('lang.driver_plural')}}</h3>
-        </div>
-        <div class="col-md-7 align-self-center">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{url('/dashboard')}}">{{trans('lang.dashboard')}}</a></li>
-                <li class="breadcrumb-item"><a href="{!! route('drivers') !!}">{{trans('lang.driver_plural')}}</a></li>
-                <li class="breadcrumb-item active">{{trans('lang.driver_edit')}}</li>
-            </ol>
-        </div>
+    <?php
+    $countries = file_get_contents(public_path('countriesdata.json'));
+    $countries = json_decode($countries);
+    $countries = (array)$countries;
+    $newcountries = array();
+    $newcountriesjs = array();
+    foreach ($countries as $keycountry => $valuecountry) {
+        $newcountries[$valuecountry->phoneCode] = $valuecountry;
+        $newcountriesjs[$valuecountry->phoneCode] = $valuecountry->code;
+    }
+    ?>
+    <div class="page-wrapper">
+        <div class="row page-titles">
+            <div class="col-md-5 align-self-center">
+                <h3 class="text-themecolor">{{trans('lang.driver_plural')}}</h3>
+            </div>
+            <div class="col-md-7 align-self-center">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{url('/dashboard')}}">{{trans('lang.dashboard')}}</a></li>
+                    <li class="breadcrumb-item"><a href="{!! route('drivers') !!}">{{trans('lang.driver_plural')}}</a></li>
+                    <li class="breadcrumb-item active">{{trans('lang.driver_edit')}}</li>
+                </ol>
+            </div>
 
-    </div>
+        </div>
 
 
         <div class="container-fluid">
 
-      <div class="resttab-sec mb-4">
-        <div class="row justify-content-center">
-            <div class="col-md-4">
-                <a href="{{route('orders')}}?driverId={{$id}}">
-                    <div class="card card-box-with-icon bg--1">
-                        <div class="card-body d-flex justify-content-between align-items-center">
-                        <div class="card-box-with-content">
-                            <h4 class="text-dark-2 mb-1 h4 rest_count" id="total_orders">1</h4>
-                            <p class="mb-0 small text-dark-2">{{trans('lang.dashboard_total_orders')}}</p>
-                        </div>
-                            <span class="box-icon ab"><img src="https://staging.foodie.siswebapp.com/images/active_restaurant.png"></span>
-                        </div>
+            <div class="resttab-sec mb-4">
+                <div class="row justify-content-center">
+                    <div class="col-md-4">
+                        <a href="{{route('orders')}}?driverId={{$id}}">
+                            <div class="card card-box-with-icon bg--1">
+                                <div class="card-body d-flex justify-content-between align-items-center">
+                                    <div class="card-box-with-content">
+                                        <h4 class="text-dark-2 mb-1 h4 rest_count" id="total_orders">1</h4>
+                                        <p class="mb-0 small text-dark-2">{{trans('lang.dashboard_total_orders')}}</p>
+                                    </div>
+                                    <span class="box-icon ab"><img src="https://staging.foodie.siswebapp.com/images/active_restaurant.png"></span>
+                                </div>
+                            </div>
+                        </a>
                     </div>
-                </a>
-            </div>
-            <div class="col-md-4">
-                <a href="{{route('payoutRequests.drivers.view',$id)}}">
-                    <div class="card card-box-with-icon bg--2">
-                        <div class="card-body d-flex justify-content-between align-items-center">
-                        <div class="card-box-with-content">
-                            <h4 class="text-dark-2 mb-1 h4 wallet_amount" id="wallet_amount">$0.00</h4>
-                            <p class="mb-0 small text-dark-2">{{trans('lang.wallet_Balance')}}</p>
-                        </div>
-                            <span class="box-icon ab"><img src="https://staging.foodie.siswebapp.com/images/total_earning.png"></span>
-                        </div>
+                    <div class="col-md-4">
+                        <a href="{{route('payoutRequests.drivers.view',$id)}}">
+                            <div class="card card-box-with-icon bg--2">
+                                <div class="card-body d-flex justify-content-between align-items-center">
+                                    <div class="card-box-with-content">
+                                        <h4 class="text-dark-2 mb-1 h4 wallet_amount" id="wallet_amount">$0.00</h4>
+                                        <p class="mb-0 small text-dark-2">{{trans('lang.wallet_Balance')}}</p>
+                                    </div>
+                                    <span class="box-icon ab"><img src="https://staging.foodie.siswebapp.com/images/total_earning.png"></span>
+                                </div>
+                            </div>
+                        </a>
                     </div>
-                </a>
-            </div>
 
 
-        </div>
-      </div>
+                </div>
+            </div>
 
 
 
@@ -97,7 +97,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                                     <div class="phone-box position-relative" id="phone-box">
                                         <select name="country" id="country_selector">
                                             <?php foreach ($newcountries as $keycy => $valuecy) { ?>
-                                            <?php $selected = ""; ?>
+                                                <?php $selected = ""; ?>
                                             <option <?php echo $selected; ?> code="<?php echo $valuecy->code; ?>"
                                                     value="<?php echo $keycy; ?>">
                                                 +<?php echo $valuecy->phoneCode; ?> {{$valuecy->countryName}}</option>
@@ -107,11 +107,11 @@ foreach ($countries as $keycountry => $valuecountry) {
                                         <div id="error2" class="err"></div>
                                     </div>
                                 </div>
-                                    <div class="form-text text-muted">{{trans('lang.user_phone_help')}}</div>
+                                <div class="form-text text-muted">{{trans('lang.user_phone_help')}}</div>
                             </div>
                             <div class="form-group row width-50">
                                 <label class="col-3 control-label">{{trans('lang.zone')}}<span
-                                            class="required-field"></span></label>
+                                        class="required-field"></span></label>
                                 <div class="col-7">
                                     <select id='zone' class="form-control">
                                         <option value="">{{ trans("lang.select_zone") }}</option>
@@ -224,349 +224,353 @@ foreach ($countries as $keycountry => $valuecountry) {
 
 
 
-</div>
+    </div>
 @endsection
 @section('scripts')
-<script>
-    var id = "<?php echo $id; ?>";
-    var photo = "";
-    var fileName='';
-    var userImageFile='';
-    var placeholderImage = '{{ asset('images/placeholder.png') }}';
-    var user_active_deactivate = false;
-    var currentCurrency = '';
-    var provider  = '';
-    var currencyAtRight = false;
-    var decimal_degits = 0;
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.26.0/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/compressorjs/1.1.1/compressor.min.js" integrity="sha512-VaRptAfSxXFAv+vx33XixtIVT9A/9unb1Q8fp63y1ljF+Sbka+eMJWoDAArdm7jOYuLQHVx5v60TQ+t3EA8weA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script>
+        const driverId = "{{ $id }}";
+        const placeholderImage = '{{ asset('images/placeholder.png') }}';
+        const routes = {
+            driver: "{{ route('drivers.getById', ['id' => $id]) }}",
+            stats: "{{ route('drivers.stats', ['id' => $id]) }}",
+            zones: "{{ route('drivers.zones') }}",
+            update: "{{ route('drivers.update', ['id' => $id]) }}",
+            currency: "{{ route('api.currencies.active') }}",
+            uploadImage: "{{ route('api.upload.image') }}",
+        };
 
-    // Load currency from SQL
-    $.ajax({
-        url: '{{url("/payments/currency")}}',
-        type: 'GET',
-        success: function(response) {
-            if(response.success && response.data) {
-                currentCurrency = response.data.symbol;
-                currencyAtRight = response.data.symbolAtRight;
-                decimal_degits = response.data.decimal_degits || 0;
+        const newcountriesjs = @json($newcountriesjs);
+        let currentCurrency = '';
+        let currencyAtRight = false;
+        let decimalDigits = 0;
+        let profileImageBase64 = null;
+        let profileImageFilename = null;
+        let existingProfileImageUrl = '';
+        let provider = 'email';
+
+        $(document).ready(() => {
+            window.csrfToken = $('meta[name="csrf-token"]').attr('content');
+            $.ajaxSetup({ headers: { 'X-CSRF-TOKEN': window.csrfToken } });
+
+            initCountrySelect();
+            bindEvents();
+            loadInitialData();
+        });
+
+        function initCountrySelect() {
+            $('#country_selector').select2({
+                templateResult: formatState,
+                templateSelection: formatStateSelection,
+                placeholder: 'Select Country',
+                allowClear: true
+            });
+        }
+
+        function bindEvents() {
+            $('#zone').empty().append('<option value="">{{ trans('lang.select_zone') }}</option>');
+
+            $(document).on('change', 'input[type="file"]', function (event) {
+                if (this.id === 'country_selector') return;
+                handleProfileFileSelect(event);
+                $(this).val('');
+            });
+
+            $('.edit-form-btn').on('click', async (event) => {
+                event.preventDefault();
+                await saveDriver();
+            });
+
+            $('#send_mail').on('click', function () {
+                alert('{{ trans('lang.error_reset_driver_password') }}');
+            });
+        }
+
+        async function loadInitialData() {
+            jQuery('#data-table_processing').show();
+            clearError();
+
+            try {
+                const [currencyRes, zonesRes] = await Promise.all([
+                    fetchJson(routes.currency),
+                    fetchJson(routes.zones)
+                ]);
+
+                if (currencyRes && currencyRes.success && currencyRes.data) {
+                    currentCurrency = currencyRes.data.symbol || '';
+                    currencyAtRight = !!currencyRes.data.symbolAtRight;
+                    decimalDigits = currencyRes.data.decimal_degits || 0;
+                }
+
+                if (zonesRes && zonesRes.success && Array.isArray(zonesRes.data)) {
+                    populateZones(zonesRes.data);
+                }
+
+                const driverRes = await fetchJson(routes.driver);
+                if (!driverRes || !driverRes.success || !driverRes.data) {
+                    throw new Error(driverRes && driverRes.message ? driverRes.message : 'Unable to load driver details.');
+                }
+
+                populateDriverForm(driverRes.data);
+
+                try {
+                    const statsRes = await fetchJson(routes.stats);
+                    if (statsRes && statsRes.success) {
+                        updateStats(statsRes);
+                    }
+                } catch (statsError) {
+                    console.warn('Unable to load driver stats', statsError);
+                }
+            } catch (error) {
+                console.error('Driver edit init error:', error);
+                showError(error.message || 'Failed to load driver information.');
+            } finally {
+                jQuery('#data-table_processing').hide();
             }
         }
-    });
 
-    // Load zones from SQL
-    $.ajax({
-        url: '{{route("drivers.zones")}}',
-        type: 'GET',
-        success: function(response) {
-            console.log('Zone response:', response);
-            if(response.success && response.data) {
-                console.log('Total zones received:', response.data.length);
-                response.data.forEach(function(data) {
-                    console.log('Adding zone:', data.id, data.name);
-                    $('#zone').append($("<option></option>")
-                        .attr("value", data.id)
-                        .text(data.name));
-                });
+        function populateZones(zones) {
+            const $zoneSelect = $('#zone');
+            zones.forEach(zone => {
+                $zoneSelect.append($('<option></option>').attr('value', zone.id).text(zone.name));
+            });
+        }
+
+        function populateDriverForm(driver) {
+            $('.user_first_name').val(driver.firstName || '');
+            $('.user_last_name').val(driver.lastName || '');
+            $('.user_email').val(driver.email || '');
+
+            if (driver.countryCode) {
+                const code = (driver.countryCode || '').replace('+', '');
+                $('#country_selector').val(code).trigger('change');
+            }
+
+            $('.user_phone').val(cleanPhone(driver.phoneNumber || ''));
+
+            if (driver.location) {
+                const lat = parseFloat(driver.location.latitude || driver.location.lat || 0);
+                const lng = parseFloat(driver.location.longitude || driver.location.lng || 0);
+                $('.user_latitude').val(Number.isFinite(lat) ? lat : '');
+                $('.user_longitude').val(Number.isFinite(lng) ? lng : '');
+            }
+
+            if (driver.zoneId) {
+                $('#zone').val(driver.zoneId).trigger('change');
+            }
+
+            $('#is_active').prop('checked', !!driver.active || !!driver.isActive);
+
+            provider = driver.provider || 'email';
+            toggleProviderControls();
+
+            existingProfileImageUrl = driver.profilePictureURL || '';
+            renderProfileImage(existingProfileImageUrl || placeholderImage);
+
+            if (driver.userBankDetails) {
+                const details = driver.userBankDetails;
+                $('#bankName').val(details.bankName || '');
+                $('#branchName').val(details.branchName || '');
+                $('#holderName').val(details.holderName || '');
+                $('#accountNumber').val(details.accountNumber || '');
+                $('#otherDetails').val(details.otherDetails || '');
+            }
+        }
+
+        function updateStats(stats) {
+            $('#total_orders').text(stats.totalOrders ?? 0);
+            const wallet = parseFloat(stats.walletBalance ?? stats.wallet_amount ?? 0);
+            $('#wallet_amount').text(formatCurrency(wallet));
+        }
+
+        function toggleProviderControls() {
+            if (!provider || provider === 'email') {
+                $('.provider_type').show();
             } else {
-                console.error('Zone loading failed:', response);
+                $('.provider_type').hide();
             }
-        },
-        error: function(xhr, status, error) {
-            console.error('Error loading zones:', error, xhr.responseText);
         }
-    });
-    $("#send_mail").click(function() {
-        if ($("#reset_password").is(":checked")) {
-            var email = $(".user_email").val();
-            firebase.auth().sendPasswordResetEmail(email)
-                .then((res) => {
-                    alert('{{trans("lang.driver_mail_sent")}}');
-                })
-                .catch((error) => {
-                    console.log('Error password reset: ', error);
-                });
-        } else {
-            alert('{{trans("lang.error_reset_driver_password")}}');
-        }
-    });
-    $(document).ready(function() {
-        jQuery("#data-table_processing").show();
-        jQuery("#country_selector").select2({
-            templateResult: formatState,
-            templateSelection: formatState2,
-            placeholder: "Select Country",
-            allowClear: true
-        });
 
-        // Load driver data from SQL
-        $.ajax({
-            url: '/drivers/' + id + '/data',
-            type: 'GET',
-            success: function(response) {
-                if(response.success && response.data) {
-                    var user = response.data;
-                    provider = user.provider || 'email';
+        async function saveDriver() {
+            clearError();
+            const errors = [];
 
-                    // Show/hide provider type based on provider
-                    if(!user.provider || user.provider == "email"){
-                        $(".provider_type").show();
-                    } else {
-                        $(".provider_type").hide();
-                    }
-                $(".user_first_name").val(user.firstName);
-                $(".user_last_name").val(user.lastName);
-                if(user.email != ""){
-                    $(".user_email").val(shortEmail(user.email));
-                }
-                else{
-                    $(".user_email").val("");
-                }
-                if(user.phoneNumber != ""){
-                    $(".user_phone").val(shortEditNumber(user.phoneNumber));
-                }
-                else
-                {
-                    $(".user_phone").val("");
-                }
-                if (user.hasOwnProperty('location') ) {
-                    if (Number.isNaN(user.location.latitude)) {
-                        $(".user_latitude").val("");
-                    } else {
-                        $(".user_latitude").val(user.location.latitude);
-                    }
-                    if (Number.isNaN(user.location.longitude)) {
-                        $(".user_longitude").val("");
-                    }
-                    else
-                    {
-                        $(".user_longitude").val(user.location.longitude);
-                    }
-                }
-                if (user.isActive) {
-                    $(".user_active").prop('checked', true);
-                }
-                if (user.active) {
-                    $("#is_active").prop("checked", true);
-                    user_active_deactivate = true;
-                }
-                if (user.profilePictureURL != '' && user.profilePictureURL != null) {
-                    photo = user.profilePictureURL;
-                    userImageFile = user.profilePictureURL;
-                    $(".user_image").append('<img onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" class="rounded" style="width:50px" src="' + photo + '" alt="image">');
-                } else {
-                    $(".user_image").append('<img class="rounded" style="width:50px" src="' + placeholderImage + '" alt="image">');
-                }
-                if (user.hasOwnProperty('zoneId') && user.zoneId != '') {
-                    $("#zone").val(user.zoneId);
-                }
+            const firstName = $('.user_first_name').val().trim();
+            const lastName = $('.user_last_name').val().trim();
+            const email = $('.user_email').val().trim();
+            const countryCode = $('#country_selector').val();
+            const phone = $('.user_phone').val().trim();
+            const zoneId = $('#zone').val();
+            const latitude = parseFloat($('.user_latitude').val());
+            const longitude = parseFloat($('.user_longitude').val());
+            const isActive = $('#is_active').is(':checked');
 
-                // Get driver stats from SQL (includes total orders)
-                $.ajax({
-                    url: '/drivers/' + id + '/stats',
-                    type: 'GET',
-                    success: function(statsResponse) {
-                        if(statsResponse.success) {
-                            $("#total_orders").text(statsResponse.totalOrders);
-                        }
-                    }
-                });
-                if (currencyAtRight) {
-                    var wallet_amount = parseFloat(user.wallet_amount).toFixed(decimal_degits) + currentCurrency;
-                } else {
-                    var wallet_amount = currentCurrency + parseFloat(user.wallet_amount).toFixed(decimal_degits);
-                }
-                if (user.wallet_amount) {
-                    $('#wallet_amount').text(wallet_amount);
-                }
-                if (isNaN(user.wallet_amount)) {
-                    if (currencyAtRight) {
-                        var wallet_amount = parseFloat(0).toFixed(decimal_degits) + currentCurrency;
-                    } else {
-                        var wallet_amount = currentCurrency + parseFloat(0).toFixed(decimal_degits);
-                    }
-                    $("#wallet_amount").text(wallet_amount);
-                }
-                if (user.userBankDetails) {
-                    if (user.userBankDetails.bankName != undefined) {
-                        $("#bankName").val(user.userBankDetails.bankName);
-                    }
-                    if (user.userBankDetails.branchName != undefined) {
-                        $("#branchName").val(user.userBankDetails.branchName);
-                    }
-                    if (user.userBankDetails.holderName != undefined) {
-                        $("#holderName").val(user.userBankDetails.holderName);
-                    }
-                    if (user.userBankDetails.accountNumber != undefined) {
-                        $("#accountNumber").val(user.userBankDetails.accountNumber);
-                    }
-                    if (user.userBankDetails.otherDetails != undefined) {
-                        $("#otherDetails").val(user.userBankDetails.otherDetails);
-                    }
-                }
-                jQuery("#data-table_processing").hide();
-            },
-            error: function() {
-                console.error('Error loading driver data');
-                jQuery("#data-table_processing").hide();
-                alert('Error loading driver data');
+            if (!firstName) errors.push("{{ trans('lang.enter_owners_name_error') }}");
+            if (!lastName) errors.push("{{ trans('lang.enter_owners_last_name_error') }}");
+            if (!phone) errors.push("{{ trans('lang.enter_owners_phone') }}");
+            if (!zoneId) errors.push("{{ trans('lang.select_zone_help') }}");
+
+            if (errors.length) {
+                showError(errors);
+                return;
             }
-        });
-    });
 
-    $(".edit-form-btn").click(function() {
-            var userFirstName = $(".user_first_name").val();
-            var userLastName = $(".user_last_name").val();
-            var email = $(".user_email").val();
-            var countryCode = '+' + jQuery("#country_selector").val();
-            var userPhone = $(".user_phone").val();
-            var zoneId = $('#zone option:selected').val();
-            var active = $(".user_active").is(":checked");
-            var user_active_deactivate = false;
-            if ($("#is_active").is(':checked')) {
-                user_active_deactivate = true;
-            }
-            var latitude = parseFloat($(".user_latitude").val());
-            var longitude = parseFloat($(".user_longitude").val());
-            if (userFirstName == '') {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.enter_owners_name_error')}}</p>");
-                window.scrollTo(0, 0);
-            } else if (userLastName == '') {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.enter_owners_last_name_error')}}</p>");
-                window.scrollTo(0, 0);
-            } else if (userPhone == '') {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.enter_owners_phone')}}</p>");
-                window.scrollTo(0, 0);
-            } else if (zoneId == '') {
-                $(".error_top").show();
-                $(".error_top").html("");
-                $(".error_top").append("<p>{{trans('lang.select_zone_help')}}</p>");
-                window.scrollTo(0, 0);
-            }
-            else {
-                var bankName = $("#bankName").val();
-                var branchName = $("#branchName").val();
-                var holderName = $("#holderName").val();
-                var accountNumber = $("#accountNumber").val();
-                var otherDetails = $("#otherDetails").val();
-                var userBankDetails = {
-                    'bankName': bankName,
-                    'branchName': branchName,
-                    'holderName': holderName,
-                    'accountNumber': accountNumber,
-                    'accountNumber': accountNumber,
-                    'otherDetails': otherDetails,
+            jQuery('#data-table_processing').show();
+
+            try {
+                let profileImageUrl = existingProfileImageUrl;
+                if (profileImageBase64) {
+                    profileImageUrl = await uploadBase64Image(profileImageBase64, 'drivers/profile', profileImageFilename);
+                }
+
+                const bankDetails = {
+                    bankName: $('#bankName').val() || '',
+                    branchName: $('#branchName').val() || '',
+                    holderName: $('#holderName').val() || '',
+                    accountNumber: $('#accountNumber').val() || '',
+                    otherDetails: $('#otherDetails').val() || ''
                 };
-                jQuery("#data-table_processing").show();
 
-                // Update driver via AJAX SQL
-                $.ajax({
-                    url: '/drivers/' + id,
-                    type: 'PUT',
-                    data: {
-                        firstName: userFirstName,
-                        lastName: userLastName,
-                        email: email,
-                        countryCode: countryCode,
-                        phoneNumber: userPhone,
-                        isActive: active,
-                        profilePictureURL: photo || userImageFile,
-                        location: {
-                            latitude: latitude,
-                            longitude: longitude
-                        },
-                        active: user_active_deactivate,
-                        userBankDetails: userBankDetails,
-                        zoneId: zoneId,
-                        _token: '{{csrf_token()}}'
+                const payload = {
+                    firstName,
+                    lastName,
+                    email,
+                    countryCode: countryCode ? '+' + countryCode : '',
+                    phoneNumber: phone,
+                    zoneId,
+                    isActive,
+                    active: isActive,
+                    profilePictureURL: profileImageUrl,
+                    location: {
+                        latitude: Number.isFinite(latitude) ? latitude : null,
+                        longitude: Number.isFinite(longitude) ? longitude : null,
                     },
-                    success: function(response) {
-                        if(response.success) {
-                            console.log('✅ Driver updated successfully');
-                            if (typeof logActivity === 'function') {
-                                logActivity('drivers', 'updated', 'Updated driver: ' + userFirstName + ' ' + userLastName);
-                            }
-                            jQuery("#data-table_processing").hide();
-                            window.location.href = '{{ route("drivers")}}';
-                        } else {
-                            jQuery("#data-table_processing").hide();
-                            $(".error_top").show();
-                            $(".error_top").html("");
-                            $(".error_top").append("<p>" + (response.message || 'Error updating driver') + "</p>");
-                            window.scrollTo(0, 0);
-                        }
-                    },
-                    error: function(xhr) {
-                        jQuery("#data-table_processing").hide();
-                        $(".error_top").show();
-                        $(".error_top").html("");
-                        var errorMsg = 'Error updating driver';
-                        if(xhr.responseJSON && xhr.responseJSON.message) {
-                            errorMsg = xhr.responseJSON.message;
-                        }
-                        $(".error_top").append("<p>" + errorMsg + "</p>");
-                        window.scrollTo(0, 0);
-                    }
+                    userBankDetails: bankDetails,
+                };
+
+                await $.ajax({
+                    url: routes.update,
+                    method: 'PUT',
+                    contentType: 'application/json; charset=utf-8',
+                    data: JSON.stringify(payload)
                 });
+
+                window.location.href = "{{ route('drivers') }}";
+            } catch (error) {
+                console.error('Driver update failed:', error);
+                const message = error?.responseJSON?.message || error.message || 'Failed to update driver.';
+                showError(message);
+            } finally {
+                jQuery('#data-table_processing').hide();
             }
-        });
-    }
-    function formatState(state) {
+        }
+
+        function handleProfileFileSelect(evt) {
+            const file = evt.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            new Compressor(file, {
+                quality: {{ env('IMAGE_COMPRESSOR_QUALITY', 0.8) }},
+                success(result) {
+                    const reader = new FileReader();
+                    reader.onload = function (e) {
+                        profileImageBase64 = e.target.result;
+                        const originalName = result.name || 'profile.jpg';
+                        const extension = originalName.split('.').pop();
+                        profileImageFilename = `${originalName.replace(/\.[^/.]+$/, '')}_${Date.now()}.${extension}`;
+                        renderProfileImage(profileImageBase64);
+                    };
+                    reader.readAsDataURL(result);
+                },
+                error(err) {
+                    console.error('Profile image compression error', err);
+                    showError('Unable to process profile image: ' + err.message);
+                }
+            });
+        }
+
+        function renderProfileImage(src) {
+            $('.user_image').empty().append(`<img class="rounded" style="width:50px" src="${src}" onerror="this.onerror=null;this.src='${placeholderImage}'" alt="profile">`);
+        }
+
+        function uploadBase64Image(base64Data, folder, filename) {
+            return $.ajax({
+                url: routes.uploadImage,
+                method: 'POST',
+                dataType: 'json',
+                data: {
+                    image: base64Data,
+                    folder: folder || 'uploads',
+                    filename: filename || `image_${Date.now()}.jpg`
+                }
+            }).then(response => {
+                if (!response || !response.success || !response.url) {
+                    throw new Error(response && response.message ? response.message : 'Image upload failed');
+                }
+                return response.url;
+            });
+        }
+
+        function fetchJson(url) {
+            return $.ajax({
+                url,
+                method: 'GET',
+                dataType: 'json'
+            });
+        }
+
+        function formatCurrency(value) {
+            const amount = Number.isFinite(value) ? value : 0;
+            const formatted = amount.toFixed(decimalDigits);
+            return currencyAtRight ? `${formatted}${currentCurrency}` : `${currentCurrency}${formatted}`;
+        }
+
+        function cleanPhone(value) {
+            return (value || '').replace(/[^0-9+]/g, '');
+        }
+
+        function showError(messages) {
+            const list = Array.isArray(messages) ? messages : [messages];
+            const $error = $('.error_top');
+            $error.html('');
+            list.filter(Boolean).forEach(msg => $error.append(`<p>${msg}</p>`));
+            if (list.length) {
+                $error.show();
+                window.scrollTo(0, 0);
+            }
+        }
+
+        function clearError() {
+            $('.error_top').hide().html('');
+        }
+
+        function formatState(state) {
             if (!state.id) {
                 return state.text;
             }
-            var baseUrl = "<?php echo URL::to('/');?>/scss/icons/flag-icon-css/flags";
-            var $state = $(
-                '<span><img src="' + baseUrl + '/' + newcountriesjs[state.element.value].toLowerCase() + '.svg" class="img-flag" /> ' + state.text + '</span>'
-            );
+            const code = newcountriesjs[state.element.value];
+            if (!code) {
+                return state.text;
+            }
+            const baseUrl = "{{ URL::to('/') }}/scss/icons/flag-icon-css/flags";
+            const $state = $(`<span><img src="${baseUrl}/${code.toLowerCase()}.svg" class="img-flag" /> ${state.text}</span>`);
             return $state;
-    }
-        function formatState2(state) {
+        }
+
+        function formatStateSelection(state) {
             if (!state.id) {
                 return state.text;
             }
-            var baseUrl = "<?php echo URL::to('/');?>/scss/icons/flag-icon-css/flags"
-            var $state = $(
-                '<span><img class="img-flag" /> <span></span></span>'
-            );
-            $state.find("span").text(state.text);
-            $state.find("img").attr("src", baseUrl + "/" + newcountriesjs[state.element.value].toLowerCase() + ".svg");
+            const code = newcountriesjs[state.element.value];
+            if (!code) {
+                return state.text;
+            }
+            const baseUrl = "{{ URL::to('/') }}/scss/icons/flag-icon-css/flags";
+            const $state = $(`<span><img class="img-flag" src="${baseUrl}/${code.toLowerCase()}.svg" /> ${state.text}</span>`);
             return $state;
         }
-        var newcountriesjs = '<?php echo json_encode($newcountriesjs); ?>';
-        var newcountriesjs = JSON.parse(newcountriesjs);
-    function handleFileSelect(evt) {
-        var f = evt.target.files[0];
-        var reader = new FileReader();
-        reader.onload = (function(theFile) {
-            return function(e) {
-                var filePayload = e.target.result;
-                var val = f.name;
-                var ext = val.split('.')[1];
-                var docName = val.split('fakepath')[1];
-                var filename = (f.name).replace(/C:\\fakepath\\/i, '')
-                var timestamp = Number(new Date());
-                var filename = filename.split('.')[0] + "_" + timestamp + '.' + ext;
-                photo = filePayload;
-                fileName = filename;
-                $(".user_image").empty();
-                $(".user_image").append('<img class="rounded" style="width:50px" src="' + photo + '" alt="image">');
-            };
-        })(f);
-        reader.readAsDataURL(f);
-    }
-    function chkAlphabets2(event, msg) {
-        if (!(event.which >= 48 && event.which <= 57)) {
-            document.getElementById(msg).innerHTML = "Accept only Number";
-            return false;
-        } else {
-            document.getElementById(msg).innerHTML = "";
-            return true;
-        }
-    }
-</script>
+    </script>
 @endsection

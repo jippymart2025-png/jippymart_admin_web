@@ -140,7 +140,15 @@
             responsive: true,
             ajax: {
                 url: '{{ route("cuisines.data") }}',
-                data: function(d){ /* DataTables sends pagination/search/order automatically */ }
+                data: function(d){ /* DataTables sends pagination/search/order automatically */ },
+                dataSrc: function(json) {
+                    // Update count display
+                    if (json.stats && json.stats.total) {
+                        $('.category_count').text(json.stats.total);
+                        console.log('📊 Total cuisines:', json.stats.total);
+                    }
+                    return json.data;
+                }
             },
             order: (checkDeletePermission) ? [1, 'asc'] : [0,'asc'],
             columnDefs: [
@@ -155,17 +163,42 @@
         table.columns.adjust().draw();
 
         $(document).on('click', '.delete-btn', function(e){
-            if(!confirm("{{trans('lang.selected_delete_alert')}}")){
-                e.preventDefault();
+            e.preventDefault();
+            var deleteUrl = $(this).attr('href');
+            var cuisineName = $(this).closest('tr').find('a').text().trim();
+
+            if(confirm("{{trans('lang.selected_delete_alert')}}")){
+                // Log activity
+                if (typeof logActivity === 'function') {
+                    logActivity('cuisines', 'deleted', 'Deleted cuisine: ' + cuisineName);
+                }
+                window.location.href = deleteUrl;
             }
         });
+
         $(document).on('change', '.toggle-publish', function(){
             var id = $(this).data('id');
             var publish = $(this).is(':checked');
+            var cuisineName = $(this).closest('tr').find('a').text().trim();
+            var action = publish ? 'published' : 'unpublished';
+
             $.post({
                 url: '{{ url('/cuisines') }}' + '/' + id + '/toggle',
                 headers: {'X-CSRF-TOKEN': '{{ csrf_token() }}'},
-                data: { publish: publish }
+                data: { publish: publish },
+                success: function(response) {
+                    console.log('✅ Cuisine publish toggled:', response);
+
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        logActivity('cuisines', action, action.charAt(0).toUpperCase() + action.slice(1) + ' cuisine: ' + cuisineName);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('❌ Error toggling publish:', error);
+                    // Revert checkbox on error
+                    $(this).prop('checked', !publish);
+                }
             });
         });
 
@@ -174,10 +207,18 @@
         });
         $("#deleteAll").click(function () {
             if ($('#categoriesTable .is_open:checked').length) {
+                var selectedCount = $('#categoriesTable .is_open:checked').length;
+
                 if (confirm("{{trans('lang.selected_delete_alert')}}")) {
-                    $('#categoriesTable .is_open:checked').each(function(){
+                    // Log activity for bulk delete
+                    if (typeof logActivity === 'function') {
+                        logActivity('cuisines', 'bulk_deleted', 'Bulk deleted ' + selectedCount + ' cuisines');
+                    }
+
+                    var deleteUrl = '{{ url('/cuisines/delete') }}';
+                    $('#categoriesTable .is_open:checked').first().each(function(){
                         var dataId = $(this).attr('dataId');
-                        window.location.href = '{{ url('/cuisines/delete') }}' + '/' + dataId;
+                        window.location.href = deleteUrl + '/' + dataId;
                     });
                 }
             } else {

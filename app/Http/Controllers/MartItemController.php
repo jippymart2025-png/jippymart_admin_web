@@ -3,11 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\MartItem;
-use App\Models\Vendor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use App\Services\ActivityLogger;
 
 /**
  * MartItemController
@@ -33,12 +34,60 @@ class MartItemController extends Controller
 
     public function edit($id)
     {
-        return view('martItems.edit')->with('id', $id);
+        $item = MartItem::findOrFail($id);
+
+        $vendors = DB::table('vendors')
+            ->where('vType', 'mart')
+            ->orderBy('title')
+            ->get(['id', 'title']);
+
+        $categories = DB::table('mart_categories')
+            ->orderBy('title')
+            ->get(['id', 'title', 'section']);
+
+        $subcategories = DB::table('mart_subcategories')
+            ->orderBy('title')
+            ->get(['id', 'title', 'parent_category_id', 'section']);
+
+        $brands = DB::table('brands')
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return view('martItems.edit', [
+            'item' => $item,
+            'vendors' => $vendors,
+            'categories' => $categories,
+            'subcategories' => $subcategories,
+            'brands' => $brands,
+        ]);
     }
 
     public function create($id = '')
     {
-        return view('martItems.create')->with('id', $id);
+        $vendors = DB::table('vendors')
+            ->where('vType', 'mart')
+            ->orderBy('title')
+            ->get(['id', 'title']);
+
+        $categories = DB::table('mart_categories')
+            ->orderBy('title')
+            ->get(['id', 'title', 'section']);
+
+        $subcategories = DB::table('mart_subcategories')
+            ->orderBy('title')
+            ->get(['id', 'title', 'parent_category_id', 'section']);
+
+        $brands = DB::table('brands')
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return view('martItems.create', [
+            'restaurantId' => $id,
+            'vendors' => $vendors,
+            'categories' => $categories,
+            'subcategories' => $subcategories,
+            'brands' => $brands,
+        ]);
     }
 
     public function createItem()
@@ -148,6 +197,17 @@ class MartItemController extends Controller
                 });
             }
 
+//            $martcategories = DB::table('mart_categories')->select('id', 'name')->get();
+//
+//            $martsubcategories = DB::table('mart_subcategories')->select('id', 'name')->get();
+//
+//            $brands = DB::table('brands')->select('id', 'name')->get();
+//
+//            $vendors = DB::table('vendors')
+//                ->select('id', 'name')
+//                ->where('vType', '=', 'mart')
+//                ->get();
+
             // Get total count before pagination
             $totalRecords = $query->count();
 
@@ -228,7 +288,11 @@ class MartItemController extends Controller
                 'draw' => $draw,
                 'recordsTotal' => $totalRecords,
                 'recordsFiltered' => $totalRecords,
-                'data' => $data
+                'data' => $data,
+//                'martcategories' => $martcategories,
+//                'vendors' => $vendors,
+//                'brands' => $brands,
+//                'martsubcategories' => $martsubcategories,
             ];
 
             return response()->json($response);
@@ -327,7 +391,7 @@ class MartItemController extends Controller
     /**
      * Toggle publish status
      */
-    public function togglePublish(Request $request, $id)
+    public function togglePublish(Request $request, $id, ActivityLogger $logger)
     {
         try {
             \Log::info('=== togglePublish called for ID: ' . $id);
@@ -356,6 +420,8 @@ class MartItemController extends Controller
             \Log::info('DB update result: ' . $updated . ' row(s) affected');
 
             if ($updated) {
+                // activity log
+                $logger->log(auth()->user(), 'mart_items', $newStatus ? 'published' : 'unpublished', 'Mart item publish toggled: ' . $id, $request);
                 return response()->json([
                     'success' => true,
                     'message' => 'Publish status updated successfully',
@@ -379,7 +445,7 @@ class MartItemController extends Controller
     /**
      * Toggle availability status
      */
-    public function toggleAvailability(Request $request, $id)
+    public function toggleAvailability(Request $request, $id, ActivityLogger $logger)
     {
         try {
             \Log::info('=== toggleAvailability called for ID: ' . $id);
@@ -408,6 +474,8 @@ class MartItemController extends Controller
             \Log::info('DB update result: ' . $updated . ' row(s) affected');
 
             if ($updated) {
+                // activity log
+                $logger->log(auth()->user(), 'mart_items', $newStatus ? 'made_available' : 'made_unavailable', 'Mart item availability toggled: ' . $id, $request);
                 return response()->json([
                     'success' => true,
                     'message' => 'Availability status updated successfully',
@@ -431,7 +499,7 @@ class MartItemController extends Controller
     /**
      * Delete mart item
      */
-    public function deleteMartItem($id)
+    public function deleteMartItem($id, ActivityLogger $logger, Request $request)
     {
         try {
             $item = MartItem::find($id);
@@ -440,7 +508,11 @@ class MartItemController extends Controller
                 return response()->json(['success' => false, 'message' => 'Item not found'], 404);
             }
 
+            $name = $item->name;
             $item->delete();
+
+            // activity log
+            $logger->log(auth()->user(), 'mart_items', 'deleted', 'Deleted mart item: ' . $name . ' (' . $id . ')', $request);
 
             return response()->json([
                 'success' => true,
@@ -456,7 +528,7 @@ class MartItemController extends Controller
     /**
      * Bulk delete mart items
      */
-    public function bulkDelete(Request $request)
+    public function bulkDelete(Request $request, ActivityLogger $logger)
     {
         try {
             $ids = $request->input('ids', []);
@@ -466,6 +538,8 @@ class MartItemController extends Controller
             }
 
             MartItem::whereIn('id', $ids)->delete();
+
+            $logger->log(auth()->user(), 'mart_items', 'bulk_deleted', 'Bulk deleted mart items: ' . implode(',', $ids), $request);
 
             return response()->json([
                 'success' => true,
@@ -481,7 +555,7 @@ class MartItemController extends Controller
     /**
      * Inline update for price fields
      */
-    public function inlineUpdate(Request $request, $id)
+    public function inlineUpdate(Request $request, $id, ActivityLogger $logger)
     {
         try {
             $item = MartItem::find($id);
@@ -524,6 +598,8 @@ class MartItemController extends Controller
 
             $item->updated_at = '"' . gmdate('Y-m-d\TH:i:s.u\Z') . '"';
             $item->save();
+
+            $logger->log(auth()->user(), 'mart_items', 'inline_updated', 'Inline updated ' . $field . ' for mart item: ' . $item->name, $request);
 
             return response()->json([
                 'success' => true,
@@ -704,210 +780,201 @@ class MartItemController extends Controller
         }
     }
 
+    protected function deleteImage(?string $path): void
+    {
+        if (!$path) {
+            return;
+        }
+
+        $publicUrl = Storage::disk('public')->url('');
+
+        if (Str::startsWith($path, ['http://', 'https://'])) {
+            if (Str::startsWith($path, $publicUrl)) {
+                $relative = Str::after($path, $publicUrl);
+                Storage::disk('public')->delete($relative);
+            }
+            return;
+        }
+
+        Storage::disk('public')->delete($path);
+    }
+
     /**
      * Store new mart item (SQL-based)
      */
-    public function store(Request $request)
+    public function store(Request $request, ActivityLogger $logger)
     {
-        try {
-            \Log::info('=== Store Mart Item Called ===');
-            \Log::info('Request data:', $request->all());
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'price' => 'required|numeric|min:0',
+            'disPrice' => 'nullable|numeric|min:0|lte:price',
+            'vendorID' => 'required|exists:vendors,id',
+            'categoryID' => 'required|exists:mart_categories,id',
+            'subcategoryID' => 'nullable|exists:mart_subcategories,id',
+            'brandID' => 'nullable|exists:brands,id',
+            'section' => 'nullable|string|max:255',
+            'quantity' => 'nullable|integer|min:-1',
+            'description' => 'required|string',
+            'calories' => 'nullable|integer|min:0',
+            'grams' => 'nullable|integer|min:0',
+            'proteins' => 'nullable|integer|min:0',
+            'fats' => 'nullable|integer|min:0',
+            'photo' => 'nullable|image|max:2048',
+        ]);
 
-            // Generate unique ID
-            $itemId = $request->input('id', uniqid());
-            \Log::info('Generated item ID: ' . $itemId);
+        $id = Str::uuid()->toString();
 
-            // Prepare data
-            $data = [
-                'id' => $itemId,
-                'name' => $request->input('name'),
-                'price' => (int) $request->input('price', 0),
-                'disPrice' => (int) $request->input('disPrice', 0),
-                'vendorID' => $request->input('vendorID'),
-                'vendorTitle' => $request->input('vendorTitle', ''),
-                'categoryID' => $request->input('categoryID'),
-                'categoryTitle' => $request->input('categoryTitle', ''),
-                'subcategoryID' => $request->input('subcategoryID', ''),
-                'subcategoryTitle' => $request->input('subcategoryTitle', ''),
-                'brandID' => $request->input('brandID', ''),
-                'brandTitle' => $request->input('brandTitle', ''),
-                'photo' => $request->input('photo', ''),
-                'description' => $request->input('description', ''),
-                'section' => $request->input('section', 'General'),
-                'publish' => $request->input('publish', false) ? 1 : 0,
-                'isAvailable' => $request->input('isAvailable', true) ? 1 : 0,
-                'nonveg' => $request->input('nonveg', false) ? 1 : 0,
-                'veg' => $request->input('veg', true) ? 1 : 0,
-                'quantity' => (int) $request->input('quantity', 10),
-                'calories' => (int) $request->input('calories', 0),
-                'grams' => (int) $request->input('grams', 0),
-                'proteins' => (int) $request->input('proteins', 0),
-                'fats' => (int) $request->input('fats', 0),
-                'isSpotlight' => $request->input('isSpotlight', false) ? 1 : 0,
-                'isStealOfMoment' => $request->input('isStealOfMoment', false) ? 1 : 0,
-                'isFeature' => $request->input('isFeature', false) ? 1 : 0,
-                'isTrending' => $request->input('isTrending', false) ? 1 : 0,
-                'isNew' => $request->input('isNew', false) ? 1 : 0,
-                'isBestSeller' => $request->input('isBestSeller', false) ? 1 : 0,
-                'isSeasonal' => $request->input('isSeasonal', false) ? 1 : 0,
-                'has_options' => $request->input('has_options', false) ? 1 : 0,
-                'options' => $request->input('options', '[]'),
-                'options_count' => (int) $request->input('options_count', 0),
-                'options_toggle' => $request->input('options_toggle', false) ? 1 : 0,
-                'options_enabled' => $request->input('options_enabled', false) ? 1 : 0,
-                'price_range' => $request->input('price_range', ''),
-                'min_price' => (int) $request->input('min_price', 0),
-                'max_price' => (int) $request->input('max_price', 0),
-                'default_option_id' => $request->input('default_option_id', ''),
-                'best_value_option' => $request->input('best_value_option', ''),
-                'savings_percentage' => (float) $request->input('savings_percentage', 0),
-                'addOnsTitle' => $request->input('addOnsTitle', '[]'),
-                'addOnsPrice' => $request->input('addOnsPrice', '[]'),
-                'product_specification' => $request->input('product_specification', '{}'),
-                'item_attribute' => $request->input('item_attribute', null),
-                'reviewCount' => '0',
-                'reviewSum' => '0',
-                'reviews' => 0,
-                'rating' => 0,
-                'created_at' => '"' . gmdate('Y-m-d\TH:i:s.u\Z') . '"',
-                'updated_at' => '"' . gmdate('Y-m-d\TH:i:s.u\Z') . '"',
-            ];
+        $vendorTitle = DB::table('vendors')->where('id', $validated['vendorID'])->value('title') ?? '';
+        $categoryTitle = DB::table('mart_categories')->where('id', $validated['categoryID'])->value('title') ?? '';
+        $subcategoryTitle = $validated['subcategoryID']
+            ? (DB::table('mart_subcategories')->where('id', $validated['subcategoryID'])->value('title') ?? '')
+            : '';
+        $brandTitle = $validated['brandID']
+            ? (DB::table('brands')->where('id', $validated['brandID'])->value('name') ?? '')
+            : '';
 
-            \Log::info('Data to insert:', $data);
-
-            // Use direct DB insert to ensure it saves
-            $inserted = DB::table('mart_items')->insert($data);
-
-            if ($inserted) {
-                \Log::info('✅ Mart item created successfully with ID: ' . $itemId);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Mart item created successfully',
-                    'id' => $itemId
-                ]);
-                        } else {
-                \Log::error('❌ Failed to insert mart item - no rows affected');
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to create mart item - database insert failed'
-                ], 500);
-            }
-
-                    } catch (\Exception $e) {
-            \Log::error('❌ Error creating mart item: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create mart item: ' . $e->getMessage()
-            ], 500);
+        $photoPath = null;
+        if ($request->hasFile('photo')) {
+            $photoPath = $request->file('photo')->store('mart_items', 'public');
         }
+
+        $item = MartItem::create([
+            'id' => $id,
+            'name' => $validated['name'],
+            'price' => $validated['price'],
+            'disPrice' => $validated['disPrice'] ?? 0,
+            'vendorID' => $validated['vendorID'],
+            'vendorTitle' => $vendorTitle,
+            'categoryID' => $validated['categoryID'],
+            'categoryTitle' => $categoryTitle,
+            'subcategoryID' => $validated['subcategoryID'] ?? '',
+            'subcategoryTitle' => $subcategoryTitle,
+            'brandID' => $validated['brandID'] ?? '',
+            'brandTitle' => $brandTitle,
+            'section' => $validated['section'] ?? 'General',
+            'photo' => $photoPath ? Storage::disk('public')->url($photoPath) : null,
+            'description' => $validated['description'],
+            'publish' => $request->boolean('publish'),
+            'isAvailable' => $request->boolean('isAvailable', true),
+            'nonveg' => $request->boolean('nonveg'),
+            'veg' => !$request->boolean('nonveg'),
+            'quantity' => $validated['quantity'] ?? -1,
+            'calories' => $validated['calories'] ?? 0,
+            'grams' => $validated['grams'] ?? 0,
+            'proteins' => $validated['proteins'] ?? 0,
+            'fats' => $validated['fats'] ?? 0,
+            'isSpotlight' => $request->boolean('isSpotlight'),
+            'isStealOfMoment' => $request->boolean('isStealOfMoment'),
+            'isFeature' => $request->boolean('isFeature'),
+            'isTrending' => $request->boolean('isTrending'),
+            'isNew' => $request->boolean('isNew'),
+            'isBestSeller' => $request->boolean('isBestSeller'),
+            'isSeasonal' => $request->boolean('isSeasonal'),
+            'has_options' => false,
+            'options_enabled' => false,
+            'options_toggle' => false,
+            'options_count' => 0,
+            'options' => json_encode([]),
+            'addOnsTitle' => json_encode([]),
+            'addOnsPrice' => json_encode([]),
+            'product_specification' => json_encode([]),
+            'item_attribute' => null,
+            'reviewCount' => '0',
+            'reviewSum' => '0',
+            'reviews' => 0,
+            'rating' => 0,
+            'created_at' => now()->toIso8601String(),
+            'updated_at' => now()->toIso8601String(),
+        ]);
+
+        $logger->log(auth()->user(), 'mart_items', 'created', 'Created mart item: ' . $item->name, $request);
+
+        return redirect()->route('mart-items')->with('success', 'Mart item created successfully.');
     }
 
     /**
      * Update existing mart item (SQL-based)
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, $id, ActivityLogger $logger)
     {
-        try {
-            \Log::info('=== Update Mart Item Called for ID: ' . $id);
-            \Log::info('Request data:', $request->all());
+        $item = MartItem::findOrFail($id);
 
-            // Check if item exists
-            $itemExists = DB::table('mart_items')->where('id', $id)->exists();
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'price' => 'required|numeric|min:0',
+            'disPrice' => 'nullable|numeric|min:0|lte:price',
+            'vendorID' => 'required|exists:vendors,id',
+            'categoryID' => 'required|exists:mart_categories,id',
+            'subcategoryID' => 'nullable|exists:mart_subcategories,id',
+            'brandID' => 'nullable|exists:brands,id',
+            'section' => 'nullable|string|max:255',
+            'quantity' => 'nullable|integer|min:-1',
+            'description' => 'required|string',
+            'calories' => 'nullable|integer|min:0',
+            'grams' => 'nullable|integer|min:0',
+            'proteins' => 'nullable|integer|min:0',
+            'fats' => 'nullable|integer|min:0',
+            'photo' => 'nullable|image|max:2048',
+        ]);
 
-            if (!$itemExists) {
-                \Log::error('Item not found: ' . $id);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Item not found'
-                ], 404);
-            }
+        $vendorTitle = DB::table('vendors')->where('id', $validated['vendorID'])->value('title') ?? '';
+        $categoryTitle = DB::table('mart_categories')->where('id', $validated['categoryID'])->value('title') ?? '';
+        $subcategoryTitle = $validated['subcategoryID']
+            ? (DB::table('mart_subcategories')->where('id', $validated['subcategoryID'])->value('title') ?? '')
+            : '';
+        $brandTitle = $validated['brandID']
+            ? (DB::table('brands')->where('id', $validated['brandID'])->value('name') ?? '')
+            : '';
 
-            // Prepare update data - use ALL fields from request
-            $data = [
-                'name' => $request->input('name'),
-                'price' => (int) $request->input('price', 0),
-                'disPrice' => (int) $request->input('disPrice', 0),
-                'vendorID' => $request->input('vendorID'),
-                'vendorTitle' => $request->input('vendorTitle', ''),
-                'categoryID' => $request->input('categoryID'),
-                'categoryTitle' => $request->input('categoryTitle', ''),
-                'subcategoryID' => $request->input('subcategoryID', ''),
-                'subcategoryTitle' => $request->input('subcategoryTitle', ''),
-                'brandID' => $request->input('brandID', ''),
-                'brandTitle' => $request->input('brandTitle', ''),
-                'photo' => $request->input('photo', ''),
-                'description' => $request->input('description', ''),
-                'section' => $request->input('section', 'General'),
-                'publish' => $request->input('publish', false) ? 1 : 0,
-                'isAvailable' => $request->input('isAvailable', true) ? 1 : 0,
-                'nonveg' => $request->input('nonveg', false) ? 1 : 0,
-                'veg' => $request->input('veg', true) ? 1 : 0,
-                'quantity' => (int) $request->input('quantity', 10),
-                'calories' => (int) $request->input('calories', 0),
-                'grams' => (int) $request->input('grams', 0),
-                'proteins' => (int) $request->input('proteins', 0),
-                'fats' => (int) $request->input('fats', 0),
-                'isSpotlight' => $request->input('isSpotlight', false) ? 1 : 0,
-                'isStealOfMoment' => $request->input('isStealOfMoment', false) ? 1 : 0,
-                'isFeature' => $request->input('isFeature', false) ? 1 : 0,
-                'isTrending' => $request->input('isTrending', false) ? 1 : 0,
-                'isNew' => $request->input('isNew', false) ? 1 : 0,
-                'isBestSeller' => $request->input('isBestSeller', false) ? 1 : 0,
-                'isSeasonal' => $request->input('isSeasonal', false) ? 1 : 0,
-                'has_options' => $request->input('has_options', false) ? 1 : 0,
-                'options' => $request->input('options', '[]'),
-                'options_count' => (int) $request->input('options_count', 0),
-                'options_toggle' => $request->input('options_toggle', false) ? 1 : 0,
-                'options_enabled' => $request->input('options_enabled', false) ? 1 : 0,
-                'price_range' => $request->input('price_range', ''),
-                'min_price' => (int) $request->input('min_price', 0),
-                'max_price' => (int) $request->input('max_price', 0),
-                'default_option_id' => $request->input('default_option_id', ''),
-                'best_value_option' => $request->input('best_value_option', ''),
-                'savings_percentage' => (float) $request->input('savings_percentage', 0),
-                'addOnsTitle' => $request->input('addOnsTitle', '[]'),
-                'addOnsPrice' => $request->input('addOnsPrice', '[]'),
-                'product_specification' => $request->input('product_specification', '{}'),
-                'item_attribute' => $request->input('item_attribute', null),
-                'updated_at' => '"' . gmdate('Y-m-d\TH:i:s.u\Z') . '"',
-            ];
-
-            \Log::info('Data to update:', $data);
-
-            // Use direct DB update to ensure it saves
-            $updated = DB::table('mart_items')
-                ->where('id', $id)
-                ->update($data);
-
-            \Log::info('DB update result: ' . $updated . ' row(s) affected');
-
-            if ($updated !== false) { // update() returns false on error, 0 or 1 on success
-                \Log::info('✅ Mart item updated successfully with ID: ' . $id);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Mart item updated successfully'
-                ]);
-            } else {
-                \Log::error('❌ Failed to update mart item - database error');
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to update mart item - database error'
-                ], 500);
-            }
-
-            } catch (\Exception $e) {
-            \Log::error('❌ Error updating mart item: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update mart item: ' . $e->getMessage()
-            ], 500);
+        if ($request->boolean('remove_photo')) {
+            $this->deleteImage($item->photo);
+            $item->photo = null;
         }
+
+        if ($request->hasFile('photo')) {
+            $this->deleteImage($item->photo);
+            $path = $request->file('photo')->store('mart_items', 'public');
+            $item->photo = Storage::disk('public')->url($path);
+        }
+
+        $item->fill([
+            'name' => $validated['name'],
+            'price' => $validated['price'],
+            'disPrice' => $validated['disPrice'] ?? 0,
+            'vendorID' => $validated['vendorID'],
+            'vendorTitle' => $vendorTitle,
+            'categoryID' => $validated['categoryID'],
+            'categoryTitle' => $categoryTitle,
+            'subcategoryID' => $validated['subcategoryID'] ?? '',
+            'subcategoryTitle' => $subcategoryTitle,
+            'brandID' => $validated['brandID'] ?? '',
+            'brandTitle' => $brandTitle,
+            'section' => $validated['section'] ?? 'General',
+            'description' => $validated['description'],
+            'publish' => $request->boolean('publish'),
+            'isAvailable' => $request->boolean('isAvailable', true),
+            'nonveg' => $request->boolean('nonveg'),
+            'veg' => !$request->boolean('nonveg'),
+            'quantity' => $validated['quantity'] ?? -1,
+            'calories' => $validated['calories'] ?? 0,
+            'grams' => $validated['grams'] ?? 0,
+            'proteins' => $validated['proteins'] ?? 0,
+            'fats' => $validated['fats'] ?? 0,
+            'isSpotlight' => $request->boolean('isSpotlight'),
+            'isStealOfMoment' => $request->boolean('isStealOfMoment'),
+            'isFeature' => $request->boolean('isFeature'),
+            'isTrending' => $request->boolean('isTrending'),
+            'isNew' => $request->boolean('isNew'),
+            'isBestSeller' => $request->boolean('isBestSeller'),
+            'isSeasonal' => $request->boolean('isSeasonal'),
+            'updated_at' => now()->toIso8601String(),
+        ]);
+
+        $item->save();
+
+        $logger->log(auth()->user(), 'mart_items', 'updated', 'Updated mart item: ' . $item->name, $request);
+
+        return redirect()->route('mart-items')->with('success', 'Mart item updated successfully.');
     }
 
     /**
@@ -957,6 +1024,42 @@ class MartItemController extends Controller
                 $sheet->setCellValue($column . '1', $header);
                 $column++;
             }
+
+            // 2️⃣ Add test/sample data
+            $sampleData = [
+                'name' => 'Test Product 1',
+                'price' => 199,
+                'description' => 'A test product for import validation',
+                'vendorID' => 'VEN123',
+                'vendorName' => 'Demo Mart',
+                'categoryID' => 'CAT001',
+                'categoryName' => 'Groceries',
+                'subcategoryID' => 'SUB001',
+                'subcategoryName' => 'Fruits',
+                'section' => 'Essentials',
+                'disPrice' => 149,
+                'publish' => 1,
+                'nonveg' => 0,
+                'isAvailable' => 1,
+                'photo' => 'https://example.com/images/apple.jpg',
+                'spotlight' => 0,
+                'steal_of_moment' => 1,
+                'featured' => 1,
+                'trending' => 0,
+                'new' => 1,
+                'best_seller' => 0,
+                'seasonal' => 1,
+                'brandID' => 'BR001',
+                'brandName' => 'TestBrand'
+            ];
+
+            // 3️⃣ Fill in test data (Row 2)
+            $column = 'A';
+            foreach ($headers as $header) {
+                $sheet->setCellValue($column . '2', $sampleData[$header] ?? '');
+                $column++;
+            }
+
 
             $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
             $writer->save($filePath);

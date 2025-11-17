@@ -120,7 +120,60 @@
     </div>
 </div>
 @endsection
-@section('styles')
+@section('style')
+<style>
+/* Toggle switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+}
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+input:checked + .slider {
+    background-color: #2196F3;
+}
+input:focus + .slider {
+    box-shadow: 0 0 1px #2196F3;
+}
+input:checked + .slider:before {
+    -webkit-transform: translateX(26px);
+    -ms-transform: translateX(26px);
+    transform: translateX(26px);
+}
+.slider.round {
+    border-radius: 34px;
+}
+.slider.round:before {
+    border-radius: 50%;
+}
+</style>
 <style>
 /* 🎨 EXTRAORDINARY COUPON TYPE CARDS */
 .coupon-type-container {
@@ -426,16 +479,33 @@
     var checkDeletePermission = ($.inArray('coupons.delete', user_permissions) >= 0);
 
     $(document).ready(function(){
+        console.log('📡 Initializing Coupons DataTable...');
+
         const table = $('#couponTable').DataTable({
-            pageLength: 10,
+            pageLength: 30,
+            lengthMenu: [[10, 25, 30, 50, 100, -1], [10, 25, 30, 50, 100, "All"]],
             processing: true,
             serverSide: true,
             responsive: true,
             ajax: function (data, callback) {
-                const params = { start: data.start, length: data.length, draw: data.draw, search: data.search.value, vendorId: vendorId, couponType: $('.coupon_type_selector').val() };
+                const params = { start: data.start, length: data.length, draw: data.draw, search: { value: data.search.value}, vendorId: vendorId, couponType: $('.coupon_type_selector').val() };
+                console.log('📡 Fetching coupons:', params);
+
                 $.get('{{ route('coupons.data') }}', params, function(json){
-                    $('.coupon_count').text(json.recordsTotal || 0);
+                    console.log('📥 Coupons response:', json);
+
+                    // Update count display
+                    if (json.stats && json.stats.total) {
+                        $('.coupon_count').text(json.stats.total);
+                        console.log('📊 Total coupons:', json.stats.total);
+                    } else {
+                        $('.coupon_count').text(json.recordsTotal || 0);
+                    }
+
                     callback(json);
+                })
+                .fail(function(xhr){
+                    console.error('❌ Error loading coupons:', xhr);
                 });
             },
             order: (checkDeletePermission) ? [6, 'desc'] : [5, 'desc'],
@@ -444,38 +514,108 @@
         });
 
         // Filter by coupon type
-        $('.coupon_type_selector').on('change', function(){ table.ajax.reload(); });
+        $('.coupon_type_selector').on('change', function(){
+            console.log('🔍 Coupon type filter changed:', $(this).val());
+            table.ajax.reload();
+        });
 
         // Toggle enable
         $('#couponTable').on('change', '.toggle-enable', function(){
             var id = $(this).data('id');
             var isEnabled = $(this).is(':checked');
             var $cb = $(this);
+            var couponCode = $cb.closest('tr').find('a').text().trim() || 'Unknown';
+            var action = isEnabled ? 'enabled' : 'disabled';
+
+            console.log('🔄 Toggle coupon status:', { id: id, code: couponCode, status: isEnabled });
+
             $cb.prop('disabled', true);
             $.post({ url: '{{ url('coupons') }}' + '/' + id + '/toggle', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }, data: { isEnabled: isEnabled } })
-                .done(function(resp){ $cb.prop('checked', !!resp.isEnabled); })
-                .fail(function(xhr){ $cb.prop('checked', !isEnabled); alert('Failed to update ('+xhr.status+'): '+xhr.statusText); })
+                .done(function(resp){
+                    console.log('✅ Coupon status toggled:', resp);
+                    $cb.prop('checked', !!resp.isEnabled);
+
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        logActivity('coupons', action, action.charAt(0).toUpperCase() + action.slice(1) + ' coupon: ' + couponCode);
+                    }
+                })
+                .fail(function(xhr){
+                    console.error('❌ Toggle failed:', xhr);
+                    $cb.prop('checked', !isEnabled);
+                    alert('Failed to update ('+xhr.status+'): '+xhr.statusText);
+                })
                 .always(function(){ $cb.prop('disabled', false); });
         });
 
         // Single delete
         $('#couponTable').on('click', '.delete-coupon', function(){
             var id = $(this).data('id');
+            var couponCode = $(this).closest('tr').find('a').text().trim() || 'Unknown';
+
+            console.log('🗑️ Delete coupon clicked:', { id: id, code: couponCode });
+
             if(!confirm("{{trans('lang.selected_delete_alert')}}")) return;
+
+            jQuery("#data-table_processing").show();
+
             $.post({ url: '{{ url('coupons') }}' + '/' + id + '/delete', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })
-                .done(function(){ $('#couponTable').DataTable().ajax.reload(null,false); })
-                .fail(function(xhr){ alert('Failed to delete ('+xhr.status+'): '+xhr.statusText); });
+                .done(function(response){
+                    console.log('✅ Coupon deleted successfully:', response);
+
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        logActivity('coupons', 'deleted', 'Deleted coupon: ' + couponCode);
+                    }
+
+                    $('#couponTable').DataTable().ajax.reload(null,false);
+
+                    if (typeof toastr !== 'undefined') {
+                        toastr.success(response.message || 'Coupon deleted successfully');
+                    }
+                })
+                .fail(function(xhr){
+                    console.error('❌ Delete failed:', xhr);
+                    alert('Failed to delete ('+xhr.status+'): '+xhr.statusText);
+                })
+                .always(function(){ jQuery("#data-table_processing").hide(); });
         });
 
         // Select all and bulk delete
         $(document).on('click','#is_active', function(){ $("#couponTable .is_open").prop('checked', $(this).prop('checked')); });
         $(document).on('click','#deleteAll', function(){
-            var ids = []; $('#couponTable .is_open:checked').each(function(){ ids.push($(this).attr('dataId')); });
+            var ids = [];
+            $('#couponTable .is_open:checked').each(function(){ ids.push($(this).attr('dataId')); });
+
             if(ids.length===0){ alert("{{trans('lang.select_delete_alert')}}"); return; }
+
+            var selectedCount = ids.length;
+            console.log('🗑️ Bulk delete coupons requested:', { count: selectedCount });
+
             if(!confirm("{{trans('lang.selected_delete_alert')}}")) return;
+
+            jQuery("#data-table_processing").show();
+
             $.post({ url: '{{ route('coupons.bulkDelete') }}', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }, data: { ids: ids } })
-                .done(function(){ $('#couponTable').DataTable().ajax.reload(null,false); })
-                .fail(function(xhr){ alert('Failed to delete ('+xhr.status+'): '+xhr.statusText); });
+                .done(function(response){
+                    console.log('✅ Bulk delete completed:', response);
+
+                    // Log activity
+                    if (typeof logActivity === 'function') {
+                        logActivity('coupons', 'bulk_deleted', 'Bulk deleted ' + (response.deleted || selectedCount) + ' coupons');
+                    }
+
+                    $('#couponTable').DataTable().ajax.reload(null,false);
+
+                    if (typeof toastr !== 'undefined') {
+                        toastr.success('Deleted ' + (response.deleted || selectedCount) + ' coupons');
+                    }
+                })
+                .fail(function(xhr){
+                    console.error('❌ Bulk delete failed:', xhr);
+                    alert('Failed to delete ('+xhr.status+'): '+xhr.statusText);
+                })
+                .always(function(){ jQuery("#data-table_processing").hide(); });
         });
     });
 </script>

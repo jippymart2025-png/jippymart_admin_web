@@ -71,29 +71,53 @@
                     isEnable: checkboxValue
                 },
                 success: function(response) {
+                    {{--if(response.success) {--}}
+                    {{--    // Log the activity (optional - don't block on failure)--}}
+                    {{--    if (typeof logActivity === 'function') {--}}
+                    {{--        try {--}}
+                    {{--            logActivity('settings', 'updated', 'Updated special discount offer setting: ' + (checkboxValue ? 'Enabled' : 'Disabled'))--}}
+                    {{--                .catch(function(err) {--}}
+                    {{--                    console.warn('Activity logging failed:', err);--}}
+                    {{--                })--}}
+                    {{--                .finally(function() {--}}
+                    {{--                    window.location.href = '{{ url("settings/app/specialOffer")}}';--}}
+                    {{--                });--}}
+                    {{--        } catch(e) {--}}
+                    {{--            console.warn('Activity logging error:', e);--}}
+                    {{--            window.location.href = '{{ url("settings/app/specialOffer")}}';--}}
+                    {{--        }--}}
+                    {{--    } else {--}}
+                    {{--        window.location.href = '{{ url("settings/app/specialOffer")}}';--}}
+                    {{--    }--}}
+                    {{--} else {--}}
+                    {{--    jQuery("#data-table_processing").hide();--}}
+                    {{--    $(".edit-setting-btn").prop('disabled', false);--}}
+                    {{--    isSaving = false;--}}
+                    {{--    alert('Error: ' + (response.message || 'Failed to update setting'));--}}
+                    {{--}--}}
                     if(response.success) {
-                        // Log the activity (optional - don't block on failure)
+                        // Ensure checkbox reflects actual state
+                        $("#enable_special_discount").prop('checked', checkboxValue);
+
+                        // Optional: small feedback toast
+                        alert('Special discount ' + (checkboxValue ? 'enabled' : 'disabled') + ' successfully.');
+
+                        // Log activity (non-blocking)
                         if (typeof logActivity === 'function') {
                             try {
                                 logActivity('settings', 'updated', 'Updated special discount offer setting: ' + (checkboxValue ? 'Enabled' : 'Disabled'))
                                     .catch(function(err) {
                                         console.warn('Activity logging failed:', err);
-                                    })
-                                    .finally(function() {
-                                        window.location.href = '{{ url("settings/app/specialOffer")}}';
                                     });
                             } catch(e) {
                                 console.warn('Activity logging error:', e);
-                                window.location.href = '{{ url("settings/app/specialOffer")}}';
                             }
-                        } else {
-                            window.location.href = '{{ url("settings/app/specialOffer")}}';
                         }
-                    } else {
+
+                        // Hide loader and re-enable button
                         jQuery("#data-table_processing").hide();
                         $(".edit-setting-btn").prop('disabled', false);
                         isSaving = false;
-                        alert('Error: ' + (response.message || 'Failed to update setting'));
                     }
                 },
                 error: function() {

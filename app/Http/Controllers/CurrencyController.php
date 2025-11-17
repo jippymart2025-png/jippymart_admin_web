@@ -10,14 +10,14 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class CurrencyController extends Controller
-{ 
+{
 
 
     public function __construct()
     {
         $this->middleware('auth');
     }
-    
+
 	    public function index()
     {
        return view("settings.currencies.index");
@@ -198,11 +198,36 @@ class CurrencyController extends Controller
             return redirect()->back()->withErrors(["You can't delete the only active currency."]);
         }
 
-        $name = $currency->name;
+        $currencyName = $currency->name;
         $currency->delete();
-        $logger->log(auth()->user(), 'currencies', 'deleted', 'Deleted currency: '.$name);
 
-        return redirect()->route('currencies')->with('success', 'Currency deleted');
+        $logger->log(auth()->user(), 'currencies', 'deleted', 'Deleted currency: '.$currencyName, request());
+
+        return redirect()->back()->with('success', 'Currency deleted successfully.');
+    }
+
+    public function getActiveCurrency()
+    {
+        $currency = Currency::where('isActive', true)->first();
+
+        if (!$currency) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No active currency found',
+                'data' => null,
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'name' => $currency->name,
+                'symbol' => $currency->symbol,
+                'code' => $currency->code,
+                'symbolAtRight' => (bool) $currency->symbolAtRight,
+                'decimal_degits' => (int) ($currency->decimal_degits ?? 0),
+            ],
+        ]);
     }
 
     public function toggle(Request $request, $id)

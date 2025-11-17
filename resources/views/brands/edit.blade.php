@@ -95,7 +95,11 @@
         var placeholderImage = '{{ asset('images/placeholder.png') }}';
 
         $(document).ready(function () {
+            console.log('🔄 Loading brand data for ID:', id);
+
             $.get('{{ url('/brands/json') }}/' + id, function(brand){
+                console.log('✅ Brand data loaded:', brand);
+
                 if (brand.logo_url) {
                     $(".brand_logo_preview").append('<span class="image-item" id="logo_1"><img onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" class="rounded" width="50px" height="auto" src="' + brand.logo_url + '"></span>');
                 } else {
@@ -105,6 +109,12 @@
                 $(".brand_slug").val(brand.slug);
                 $("#brand_description").val(brand.description);
                 if (brand.status) { $(".brand_status").prop('checked', true); }
+
+                console.log('📝 Form populated with brand data');
+            })
+            .fail(function(xhr){
+                console.error('❌ Failed to load brand data:', xhr);
+                $(".error_top").show().html('<p>Error loading brand data</p>');
             });
 
             // Auto-generate slug from name
@@ -121,6 +131,7 @@
             $(".edit-form-btn").click(function(){
                 const name = $(".brand_name").val();
                 const description = $("#brand_description").val();
+
                 if(!name){
                     $(".error_top").show().html('<p>{{trans('lang.enter_brand_name_error')}}</p>');
                     window.scrollTo(0,0); return;
@@ -129,24 +140,44 @@
                     $(".error_top").show().html('<p>{{trans('lang.enter_brand_description_error')}}</p>');
                     window.scrollTo(0,0); return;
                 }
+
                 $(".error_top").hide();
+                console.log('💾 Updating brand:', { id: id, name: name, description: description.substring(0, 50) + '...' });
+
+                jQuery("#data-table_processing").show();
+
                 let fd = new FormData();
                 fd.append('name', name);
                 fd.append('slug', $(".brand_slug").val());
                 fd.append('description', description);
                 fd.append('status', $(".brand_status").is(':checked') ? 1 : 0);
                 const file = document.getElementById('brand_logo').files[0];
-                if(file){ fd.append('logo', file); }
+                if(file){
+                    fd.append('logo', file);
+                    console.log('📤 Including logo file:', file.name);
+                }
                 fd.append('_token','{{ csrf_token() }}');
                 fd.append('_method','PUT');
+
                 $.ajax({
                     url: '{{ url('/brands') }}/' + id,
                     method: 'POST',
                     data: fd,
                     processData: false,
                     contentType: false,
-                    success: function(){ window.location.href = '{{ route('brands') }}'; },
+                    success: function(response){
+                        console.log('✅ Brand updated successfully:', response);
+
+                        // Log activity
+                        if (typeof logActivity === 'function') {
+                            logActivity('brands', 'updated', 'Updated brand: ' + name);
+                        }
+
+                        window.location.href = '{{ route('brands') }}';
+                    },
                     error: function(xhr){
+                        console.error('❌ Update failed:', xhr);
+                        jQuery("#data-table_processing").hide();
                         const msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Error updating brand';
                         $(".error_top").show().html('<p>'+msg+'</p>');
                         window.scrollTo(0,0);

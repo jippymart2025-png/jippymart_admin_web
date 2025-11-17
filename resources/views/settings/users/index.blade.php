@@ -29,8 +29,8 @@
                                 <div class="select-box pl-3">
                                     <select class="form-control status_selector">
                                         <option value="">{{trans("lang.status")}}</option>
-                                        <option value="active">{{trans("lang.active")}}</option>
-                                        <option value="inactive">{{trans("lang.in_active")}}</option>
+                                        <option value="1">{{trans("lang.active")}}</option>
+                                        <option value="0">{{trans("lang.in_active")}}</option>
                                     </select>
                                 </div>
                                 <div class="select-box pl-3">
@@ -196,7 +196,6 @@
                 return '-';
             }
         }
-
         // Load zones from SQL
         var loadZonesPromise = new Promise(function(resolve){
             console.log('🔄 Loading zones from SQL...');
@@ -251,12 +250,12 @@
 
         // Main filter handler - triggers when ANY select changes
         $('select').change(async function() {
-            var status = $('.status_selector').val();
             var zoneValue = $('.zone_selector').val();
             var daterangepicker = $('#daterange').data('daterangepicker');
 
+            let statusValue = $('.status_selector').val();
+            console.log('- Status Value:', statusValue);
             console.log('Filter change triggered:');
-            console.log('- Status Value:', status);
             console.log('- Zone Value:', zoneValue);
 
             // No-op; filters are sent to server via DataTables ajax
@@ -266,13 +265,8 @@
 
             // Apply date filter
             if ($('#daterange span').html() != '{{trans("lang.select_range")}}' && daterangepicker) {
-                // handled server-side
             }
 
-            // Apply status filter
-            // handled server-side
-
-            // Reload the table with new filters
             $('#userTable').DataTable().ajax.reload();
         });
 
@@ -328,7 +322,8 @@
                     fileName: "{{trans('lang.user_table')}}",
                 };
                 const table = $('#userTable').DataTable({
-                    pageLength: 10,
+                    pageLength: 30,
+                    lengthMenu: [[10,30, 50, 100], [10,30, 50, 100,]],
                     processing: false, // Show processing indicator
                     serverSide: true, // Enable server-side processing
                     responsive: true,
@@ -336,7 +331,10 @@
                         const start = data.start;
                         const length = data.length;
                         const searchValue = data.search.value.toLowerCase();
-                        const status = $('.status_selector').val();
+                        let statusValue = $('.status_selector').val();
+
+                        let activeFilter = statusValue;  // sends '1' or '0' directly
+
                         const zoneValue = $('.zone_selector').val();
                         const daterangepicker = $('#daterange').data('daterangepicker');
                         let from = '', to = '';
@@ -353,7 +351,7 @@
                                 page: Math.floor(start / length) + 1,
                                 limit: length,
                                 search: searchValue,
-                                status: status,
+                                active: activeFilter,
                                 zoneId: zoneValue,
                                 from: from,
                                 to: to,

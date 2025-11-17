@@ -38,11 +38,17 @@ class AttributeController extends Controller
         $draw = (int) $request->input('draw', 1);
         $search = strtolower((string) data_get($request->input('search'), 'value', ''));
 
+        // Base query for total
+        $baseQ = DB::table('vendor_attributes');
+        $totalRecords = $baseQ->count();
+
+        // Filtered query
         $q = DB::table('vendor_attributes');
         if ($search !== '') {
             $q->where('title', 'like', '%'.$search.'%');
         }
-        $total = (clone $q)->count();
+
+        $filteredRecords = (clone $q)->count();
         $rows = $q->orderBy('title', 'asc')->offset($start)->limit($length)->get();
 
         $canDelete = in_array('attributes.delete', json_decode(@session('user_permissions'), true) ?: []);
@@ -56,7 +62,17 @@ class AttributeController extends Controller
             }
             $data[] = [ $nameHtml, $actionsHtml ];
         }
-        return response()->json(['draw'=>$draw,'recordsTotal'=>$total,'recordsFiltered'=>$total,'data'=>$data]);
+
+        return response()->json([
+            'draw' => $draw,
+            'recordsTotal' => $totalRecords,
+            'recordsFiltered' => $filteredRecords,
+            'data' => $data,
+            'stats' => [
+                'total' => $totalRecords,
+                'filtered' => $filteredRecords
+            ]
+        ]);
     }
 
     public function showJson($id)
@@ -71,6 +87,10 @@ class AttributeController extends Controller
         $request->validate(['title'=>'required|string|max:255']);
         $id = uniqid();
         VendorAttribute::create(['id'=>$id,'title'=>$request->input('title')]);
+
+        // Log activity
+        \Log::info('✅ Attribute created:', ['id' => $id, 'title' => $request->input('title')]);
+
         return response()->json(['success'=>true,'id'=>$id]);
     }
 
@@ -80,15 +100,28 @@ class AttributeController extends Controller
         $attr = VendorAttribute::findOrFail($id);
         $attr->title = $request->input('title');
         $attr->save();
+
+        // Log activity
+        \Log::info('✅ Attribute updated:', ['id' => $id, 'title' => $request->input('title')]);
+
         return response()->json(['success'=>true]);
     }
 
     public function destroy($id)
     {
         $attr = VendorAttribute::find($id);
-        if (!$attr) return response()->json(['success'=>false],404);
+        if (!$attr) {
+            \Log::error('❌ Attribute not found for deletion:', ['id' => $id]);
+            return response()->json(['success'=>false, 'message'=>'Attribute not found'], 404);
+        }
+
+        $title = $attr->title;
         $attr->delete();
-        return response()->json(['success'=>true]);
+
+        // Log activity
+        \Log::info('✅ Attribute deleted:', ['id' => $id, 'title' => $title]);
+
+        return response()->json(['success'=>true, 'message'=>'Attribute deleted successfully']);
     }
 }
 

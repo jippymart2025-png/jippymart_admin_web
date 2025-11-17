@@ -516,6 +516,8 @@
         function assignDriverToOrder(driverId) {
                 $('#assign_driver_btn').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Assigning...');
 
+            console.log('🚗 Assigning driver to order:', { orderId: id, driverId: selectedDriverId });
+
             $.ajax({
                 url: '{{ route("orders.assign.driver", ":id") }}'.replace(':id', id),
                 type: 'POST',
@@ -525,24 +527,34 @@
                 },
                 success: function(response) {
                     if (response.success) {
-                    alert('{{ trans("lang.driver_assigned_successfully") }}');
-                    window.location.reload();
-                } else {
+                        console.log('✅ Driver assigned successfully:', response);
+
+                        // Log activity
+                        if (typeof logActivity === 'function') {
+                            logActivity('orders', 'driver_assigned', 'Assigned driver ' + (response.driver_name || driverId) + ' to order #' + id);
+                        }
+
+                        alert('{{ trans("lang.driver_assigned_successfully") }}');
+                        window.location.reload();
+                    } else {
                         alert('Error: ' + (response.message || 'Failed to assign driver'));
                     }
                 },
-                error: function() {
+                error: function(xhr) {
+                    console.error('❌ Error assigning driver:', xhr);
                     alert('{{ trans("lang.error_assigning_driver") }}');
                 },
-                finally: function() {
-                $('#assign_driver_btn').prop('disabled', false).html('<i class="fa fa-user-plus"></i> {{ trans("lang.assign_driver") }}');
-            }
+                complete: function() {
+                    $('#assign_driver_btn').prop('disabled', false).html('<i class="fa fa-user-plus"></i> {{ trans("lang.assign_driver") }}');
+                }
             });
         }
 
         // Remove driver from order using Laravel route
         function removeDriverFromOrder() {
                 $('#remove_driver_btn').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Removing...');
+
+            console.log('🚗 Removing driver from order:', { orderId: id });
 
             $.ajax({
                 url: '{{ route("orders.remove.driver", ":id") }}'.replace(':id', id),
@@ -552,19 +564,27 @@
                 },
                 success: function(response) {
                     if (response.success) {
-                    alert('{{ trans("lang.driver_removed_successfully") }}');
-                    window.location.reload();
-                } else {
+                        console.log('✅ Driver removed successfully:', response);
+
+                        // Log activity
+                        if (typeof logActivity === 'function') {
+                            logActivity('orders', 'driver_removed', 'Removed driver ' + (response.old_driver_name || response.old_driver_id) + ' from order #' + id);
+                        }
+
+                        alert('{{ trans("lang.driver_removed_successfully") }}');
+                        window.location.reload();
+                    } else {
                         alert('Error: ' + (response.message || 'Failed to remove driver'));
                     }
                 },
-                error: function() {
+                error: function(xhr) {
+                    console.error('❌ Error removing driver:', xhr);
                     alert('{{ trans("lang.error_removing_driver") }}');
                 },
-                finally: function() {
-                $('#remove_driver_btn').prop('disabled', false).html('<i class="fa fa-user-times"></i> {{ trans("lang.remove_driver") }}');
-                    }
-                });
+                complete: function() {
+                    $('#remove_driver_btn').prop('disabled', false).html('<i class="fa fa-user-times"></i> {{ trans("lang.remove_driver") }}');
+                }
+            });
             }
 
         $(document).ready(async function () {
@@ -638,36 +658,41 @@
                 }
 
             // Created date - robust parsing for MySQL (YYYY-MM-DD HH:mm:ss), ISO, or timestamp
+            // Format date like "Oct 1, 2025 11:27 PM"
             function formatDateTime(value){
                 try{
                     if(!value){ return ''; }
-                    // If object with seconds (legacy Firestore)
-                    if(typeof value === 'object' && value.seconds){
-                        var d1 = new Date(value.seconds*1000);
-                        return d1.toLocaleDateString('en-GB')+' '+d1.toLocaleTimeString('en-US');
+
+                    // Parse the date
+                    var date = new Date(value);
+
+                    // Check if valid
+                    if(isNaN(date.getTime())) {
+                        return value; // Return raw value if can't parse
                     }
-                    // If numeric timestamp
-                    if(!isNaN(value) && value.toString().length>=10){
-                        var d2 = new Date(parseInt(value));
-                        if(!isNaN(d2.getTime())) return d2.toLocaleDateString('en-GB')+' '+d2.toLocaleTimeString('en-US');
-                    }
-                    // If MySQL datetime string "YYYY-MM-DD HH:mm:ss"
-                    if(typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/)){
-                        // Replace space with 'T' to help Date parse consistently
-                        var norm = value.replace(' ', 'T');
-                        var d3 = new Date(norm);
-                        if(!isNaN(d3.getTime())) return d3.toLocaleDateString('en-GB')+' '+d3.toLocaleTimeString('en-US');
-                    }
-                    // ISO or other parseable strings
-                    var d4 = new Date(value);
-                    if(!isNaN(d4.getTime())) return d4.toLocaleDateString('en-GB')+' '+d4.toLocaleTimeString('en-US');
-                    return value;
+
+                    // Format: Oct 1, 2025 11:27 PM
+                    var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    var month = months[date.getMonth()];
+                    var day = date.getDate();
+                    var year = date.getFullYear();
+                    var hours = date.getHours();
+                    var minutes = date.getMinutes();
+                    var ampm = hours >= 12 ? 'PM' : 'AM';
+                    hours = hours % 12;
+                    hours = hours ? hours : 12; // 0 should be 12
+                    minutes = minutes < 10 ? '0' + minutes : minutes;
+
+                    return month + ' ' + day + ', ' + year + ' ' + hours + ':' + minutes + ' ' + ampm;
                 }catch(err){
+                    console.error('Error formatting date:', err);
                     return value;
                 }
             }
+
             if(order.createdAt){
                 $('#createdAt').text(formatDateTime(order.createdAt));
+                console.log('📅 Formatted order date:', formatDateTime(order.createdAt));
             }
                 var payment_method = '';
                 if (order.payment_method) {
@@ -847,9 +872,10 @@
                 var scheduleTime = '';
                 if (order.hasOwnProperty('scheduleTime') && order.scheduleTime != null && order.scheduleTime != '') {
                     scheduleTime = order.scheduleTime;
-                    var scheduleDateTime = typeof formatDateTime === 'function' ? formatDateTime(scheduleTime) : scheduleTime;
+                    var scheduleDateTime = formatDateTime(scheduleTime);
                     $('.schedule_date').append(
                         '<label class="col-12 control-label"><strong>{{ trans('lang.schedule_date_time') }}:</strong><span id=""> ' + scheduleDateTime + '</span></label>');
+                    console.log('📅 Formatted schedule time:', scheduleDateTime);
                 }
                 if (order.hasOwnProperty('estimatedTimeToPrepare') && order.estimatedTimeToPrepare !=
                     null && order.estimatedTimeToPrepare != '') {
@@ -1028,29 +1054,39 @@
 
                 if (old_order_status != orderStatus) {
                     // Update order status via Laravel route
-                    $.ajax({
-                        type: 'POST',
-                        url: '{{ route("orders.update.status", ":id") }}'.replace(':id', id),
-                        data: {
-                            _token: '{{ csrf_token() }}',
-                            status: orderStatus
-                        },
-                        success: function(response) {
-                            if (response.success) {
-                                alert('Order status updated successfully');
-                                <?php if (isset($_GET['eid']) && $_GET['eid'] != '') { ?>
-                                    window.location.href = "{{ route('restaurants.orders', $_GET['eid']) }}";
-                                <?php } else { ?>
-                                    window.location.href = '{{ route('orders') }}';
-                                <?php } ?>
-                            } else {
-                                alert('Error: ' + (response.message || 'Failed to update status'));
+                console.log('🔄 Updating order status:', { orderId: id, oldStatus: old_order_status, newStatus: orderStatus });
+
+                $.ajax({
+                    type: 'POST',
+                    url: '{{ route("orders.update.status", ":id") }}'.replace(':id', id),
+                    data: {
+                        _token: '{{ csrf_token() }}',
+                        status: orderStatus
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            console.log('✅ Order status updated:', response);
+
+                            // Log activity
+                            if (typeof logActivity === 'function') {
+                                logActivity('orders', 'status_updated', 'Updated order #' + id + ' status from "' + old_order_status + '" to "' + orderStatus + '"');
                             }
-                        },
-                        error: function() {
-                            alert('Error updating order status');
+
+                            alert('Order status updated successfully');
+                            <?php if (isset($_GET['eid']) && $_GET['eid'] != '') { ?>
+                                window.location.href = "{{ route('restaurants.orders', $_GET['eid']) }}";
+                            <?php } else { ?>
+                                window.location.href = '{{ route('orders') }}';
+                            <?php } ?>
+                        } else {
+                            alert('Error: ' + (response.message || 'Failed to update status'));
                         }
-                    });
+                    },
+                    error: function(xhr) {
+                        console.error('❌ Error updating order status:', xhr);
+                        alert('Error updating order status');
+                    }
+                });
                 } else {
                     // No status change, just close
                     <?php if (isset($_GET['eid']) && $_GET['eid'] != '') { ?>
