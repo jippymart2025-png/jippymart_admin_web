@@ -148,7 +148,6 @@ class OTPController extends Controller
                 'lastName'      => substr($phone, -4),
                 'phoneNumber'   => $phone,
                 'firebase_id'   => $firebaseId,
-                '_id'           => $firebaseId,
                 'email'         => null,
                 'password'      => bcrypt(Str::random(16)),
                 'active'        => 1,

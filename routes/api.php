@@ -205,9 +205,7 @@ Route::prefix('vendors')->group(function () {
     Route::get('{vendorId}/products', [\App\Http\Controllers\Api\ProductController::class, 'getProductsByVendorId']);
     Route::get('{vendorId}/offers', [VendorController::class, 'getOffersByVendorId']);
     Route::get('{categoryId}/category', [VendorController::class, 'getNearestRestaurantByCategory']);
-
 });
-
     Route::get('vendor-categories/{id}', [VendorController::class, 'getVendorCategoryById']);
     Route::get('products/{id}', [VendorController::class, 'getProductById']);
 });
@@ -220,16 +218,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
 //wallet
 Route::middleware('auth:sanctum')->group(function () {
-
     Route::post('/update-wallet', [WalletController::class, 'updateWallet']);
-
 });
 
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get(
         '/restaurants/{vendorId}/product-feed{extra?}',
-        [\App\Http\Controllers\Api\ProductController::class, 'getRestaurantProductFeed']
+        [ProductController::class, 'getRestaurantProductFeed']
     )->where('extra', '.*');
 
 });
@@ -266,6 +262,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/mart-items/getSimilarProducts', [MartItemController::class, 'getSimilarProducts']);
     Route::get('/mart-items/getItemsBySectionName', [MartItemController::class, 'getItemsBySectionName']);
     Route::get('/mart-items/getMartVendors', [MartItemController::class, 'getMartVendors']);
+
 });
 
 
@@ -294,8 +291,8 @@ Route::prefix('firestore')->group(function () {
 //    Route::post('/chat/driver/messages', [FirestoreBridgeController::class, 'addDriverChat']);
 //    Route::post('/chat/restaurant/inbox', [FirestoreBridgeController::class, 'addRestaurantInbox']);
 //    Route::post('/chat/restaurant/messages', [FirestoreBridgeController::class, 'addRestaurantChat']);
-    // Route::post('/chat/upload-image', [FirestoreBridgeController::class, 'uploadChatImageToStorage']);
-    // Route::post('/chat/upload-video', [FirestoreBridgeController::class, 'uploadChatVideoToStorage']);
+//    Route::post('/chat/upload-image', [FirestoreBridgeController::class, 'uploadChatImageToStorage']);
+//    Route::post('/chat/upload-video', [FirestoreBridgeController::class, 'uploadChatVideoToStorage']);
     Route::get('/vendor-categories/{id}', [FirestoreBridgeController::class, 'getVendorCategoryByCategoryId']);
     Route::post('/ratings', [FirestoreBridgeController::class, 'setRatingModel']);
     Route::put('/vendors/{vendorId}', [FirestoreBridgeController::class, 'updateVendor']);
@@ -304,6 +301,7 @@ Route::prefix('firestore')->group(function () {
     Route::get('/promotions/by-product', [FirestoreBridgeController::class, 'getActivePromotionForProduct']);
     Route::get('/search/products', [FirestoreBridgeController::class, 'getAllProductsInZone']);
     Route::get('/search/vendors', [FirestoreBridgeController::class, 'getAllVendors']);
+    Route::get('/getLatestOrderInRange', [FirestoreBridgeController::class, 'getLatestOrderInRange']);
 });
 });
 
@@ -317,25 +315,18 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::middleware('auth:sanctum')->group(function () {
     // Chat inbox (list all chats)
     Route::get('/chat/inbox', [ChatController::class, 'getInbox']);
-
     // Get chat messages by order ID
     Route::get('/chat/{orderId}/messages', [ChatController::class, 'getMessages']);
-
     // Get single chat with messages
     Route::get('/chat/{orderId}', [ChatController::class, 'getChat']);
-
     // Send message
     Route::post('/chat/{orderId}/send', [ChatController::class, 'sendMessage']);
-
     // Delete message
     Route::delete('/chat/message/{messageId}', [ChatController::class, 'deleteMessage']);
-
     // Delete chat
     Route::delete('/chat/{orderId}', [ChatController::class, 'deleteChat']);
-
     // Upload image
     Route::post('/chat/upload/image', [ChatController::class, 'uploadImage']);
-
     // Upload video
     Route::post('/chat/upload/video', [ChatController::class, 'uploadVideo']);
 });
