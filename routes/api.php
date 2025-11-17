@@ -27,8 +27,6 @@ use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\WalletController;
 use App\Http\Controllers\Api\OrderApiController;
 use App\Http\Controllers\Api\MartItemController;
-use App\Http\Controllers\Api\OrderSupportController;
-use App\Http\Controllers\Api\MobileSqlBridgeController;
 use App\Http\Controllers\ChatController;
 
 
