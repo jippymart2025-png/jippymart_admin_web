@@ -25,7 +25,7 @@ class ImpersonationController extends Controller
     {
         // Validate CSRF token
         $this->validateCSRFToken($request);
-        
+
         // Validate request
         $validator = Validator::make($request->all(), [
             'restaurant_id' => 'required|string',
@@ -56,8 +56,8 @@ class ImpersonationController extends Controller
 
         // Generate the impersonation token
         $result = $this->impersonationService->generateImpersonationToken(
-            $restaurantId, 
-            $adminUserId, 
+            $restaurantId,
+            $adminUserId,
             $expirationMinutes
         );
 
@@ -79,14 +79,14 @@ class ImpersonationController extends Controller
             'admin_id' => $adminUserId,
             'expires_at' => time() + ($expirationMinutes * 60)
         ];
-        
+
         // Store in cache for 10 minutes (longer than token expiration)
         \Illuminate\Support\Facades\Cache::put($cacheKey, $impersonationData, 600);
 
         // Create URL with cache key for restaurant panel to retrieve data
         $restaurantUrl = config('app.restaurant_panel_url', 'http://127.0.0.1:8001');
         $impersonationUrl = $restaurantUrl . '/login?impersonation_key=' . $cacheKey;
-        
+
         return response()->json([
             'success' => true,
             'restaurant_name' => $result['restaurant_name'],
@@ -103,32 +103,32 @@ class ImpersonationController extends Controller
     private function canImpersonate($adminUserId)
     {
         $user = Auth::user();
-        
+
         // Check if user exists and is authenticated
         if (!$user) {
             return false;
         }
-        
+
         // Check if user has admin role (uncomment when roles are implemented)
         // if (!$user->hasRole('admin')) {
         //     return false;
         // }
-        
+
         // Check if user has impersonation permission (uncomment when permissions are implemented)
         // if (!$user->hasPermission('restaurants.impersonate')) {
         //     return false;
         // }
-        
+
         // Check if user account is active
         if (isset($user->status) && $user->status !== 'active') {
             return false;
         }
-        
+
         // Check if user is not suspended
         if (isset($user->is_suspended) && $user->is_suspended) {
             return false;
         }
-        
+
         return true; // For now, allow all authenticated users
     }
 
@@ -140,22 +140,22 @@ class ImpersonationController extends Controller
         if (!is_string($restaurantId) || strlen($restaurantId) > 100) {
             throw new \InvalidArgumentException('Invalid restaurant ID format');
         }
-        
+
         // Check for potentially malicious patterns
         if (preg_match('/[<>"\'\x00-\x1f\x7f-\x9f]/', $restaurantId)) {
             throw new \SecurityException('Potentially malicious restaurant ID');
         }
-        
+
         // Additional security checks
         if (preg_match('/\.\.|\/|\\|script|javascript|vbscript/i', $restaurantId)) {
             throw new \SecurityException('Invalid characters in restaurant ID');
         }
-        
+
         // Check for SQL injection patterns
         if (preg_match('/(union|select|insert|update|delete|drop|create|alter|exec|execute)/i', $restaurantId)) {
             throw new \SecurityException('Suspicious SQL patterns detected');
         }
-        
+
         return trim($restaurantId);
     }
 
@@ -165,11 +165,11 @@ class ImpersonationController extends Controller
     private function sanitizeExpirationMinutes($minutes)
     {
         $minutes = (int) $minutes;
-        
+
         if ($minutes < 1 || $minutes > 30) {
             throw new \InvalidArgumentException('Expiration minutes must be between 1 and 30');
         }
-        
+
         return $minutes;
     }
 
@@ -180,11 +180,11 @@ class ImpersonationController extends Controller
     {
         $token = $request->header('X-CSRF-TOKEN') ?? $request->input('_token');
         $sessionToken = session()->token();
-        
+
         if (!hash_equals($sessionToken, $token)) {
             throw new \SecurityException('CSRF token mismatch');
         }
-        
+
         // Additional validation for impersonation requests
         $referrer = $request->header('Referer');
         $allowedReferrers = [
@@ -192,7 +192,7 @@ class ImpersonationController extends Controller
             'localhost:8000',
             '127.0.0.1:8000'
         ];
-        
+
         $isValidReferrer = false;
         foreach ($allowedReferrers as $allowed) {
             if (strpos($referrer, $allowed) !== false) {
@@ -200,7 +200,7 @@ class ImpersonationController extends Controller
                 break;
             }
         }
-        
+
         if (!$isValidReferrer) {
             throw new \SecurityException('Invalid referrer for impersonation request');
         }
@@ -213,17 +213,17 @@ class ImpersonationController extends Controller
     {
         // Get restaurant panel URL from config with fallback
         $baseUrl = config('app.restaurant_panel_url', 'https://restaurant.jippymart.in');
-        
+
         // Fallback URLs for different environments
         $fallbackUrls = [
             'production' => 'https://restaurant.jippymart.in',
             'staging' => 'https://staging-restaurant.jippymart.in',
             'local' => 'http://127.0.0.1:8001'
         ];
-        
+
         $environment = app()->environment();
         $baseUrl = $fallbackUrls[$environment] ?? $baseUrl;
-        
+
         $params = http_build_query([
             'impersonation_token' => $customToken,
             'restaurant_uid' => $restaurantUid,

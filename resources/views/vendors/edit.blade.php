@@ -33,9 +33,9 @@
                                 <li class="active restaurantRouteLi" style="display:none;">
                                     <a href="{{ route('vendor.edit', $id) }}">{{ trans('lang.profile') }}</a>
                                 </li>
-                                <li class="restaurantRouteLi" style="display:none;">
-                                    <a class="restaurantRoute">{{ trans('lang.restaurant') }}</a>
-                                </li>
+{{--                                <li class="restaurantRouteLi" style="display:none;">--}}
+{{--                                    <a class="restaurantRoute">{{ trans('lang.restaurant') }}</a>--}}
+{{--                                </li>--}}
                             </ul>
                         </div>
                         <div class="error_top"></div>
@@ -385,7 +385,7 @@
                     vendorType='restaurant';
                 }
 
-                var subscriptionPlanId = $('#restaurant_subscription_model').val();
+                var subscriptionPlanId = $('#restaurant_subscription_model').val() || null;
                 var change_expiry_date = $('#change_expiry_date').val();
                 var subscriptionExpiryDate = change_expiry_date;
 
@@ -444,7 +444,7 @@
                         success: function(response) {
                             if (response.success) {
                                 jQuery("#data-table_processing").hide();
-                                Swal.fire('Update Complete!',`User updated.`,'success');
+                                // Swal.fire('Update Complete!',`User updated.`,'success');
                                 // Redirect to index page after saving
                                 window.location.href = "{{ route('vendors') }}"
                             } else {

@@ -12,7 +12,12 @@ class OrderController extends Controller
 
     public function __construct()
     {
-        $this->middleware('auth')->except('getLatestOrderId');
+//        $this->middleware('auth')->except('getLatestOrderId');
+//        $this->middleware('auth')->except('getOrder');
+        $this->middleware('auth')->except([
+            'getLatestOrderId',
+            'getOrder'
+        ]);
     }
 
 //    public function index(Request $request, $id = '')

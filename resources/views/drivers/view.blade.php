@@ -315,10 +315,9 @@
 
         // Add wallet amount via AJAX
         $.ajax({
-            url: '{{url("/api/users/wallet/add")}}',
+            url: '{{url("/users/wallet")}}/' + id,
             type: 'POST',
             data: {
-                user_id: id,
                 amount: amount,
                 note: note,
                 _token: '{{csrf_token()}}'
