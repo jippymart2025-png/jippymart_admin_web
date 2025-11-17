@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\restaurant_orders;
 use App\Models\VendorProduct;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -148,158 +149,158 @@ class FirestoreBridgeController extends Controller
     /**
      * Create or update a driver chat inbox entry.
      */
-//    public function addDriverInbox(Request $request): \Illuminate\Http\JsonResponse
-//    {
-//        $data = $request->all();
-//
-//        $validator = Validator::make($data, [
-//            'order_id' => ['required', 'string'],
-//            'chat_type' => ['nullable', 'string'],
-//        ]);
-//
-//        if ($validator->fails()) {
-//            return $this->error('Validation failed', 422, $validator->errors()->toArray());
-//        }
-//
-//        $id = $data['order_id'];
-//
-//        DB::table('chat_driver')->updateOrInsert(
-//            ['id' => $id],
-//            [
-//                'orderId' => $id,
-//                'restaurantId' => $data['restaurant_id'] ?? null,
-//                'restaurantName' => $data['restaurant_name'] ?? null,
-//                'restaurantProfileImage' => $data['restaurant_profile_image'] ?? null,
-//                'customerId' => $data['customer_id'] ?? null,
-//                'customerName' => $data['customer_name'] ?? null,
-//                'customerProfileImage' => $data['customer_profile_image'] ?? null,
-//                'lastSenderId' => $data['last_sender_id'] ?? null,
-//                'lastMessage' => $data['last_message'] ?? null,
-//                'createdAt' => $data['created_at'] ?? Carbon::now()->toIso8601String(),
-//                'chatType' => $data['chat_type'] ?? 'Driver',
-//            ]
-//        );
-//
-//        return $this->success(['id' => $id], 'Driver inbox stored');
-//    }
-//
-//    /**
-//     * Add a driver chat message.
-//     */
-//    public function addDriverChat(Request $request): \Illuminate\Http\JsonResponse
-//    {
-//        $data = $request->all();
-//
-//        $validator = Validator::make($data, [
-//            'chat_id' => ['required', 'string'],
-//            'order_id' => ['required', 'string'],
-//            'sender_id' => ['required', 'string'],
-//            'receiver_id' => ['nullable', 'string'],
-//            'message_type' => ['required', 'string'],
-//            'message' => ['nullable', 'string'],
-//        ]);
-//
-//        if ($validator->fails()) {
-//            return $this->error('Validation failed', 422, $validator->errors()->toArray());
-//        }
-//
-//        $messageId = $data['id'] ?? (string) Str::uuid();
-//
-//        DB::table('chat_driver_thread')->updateOrInsert(
-//            ['id' => $messageId],
-//            [
-//                'chat_id' => $data['chat_id'],
-//                'orderId' => $data['order_id'],
-//                'senderId' => $data['sender_id'],
-//                'receiverId' => $data['receiver_id'] ?? null,
-//                'messageType' => $data['message_type'],
-//                'message' => $data['message'] ?? null,
-//                'url' => $data['url'] ?? null,
-//                'videoThumbnail' => $data['video_thumbnail'] ?? null,
-//                'createdAt' => $data['created_at'] ?? Carbon::now()->toIso8601String(),
-//            ]
-//        );
-//
-//        return $this->success(['id' => $messageId], 'Driver chat message stored');
-//    }
-//
-//    /**
-//     * Create or update a restaurant chat inbox entry.
-//     */
-//    public function addRestaurantInbox(Request $request): \Illuminate\Http\JsonResponse
-//    {
-//        $data = $request->all();
-//
-//        $validator = Validator::make($data, [
-//            'order_id' => ['required', 'string'],
-//            'restaurant_id' => ['required', 'string'],
-//        ]);
-//
-//        if ($validator->fails()) {
-//            return $this->error('Validation failed', 422, $validator->errors()->toArray());
-//        }
-//
-//        $id = $data['order_id'];
-//
-//        DB::table('chat_restaurant')->updateOrInsert(
-//            ['id' => $id],
-//            [
-//                'orderId' => $id,
-//                'restaurantId' => $data['restaurant_id'],
-//                'restaurantName' => $data['restaurant_name'] ?? null,
-//                'restaurantProfileImage' => $data['restaurant_profile_image'] ?? null,
-//                'customerId' => $data['customer_id'] ?? null,
-//                'customerName' => $data['customer_name'] ?? null,
-//                'customerProfileImage' => $data['customer_profile_image'] ?? null,
-//                'lastSenderId' => $data['last_sender_id'] ?? null,
-//                'lastMessage' => $data['last_message'] ?? null,
-//                'createdAt' => $data['created_at'] ?? Carbon::now()->toIso8601String(),
-//                'chatType' => $data['chat_type'] ?? 'restaurant',
-//            ]
-//        );
-//
-//        return $this->success(['id' => $id], 'Restaurant inbox stored');
-//    }
-//
-//    /**
-//     * Add a restaurant chat message.
-//     */
-//    public function addRestaurantChat(Request $request): \Illuminate\Http\JsonResponse
-//    {
-//        $data = $request->all();
-//
-//        $validator = Validator::make($data, [
-//            'chat_id' => ['required', 'string'],
-//            'order_id' => ['required', 'string'],
-//            'sender_id' => ['required', 'string'],
-//            'receiver_id' => ['nullable', 'string'],
-//            'message_type' => ['required', 'string'],
-//            'message' => ['nullable', 'string'],
-//        ]);
-//
-//        if ($validator->fails()) {
-//            return $this->error('Validation failed', 422, $validator->errors()->toArray());
-//        }
-//
-//        $messageId = $data['id'] ?? (string) Str::uuid();
-//
-//        DB::table('chat_restaurant_thread')->updateOrInsert(
-//            ['id' => $messageId],
-//            [
-//                'chat_id' => $data['chat_id'],
-//                'orderId' => $data['order_id'],
-//                'senderId' => $data['sender_id'],
-//                'receiverId' => $data['receiver_id'] ?? null,
-//                'messageType' => $data['message_type'],
-//                'message' => $data['message'] ?? null,
-//                'url' => $data['url'] ?? null,
-//                'videoThumbnail' => $data['video_thumbnail'] ?? null,
-//                'createdAt' => $data['created_at'] ?? Carbon::now()->toIso8601String(),
-//            ]
-//        );
-//
-//        return $this->success(['id' => $messageId], 'Restaurant chat message stored');
-//    }
+    public function addDriverInbox(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $data = $request->all();
+
+        $validator = Validator::make($data, [
+            'order_id' => ['required', 'string'],
+            'chat_type' => ['nullable', 'string'],
+        ]);
+
+        if ($validator->fails()) {
+            return $this->error('Validation failed', 422, $validator->errors()->toArray());
+        }
+
+        $id = $data['order_id'];
+
+        DB::table('chat_driver')->updateOrInsert(
+            ['id' => $id],
+            [
+                'orderId' => $id,
+                'restaurantId' => $data['restaurant_id'] ?? null,
+                'restaurantName' => $data['restaurant_name'] ?? null,
+                'restaurantProfileImage' => $data['restaurant_profile_image'] ?? null,
+                'customerId' => $data['customer_id'] ?? null,
+                'customerName' => $data['customer_name'] ?? null,
+                'customerProfileImage' => $data['customer_profile_image'] ?? null,
+                'lastSenderId' => $data['last_sender_id'] ?? null,
+                'lastMessage' => $data['last_message'] ?? null,
+                'createdAt' => $data['created_at'] ?? Carbon::now()->toIso8601String(),
+                'chatType' => $data['chat_type'] ?? 'Driver',
+            ]
+        );
+
+        return $this->success(['id' => $id], 'Driver inbox stored');
+    }
+
+    /**
+     * Add a driver chat message.
+     */
+    public function addDriverChat(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $data = $request->all();
+
+        $validator = Validator::make($data, [
+            'chat_id' => ['required', 'string'],
+            'order_id' => ['required', 'string'],
+            'sender_id' => ['required', 'string'],
+            'receiver_id' => ['nullable', 'string'],
+            'message_type' => ['required', 'string'],
+            'message' => ['nullable', 'string'],
+        ]);
+
+        if ($validator->fails()) {
+            return $this->error('Validation failed', 422, $validator->errors()->toArray());
+        }
+
+        $messageId = $data['id'] ?? (string) Str::uuid();
+
+        DB::table('chat_driver_thread')->updateOrInsert(
+            ['id' => $messageId],
+            [
+                'chat_id' => $data['chat_id'],
+                'orderId' => $data['order_id'],
+                'senderId' => $data['sender_id'],
+                'receiverId' => $data['receiver_id'] ?? null,
+                'messageType' => $data['message_type'],
+                'message' => $data['message'] ?? null,
+                'url' => $data['url'] ?? null,
+                'videoThumbnail' => $data['video_thumbnail'] ?? null,
+                'createdAt' => $data['created_at'] ?? Carbon::now()->toIso8601String(),
+            ]
+        );
+
+        return $this->success(['id' => $messageId], 'Driver chat message stored');
+    }
+
+    /**
+     * Create or update a restaurant chat inbox entry.
+     */
+    public function addRestaurantInbox(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $data = $request->all();
+
+        $validator = Validator::make($data, [
+            'order_id' => ['required', 'string'],
+            'restaurant_id' => ['required', 'string'],
+        ]);
+
+        if ($validator->fails()) {
+            return $this->error('Validation failed', 422, $validator->errors()->toArray());
+        }
+
+        $id = $data['order_id'];
+
+        DB::table('chat_restaurant')->updateOrInsert(
+            ['id' => $id],
+            [
+                'orderId' => $id,
+                'restaurantId' => $data['restaurant_id'],
+                'restaurantName' => $data['restaurant_name'] ?? null,
+                'restaurantProfileImage' => $data['restaurant_profile_image'] ?? null,
+                'customerId' => $data['customer_id'] ?? null,
+                'customerName' => $data['customer_name'] ?? null,
+                'customerProfileImage' => $data['customer_profile_image'] ?? null,
+                'lastSenderId' => $data['last_sender_id'] ?? null,
+                'lastMessage' => $data['last_message'] ?? null,
+                'createdAt' => $data['created_at'] ?? Carbon::now()->toIso8601String(),
+                'chatType' => $data['chat_type'] ?? 'restaurant',
+            ]
+        );
+
+        return $this->success(['id' => $id], 'Restaurant inbox stored');
+    }
+
+    /**
+     * Add a restaurant chat message.
+     */
+    public function addRestaurantChat(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $data = $request->all();
+
+        $validator = Validator::make($data, [
+            'chat_id' => ['required', 'string'],
+            'order_id' => ['required', 'string'],
+            'sender_id' => ['required', 'string'],
+            'receiver_id' => ['nullable', 'string'],
+            'message_type' => ['required', 'string'],
+            'message' => ['nullable', 'string'],
+        ]);
+
+        if ($validator->fails()) {
+            return $this->error('Validation failed', 422, $validator->errors()->toArray());
+        }
+
+        $messageId = $data['id'] ?? (string) Str::uuid();
+
+        DB::table('chat_restaurant_thread')->updateOrInsert(
+            ['id' => $messageId],
+            [
+                'chat_id' => $data['chat_id'],
+                'orderId' => $data['order_id'],
+                'senderId' => $data['sender_id'],
+                'receiverId' => $data['receiver_id'] ?? null,
+                'messageType' => $data['message_type'],
+                'message' => $data['message'] ?? null,
+                'url' => $data['url'] ?? null,
+                'videoThumbnail' => $data['video_thumbnail'] ?? null,
+                'createdAt' => $data['created_at'] ?? Carbon::now()->toIso8601String(),
+            ]
+        );
+
+        return $this->success(['id' => $messageId], 'Restaurant chat message stored');
+    }
 
     /**
      * Upload chat image and return storage URL.
@@ -1016,6 +1017,26 @@ class FirestoreBridgeController extends Controller
 
         return response()->json($payload, $status);
     }
+
+    public function getLatestOrderInRange()
+    {
+        $order = restaurant_orders::where('id', '>=', 'Jippy3000000')
+            ->where('id', '<', 'Jippy4')
+            ->first();
+
+        if ($order) {
+            return response()->json([
+                'success' => true,
+                'order' => $order
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'No order found in the specified range'
+        ], 404);
+    }
+
 }
 
 

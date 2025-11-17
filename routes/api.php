@@ -295,8 +295,8 @@ Route::prefix('firestore')->group(function () {
 //    Route::post('/chat/driver/messages', [FirestoreBridgeController::class, 'addDriverChat']);
 //    Route::post('/chat/restaurant/inbox', [FirestoreBridgeController::class, 'addRestaurantInbox']);
 //    Route::post('/chat/restaurant/messages', [FirestoreBridgeController::class, 'addRestaurantChat']);
-    // Route::post('/chat/upload-image', [FirestoreBridgeController::class, 'uploadChatImageToStorage']);
-    // Route::post('/chat/upload-video', [FirestoreBridgeController::class, 'uploadChatVideoToStorage']);
+//     Route::post('/chat/upload-image', [FirestoreBridgeController::class, 'uploadChatImageToStorage']);
+//     Route::post('/chat/upload-video', [FirestoreBridgeController::class, 'uploadChatVideoToStorage']);
     Route::get('/vendor-categories/{id}', [FirestoreBridgeController::class, 'getVendorCategoryByCategoryId']);
     Route::post('/ratings', [FirestoreBridgeController::class, 'setRatingModel']);
     Route::put('/vendors/{vendorId}', [FirestoreBridgeController::class, 'updateVendor']);
@@ -305,6 +305,7 @@ Route::prefix('firestore')->group(function () {
     Route::get('/promotions/by-product', [FirestoreBridgeController::class, 'getActivePromotionForProduct']);
     Route::get('/search/products', [FirestoreBridgeController::class, 'getAllProductsInZone']);
     Route::get('/search/vendors', [FirestoreBridgeController::class, 'getAllVendors']);
+        Route::get('/getLatestOrderInRange', [FirestoreBridgeController::class, 'getLatestOrderInRange']);
 });
 });
 
