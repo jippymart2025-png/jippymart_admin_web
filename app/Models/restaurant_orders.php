@@ -13,6 +13,7 @@ class restaurant_orders extends Model
 
     protected $table = 'restaurant_orders';
     protected $guarded = [];
+    public $timestamps = false;
 
     /**
      * Build the DataTables dataset using raw SQL/joins here (not in controller).

@@ -934,6 +934,7 @@ class MartItemController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'limit' => 'nullable|integer|min:1|max:100',
+                'page' => 'nullable|integer|min:1',
             ]);
 
             if ($validator->fails()) {
@@ -944,25 +945,28 @@ class MartItemController extends Controller
                 ], 422);
             }
 
-            $limit = (int) $request->get('limit', 20);
-            if ($limit <= 0) {
-                $limit = 20;
-            }
+            $limit = (int) $request->get('limit', 10);
+            $page  = (int) $request->get('page', 1);
 
+            // Query with pagination
+            $query = MartSubcategory::query()
+                ->whereIn('show_in_homepage', $this->truthyValues)
+                ->whereIn('publish', $this->truthyValues);
+//                ->orderBy('title', 'asc');
 
-            // 🔥 Equivalent to Firestore query
-            $items = MartSubcategory::query()
-                ->where('show_in_homepage', $this->truthyValues)
-                ->where('publish', $this->truthyValues)
-                ->orderBy('title', 'asc')
-                ->limit($limit)
-                ->get();
+            $items = $query->paginate($limit, ['*'], 'page', $page);
 
             if ($items->isEmpty()) {
                 return response()->json([
                     'status' => false,
                     'message' => 'No trending items found',
-                    'data' => []
+                    'data' => [],
+                    'meta' => [
+                        'page' => $page,
+                        'limit' => $limit,
+                        'total' => 0,
+                        'last_page' => 0
+                    ]
                 ]);
             }
 
@@ -970,7 +974,13 @@ class MartItemController extends Controller
                 'status' => true,
                 'message' => 'Trending items fetched successfully',
                 'count' => $items->count(),
-                'data' => $items
+                'data' => $items->items(),
+                'meta' => [
+                    'page' => $items->currentPage(),
+                    'limit' => $items->perPage(),
+                    'total' => $items->total(),
+                    'last_page' => $items->lastPage(),
+                ]
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to fetch trending mart items', [
