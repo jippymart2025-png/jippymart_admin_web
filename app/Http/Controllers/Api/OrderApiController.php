@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\restaurant_orders;
 use App\Models\restaurant_orders as RestaurantOrder;
+use App\Models\User;
+use App\Models\Vendor;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -16,36 +19,36 @@ class OrderApiController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-    
+
         if (!$user) {
             return response()->json([
                 'success' => false,
                 'message' => 'User not authenticated',
             ], 401);
         }
-    
+
         // Determine the authorID to filter by (supports both authorId and author_id)
         $authorId = $request->query('authorId')
             ?? $request->query('author_id')
             ?? $user->firebase_id
             ?? $user->id;
-    
+
         if (empty($authorId)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Author ID is required',
             ], 400);
         }
-    
+
         // Pagination settings
         $perPage = (int) $request->query('limit', 50);
         $perPage = max(1, min($perPage, 100));
         $page = max(1, (int) $request->query('page', 1));
         $offset = ($page - 1) * $perPage;
-    
+
         // Base query
         $query = RestaurantOrder::where('authorID', $authorId);
-    
+
         $statusGroups = $this->statusGroups();
         $filterRaw = (string) $request->query('filter', '');
         $filterKey = $this->resolveStatusGroupKey($filterRaw);
@@ -123,7 +126,7 @@ class OrderApiController extends Controller
                 // ignore invalid date formats
             }
         }
-    
+
         // Search filter (optional)
         if ($request->filled('search')) {
             $search = strtolower($request->query('search'));
@@ -133,10 +136,10 @@ class OrderApiController extends Controller
                   ->orWhereRaw('LOWER(vendorID) LIKE ?', ["%{$search}%"]);
             });
         }
-    
+
         // Total count before pagination
         $total = (clone $query)->count();
-    
+
         // Fetch paginated results
         $orders = $query
             ->orderByDesc('createdAt')
@@ -144,12 +147,12 @@ class OrderApiController extends Controller
             ->skip($offset)
             ->take($perPage)
             ->get();
-    
+
         // Transform order data to match legacy payload expectations
         $data = $orders->map(function (RestaurantOrder $order) {
             return $this->transformOrder($order);
         })->values();
-    
+
         // Optional: return status counts
         $statusCounts = null;
         $statusGroupCounts = null;
@@ -179,7 +182,7 @@ class OrderApiController extends Controller
 
             $statusCounts = $rawCounts;
         }
-    
+
         return response()->json([
             'success' => true,
             'data' => $data,
@@ -196,7 +199,7 @@ class OrderApiController extends Controller
             ],
         ]);
     }
-    
+
     /**
      * Fetch a single order that belongs to the authenticated customer.
      */
@@ -546,17 +549,17 @@ class OrderApiController extends Controller
                 return $trimmed;
             }
         }
-    
+
         if (is_numeric($value)) {
             $intVal = (int) $value;
             if ($intVal !== 0) {
                 return (string) $intVal;
             }
         }
-    
+
         return (string) $value;
     }
-    
+
     /**
      * Normalize timestamp-like values stored as strings or ints.
      */
@@ -734,6 +737,201 @@ class OrderApiController extends Controller
 
         return $primary;
     }
+
+    public function track($orderId)
+    {
+        $order = RestaurantOrder::query()->find($orderId);
+
+        if (!$order) {
+            return response()->json(['message' => 'Order not found'], 404);
+        }
+
+        $orderPayload = $this->transformOrder($order);
+
+        $driverPayload = $this->resolveDriverPayload($order, $orderPayload['driver'] ?? []);
+        $vendorPayload = $this->resolveVendorPayload($order, $orderPayload['vendor'] ?? []);
+        $addressPayload = is_array($orderPayload['address'] ?? null)
+            ? $orderPayload['address']
+            : $this->decodeJson($orderPayload['address'] ?? null, []);
+
+        $orderPayload['driver'] = $driverPayload;
+        $orderPayload['vendor'] = $vendorPayload;
+        $orderPayload['address'] = $addressPayload;
+
+        $polyline = $this->buildPolylinePayload(
+            $order->status,
+            $driverPayload,
+            $vendorPayload,
+            $addressPayload
+        );
+
+        return response()->json([
+            'order' => $orderPayload,
+            'driver' => $driverPayload,
+            'polyline' => $polyline,
+        ]);
+    }
+
+    private function resolveDriverPayload(RestaurantOrder $order, $driverPayload): array
+    {
+        $payload = is_array($driverPayload) ? $driverPayload : [];
+
+        $driverId = $order->driverID ?? ($payload['id'] ?? null);
+        if (empty($driverId)) {
+            return $payload;
+        }
+
+        $user = User::query()
+            ->where('id', $driverId)
+            ->orWhere('firebase_id', $driverId)
+            ->first();
+
+        if (!$user) {
+            return $payload;
+        }
+
+        $location = $this->decodeJson($user->location ?? null, []);
+        if (empty($payload['location']) && !empty($location)) {
+            $payload['location'] = $location;
+        }
+
+        $userData = array_filter([
+            'id' => $user->firebase_id ?? $user->id,
+            'firebase_id' => $user->firebase_id,
+            'firstName' => $user->firstName,
+            'lastName' => $user->lastName,
+            'phoneNumber' => $user->phoneNumber,
+            'role' => $user->role,
+        ], function ($value) {
+            return !is_null($value);
+        });
+
+        return array_merge($userData, $payload);
+    }
+
+    private function resolveVendorPayload(RestaurantOrder $order, $vendorPayload): array
+    {
+        $payload = is_array($vendorPayload) ? $vendorPayload : [];
+
+        $vendorId = $order->vendorID ?? ($payload['id'] ?? null);
+        if (empty($vendorId)) {
+            return $payload;
+        }
+
+        $vendor = Vendor::query()
+            ->select(['id', 'title', 'latitude', 'longitude', 'location'])
+            ->find($vendorId);
+
+        if (!$vendor) {
+            return $payload;
+        }
+
+        $vendorData = array_filter([
+            'id' => $vendor->id,
+            'title' => $vendor->title,
+            'latitude' => $vendor->latitude,
+            'longitude' => $vendor->longitude,
+            'lat' => $vendor->latitude,
+            'lng' => $vendor->longitude,
+        ], function ($value) {
+            return !is_null($value);
+        });
+
+        $location = $this->decodeJson($vendor->location ?? null, []);
+        if (!empty($location)) {
+            $vendorData['location'] = $location;
+        }
+
+        return array_merge($vendorData, $payload);
+    }
+
+    private function buildPolylinePayload(?string $status, array $driver, array $vendor, array $address): ?array
+    {
+        $driverPoint = $this->extractLatLng($driver);
+        $vendorPoint = $this->extractLatLng($vendor);
+        $addressPoint = $this->extractLatLng($address);
+
+        if (!$driverPoint && !$vendorPoint && !$addressPoint) {
+            return null;
+        }
+
+        $statusKey = strtolower((string) $status);
+        $source = null;
+        $destination = null;
+
+        if ($statusKey === 'shipped' && $driverPoint && $vendorPoint) {
+            $source = $driverPoint;
+            $destination = $vendorPoint;
+        } elseif (in_array($statusKey, ['in_transit', 'out_for_delivery', 'driver_assigned'], true) && $driverPoint && $addressPoint) {
+            $source = $driverPoint;
+            $destination = $addressPoint;
+        } elseif ($vendorPoint && $addressPoint) {
+            $source = $vendorPoint;
+            $destination = $addressPoint;
+        } elseif ($driverPoint && $vendorPoint) {
+            $source = $driverPoint;
+            $destination = $vendorPoint;
+        } elseif ($driverPoint && $addressPoint) {
+            $source = $driverPoint;
+            $destination = $addressPoint;
+        } else {
+            $source = $vendorPoint ?? $driverPoint ?? $addressPoint;
+            $destination = $addressPoint ?? $vendorPoint ?? $driverPoint;
+        }
+
+        return [
+            'source' => $source,
+            'destination' => $destination,
+        ];
+    }
+
+    private function extractLatLng($payload): ?array
+    {
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        $lat = $this->resolveCoordinate($payload, [
+            'lat',
+            'latitude',
+            'location.lat',
+            'location.latitude',
+            'coordinates.lat',
+            'coordinates.latitude',
+        ]);
+        $lng = $this->resolveCoordinate($payload, [
+            'lng',
+            'lon',
+            'long',
+            'longitude',
+            'location.lng',
+            'location.longitude',
+            'coordinates.lng',
+            'coordinates.longitude',
+        ]);
+
+        if ($lat === null || $lng === null) {
+            return null;
+        }
+
+        return [
+            'lat' => $lat,
+            'lng' => $lng,
+        ];
+    }
+
+    private function resolveCoordinate(array $payload, array $keys): ?float
+    {
+        foreach ($keys as $key) {
+            $value = data_get($payload, $key);
+            if (is_numeric($value)) {
+                return (float) $value;
+            }
+        }
+
+        return null;
+    }
+
 }
 
 
