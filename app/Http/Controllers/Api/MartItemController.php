@@ -933,72 +933,66 @@ class MartItemController extends Controller
     public function getSubcategories_home(Request $request)
     {
         try {
-            // Validate input
             $validator = Validator::make($request->all(), [
                 'limit' => 'nullable|integer|min:1|max:100',
-                'page'  => 'nullable|integer|min:1',
+                'page' => 'nullable|integer|min:1',
             ]);
 
             if ($validator->fails()) {
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
                     'message' => 'Invalid request parameters',
-                    'errors'  => $validator->errors(),
+                    'errors' => $validator->errors(),
                 ], 422);
             }
 
-            // Pagination defaults
-            $limit = $request->input('limit', 10);
-            $page  = $request->input('page', 1);
+            $limit = (int) $request->get('limit', 10);
+            $page  = (int) $request->get('page', 1);
 
-            // Query
+            // Query with pagination
             $query = MartSubcategory::query()
-                ->where('show_in_homepage', true)
-                ->where('publish', true)
-                ->orderBy('title', 'asc');
+                ->whereIn('show_in_homepage', $this->truthyValues)
+                ->whereIn('publish', $this->truthyValues);
+//                ->orderBy('title', 'asc');
 
-            // Apply pagination
             $items = $query->paginate($limit, ['*'], 'page', $page);
 
-            // If empty
             if ($items->isEmpty()) {
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
                     'message' => 'No trending items found',
-                    'data'    => [],
-                    'meta'    => [
-                        'page'      => $page,
-                        'limit'     => $limit,
-                        'total'     => 0,
+                    'data' => [],
+                    'meta' => [
+                        'page' => $page,
+                        'limit' => $limit,
+                        'total' => 0,
                         'last_page' => 0
                     ]
                 ]);
             }
 
-            // Success response
             return response()->json([
-                'status'  => true,
+                'status' => true,
                 'message' => 'Trending items fetched successfully',
-                'count'   => $items->count(),
-                'data'    => $items->items(),
-                'meta'    => [
-                    'page'      => $items->currentPage(),
-                    'limit'     => $items->perPage(),
-                    'total'     => $items->total(),
+                'count' => $items->count(),
+                'data' => $items->items(),
+                'meta' => [
+                    'page' => $items->currentPage(),
+                    'limit' => $items->perPage(),
+                    'total' => $items->total(),
                     'last_page' => $items->lastPage(),
                 ]
             ]);
 
         } catch (\Exception $e) {
-
             Log::error('Failed to fetch trending mart items', [
                 'error' => $e->getMessage(),
             ]);
 
             return response()->json([
-                'status'  => false,
+                'status' => false,
                 'message' => 'Error fetching trending items',
-                'error'   => $e->getMessage()
+                'error' => $e->getMessage()
             ], 500);
         }
     }

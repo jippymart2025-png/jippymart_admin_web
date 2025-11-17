@@ -22,6 +22,9 @@ use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\WalletController;
 use App\Http\Controllers\Api\OrderApiController;
 use App\Http\Controllers\Api\MartItemController;
+use App\Http\Controllers\Api\OrderSupportController;
+use App\Http\Controllers\Api\MobileSqlBridgeController;
+use App\Http\Controllers\ChatController;
 
 
 /*
@@ -85,6 +88,28 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/zones/detect-id', [ZoneController::class, 'detectZoneId']);
     Route::get('/zones/check-service-area', [ZoneController::class, 'checkServiceArea']);
     Route::get('/zones/all', [ZoneController::class, 'getAllZones']);
+});
+
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/mobile/brands/{brandId}', [MobileSqlBridgeController::class, 'fetchBrand']);
+    Route::get('/mobile/surge-rules', [MobileSqlBridgeController::class, 'getSurgeRules']);
+    Route::get('/mobile/surge-rules/admin-fee', [MobileSqlBridgeController::class, 'getAdminSurgeFee']);
+    Route::get('/mobile/settings/mart-delivery-charge', [MobileSqlBridgeController::class, 'getMartDeliveryChargeSettings']);
+    Route::get('/mobile/coupons/used', [MobileSqlBridgeController::class, 'getUsedCoupons']);
+    Route::post('/mobile/coupons/{couponId}/used', [MobileSqlBridgeController::class, 'markCouponAsUsed']);
+    Route::post('/mobile/orders', [MobileSqlBridgeController::class, 'createOrder']);
+    Route::post('/mobile/orders/rollback', [MobileSqlBridgeController::class, 'rollbackFailedOrder']);
+    Route::get('/mobile/orders/{orderId}/surge-fee', [MobileSqlBridgeController::class, 'getOrderSurgeFee']);
+    Route::get('/mobile/orders/{orderId}/billing/to-pay', [OrderSupportController::class, 'fetchOrderToPay']);
+    Route::get('/mobile/orders/{orderId}/billing/surge-fee', [OrderSupportController::class, 'fetchOrderSurgeFee']);
+    Route::post('/mobile/orders/rollback-failed', [OrderSupportController::class, 'rollbackFailedOrder']);
+    Route::post('/mobile/orders/place-basic', [OrderSupportController::class, 'placeOrder']);
+    Route::get('/mobile/app/version', [MobileSqlBridgeController::class, 'getLatestVersionInfo']);
+    Route::post('/mobile/chat/restaurant/messages', [MobileSqlBridgeController::class, 'addRestaurantChat']);
+    Route::post('/mobile/chat/restaurant/inbox', [MobileSqlBridgeController::class, 'addRestaurantInbox']);
+    Route::post('/mobile/chat/driver/inbox', [MobileSqlBridgeController::class, 'addDriverInbox']);
+    Route::post('/mobile/chat/driver/messages', [MobileSqlBridgeController::class, 'addDriverChat']);
 });
 
 // Restaurant/Vendor API routes
@@ -171,10 +196,17 @@ Route::prefix('vendors')->group(function () {
     Route::get('{vendorId}/products', [\App\Http\Controllers\Api\ProductController::class, 'getProductsByVendorId']);
     Route::get('{vendorId}/offers', [VendorController::class, 'getOffersByVendorId']);
     Route::get('{categoryId}/category', [VendorController::class, 'getNearestRestaurantByCategory']);
+
 });
 
 Route::get('vendor-categories/{id}', [VendorController::class, 'getVendorCategoryById']);
 Route::get('products/{id}', [VendorController::class, 'getProductById']);
+});
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/mart-vendor/default', [VendorController::class, 'getDefaultMartVendor']);
+    Route::get('/mart-vendor/zone/{zoneId}', [VendorController::class, 'getMartVendorsByZone']);
+    Route::get('/mart-vendor/{vendorId}', [VendorController::class, 'getMartVendorById']);
 });
 
 //wallet
@@ -254,12 +286,12 @@ Route::prefix('firestore')->group(function () {
     Route::get('/orders', [FirestoreBridgeController::class, 'getAllOrders']);
     Route::get('/email-templates/{type}', [FirestoreBridgeController::class, 'getEmailTemplates']);
     Route::get('/notifications/{type}', [FirestoreBridgeController::class, 'getNotificationContent']);
-    Route::post('/chat/driver/inbox', [FirestoreBridgeController::class, 'addDriverInbox']);
-    Route::post('/chat/driver/messages', [FirestoreBridgeController::class, 'addDriverChat']);
-    Route::post('/chat/restaurant/inbox', [FirestoreBridgeController::class, 'addRestaurantInbox']);
-    Route::post('/chat/restaurant/messages', [FirestoreBridgeController::class, 'addRestaurantChat']);
-    Route::post('/chat/upload-image', [FirestoreBridgeController::class, 'uploadChatImageToStorage']);
-    Route::post('/chat/upload-video', [FirestoreBridgeController::class, 'uploadChatVideoToStorage']);
+//    Route::post('/chat/driver/inbox', [FirestoreBridgeController::class, 'addDriverInbox']);
+//    Route::post('/chat/driver/messages', [FirestoreBridgeController::class, 'addDriverChat']);
+//    Route::post('/chat/restaurant/inbox', [FirestoreBridgeController::class, 'addRestaurantInbox']);
+//    Route::post('/chat/restaurant/messages', [FirestoreBridgeController::class, 'addRestaurantChat']);
+    // Route::post('/chat/upload-image', [FirestoreBridgeController::class, 'uploadChatImageToStorage']);
+    // Route::post('/chat/upload-video', [FirestoreBridgeController::class, 'uploadChatVideoToStorage']);
     Route::get('/vendor-categories/{id}', [FirestoreBridgeController::class, 'getVendorCategoryByCategoryId']);
     Route::post('/ratings', [FirestoreBridgeController::class, 'setRatingModel']);
     Route::put('/vendors/{vendorId}', [FirestoreBridgeController::class, 'updateVendor']);
@@ -274,4 +306,33 @@ Route::prefix('firestore')->group(function () {
 Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/products', [ProductController::class, 'getAllPublishedProducts']);
+    Route::get('/order/{id}/tracking', [OrderApiController::class, 'track']);
+
+});
+
+// Chat API routes
+Route::middleware('auth:sanctum')->group(function () {
+    // Chat inbox (list all chats)
+    Route::get('/chat/inbox', [ChatController::class, 'getInbox']);
+
+    // Get chat messages by order ID
+    Route::get('/chat/{orderId}/messages', [ChatController::class, 'getMessages']);
+
+    // Get single chat with messages
+    Route::get('/chat/{orderId}', [ChatController::class, 'getChat']);
+
+    // Send message
+    Route::post('/chat/{orderId}/send', [ChatController::class, 'sendMessage']);
+
+    // Delete message
+    Route::delete('/chat/message/{messageId}', [ChatController::class, 'deleteMessage']);
+
+    // Delete chat
+    Route::delete('/chat/{orderId}', [ChatController::class, 'deleteChat']);
+
+    // Upload image
+    Route::post('/chat/upload/image', [ChatController::class, 'uploadImage']);
+
+    // Upload video
+    Route::post('/chat/upload/video', [ChatController::class, 'uploadVideo']);
 });
