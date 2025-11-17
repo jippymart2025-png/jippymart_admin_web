@@ -14,7 +14,7 @@ class SettingsController extends Controller
 
     public function __construct()
     {
-        $this->middleware('auth');
+        $this->middleware('auth')->except('getRingtone');
     }
 
     public function social()
@@ -193,6 +193,25 @@ class SettingsController extends Controller
     public function surgeRules()
     {
       return view('settings.app.surgeRules');
+    }
+
+    public function getRingtone()
+    {
+        $row = DB::table('settings')
+            ->where('document_name', 'globalSettings')
+            ->first();
+
+        if (!$row) {
+            return response()->json(['ringtone' => null]);
+        }
+
+        $fields = json_decode($row->fields, true);
+
+        return response()->json([
+            'ringtone' => $fields['order_ringtone_url'] ?? null,
+             'status' => 'OK',
+        'route_debug' => request()->route(),
+        ]);
     }
 
     // Email templates SQL endpoints

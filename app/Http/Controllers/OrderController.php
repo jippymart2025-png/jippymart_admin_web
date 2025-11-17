@@ -12,7 +12,7 @@ class OrderController extends Controller
 
     public function __construct()
     {
-        $this->middleware('auth');
+        $this->middleware('auth')->except('getLatestOrderId');
     }
 
 //    public function index(Request $request, $id = '')
@@ -789,5 +789,34 @@ class OrderController extends Controller
                 'message' => 'Error removing driver: ' . $e->getMessage()
             ], 500);
         }
+    }
+//    public function getLatestOrderId()
+//    {
+//        $last = DB::table('restaurant_orders')->orderBy('id', 'desc')->first();
+//        return response()->json(['latest_id' => $last->id ?? 0]);
+//    }
+
+    public function getLatestOrderId()
+    {
+        $last = DB::table('restaurant_orders')
+            ->select('id')
+            ->orderByRaw('CAST(SUBSTRING(id, 6) AS UNSIGNED) DESC') // from "Jippy30001018"
+            ->first();
+
+        return response()->json(['latest_id' => $last->id ?? '']);
+    }
+
+
+    public function getOrder($id)
+    {
+        $order = DB::table('restaurant_orders')->where('id', $id)->first();
+
+        if (!$order) return response()->json([]);
+
+        // Convert JSON fields if needed
+        $order->vendor = json_decode($order->vendor, true);
+        $order->author = json_decode($order->author, true);
+
+        return response()->json($order);
     }
 }

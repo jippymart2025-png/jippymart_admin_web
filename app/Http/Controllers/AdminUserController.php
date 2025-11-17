@@ -118,7 +118,7 @@ class AdminUserController extends Controller
     {
         $limit = (int) $request->query('limit', 10);
         $page = (int) $request->query('page', 1);
-        $status = $request->query('status'); // 'active' | 'inactive' | null
+        $active = $request->query('active');
         $zoneId = $request->query('zoneId');
         $search = trim((string) $request->query('search', ''));
 
@@ -140,16 +140,8 @@ class AdminUserController extends Controller
             $query->where('createdAt', '<=', $to);
         }
 
-        // NEW status filter (matches DB int 1/0)
-        $active = $request->query('active');  // frontend sends 1 or 0
-
         if ($active !== null && $active !== '') {
-            $activeInt = (int) $active;
-
-            $query->where(function ($q) use ($activeInt) {
-                $q->where('active', $activeInt)
-                    ->orWhere('isActive', $activeInt);
-            });
+            $query->where('active', (int) $active);
         }
 
         // Zone filter - search in shippingAddress JSON column
@@ -192,7 +184,8 @@ class AdminUserController extends Controller
                 'phoneNumber' => (string) ($u->phoneNumber ?? ''),
                 'zoneId' => (string) $zoneId,
                 'createdAt' => (string) ($u->createdAt ?? ''),
-                'active' => in_array((string) $u->active, ['1','true'], true) || (bool) ($u->isActive ?? 0),
+//                'active' => in_array((string) $u->active, ['1','true'], true) || (bool) ($u->isActive ?? 0),
+                'active' => ($u->active == 1 || $u->isActive == 1) ? 1 : 0,
                 'profilePictureURL' => $u->profilePictureURL,
             ];
         })->all();

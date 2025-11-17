@@ -47,23 +47,20 @@
                 </div>
             </div>
         </li>
-{{--                         <li class="nav-item dropdown">--}}
+{{--        <li class="nav-item dropdown">--}}
 {{--                 <a class="nav-link text-muted waves-effect waves-dark" href="#" onclick="window.orderNotificationSystem.testNotification(); return false;" title="Test Notification">--}}
-{{--                     <i class="fa fa-bell-o" style="font-size: 16px;"></i>--}}
-{{--                 </a>--}}
-{{--             </li>--}}
-{{--              <li class="nav-item dropdown">--}}
-{{--                 <a class="nav-link text-muted waves-effect waves-dark" href="#" onclick="window.orderNotificationSystem.testCustomRingtone(); return false;" title="Test Custom Ringtone">--}}
-{{--                     <i class="fa fa-music" style="font-size: 16px;"></i>--}}
-{{--                 </a>--}}
-{{--             </li>--}}
+        <li class="nav-item dropdown">
+            <a class="nav-link" onclick="orderNotificationSystem.testNotification(); return false;">
+            <i class="fa fa-bell-o" style="font-size: 16px;"></i>
+                 </a>
+             </li>
         <li class="nav-item dropdown">
            <div class="d-flex align-items-center dropdown-toggle text-muted waves-effect waves-dark" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
             <a class="nav-link " href="">
                <img src="{{ asset('/images/users/user-new.png') }}" alt="user" class="profile-pic"></a>
                <div class="nav-item-user">
                 <h5 class="text-dark mb-0">{{  Auth::user()->name }}</h5>
-                <!--<p class="mb-0">foodie@admin.com</p>-->
+                <p class="mb-0">{{ Auth::user()->email }}</p>
                </div>
              </div>
             <div class="dropdown-menu dropdown-menu-right scale-up">
