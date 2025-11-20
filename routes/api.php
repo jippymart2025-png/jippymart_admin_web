@@ -139,7 +139,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/categories', [CategoryController::class, 'index']);
     Route::get('/categories/{id}', [CategoryController::class, 'show']);
 
-Route::get('/categories/home', [CategoryController::class, 'home']);
+Route::get('/categories/home', [CategoryController::class, 'home'])
+    ->withoutMiddleware(['throttle:api']);
+
 
 // Banner API routes (Public - no auth required)
     Route::get('/banners/top', [BannerController::class, 'top']);
@@ -296,7 +298,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/vendor/{vendorId}/reviews', [Vendor_Reviews::class, 'getVendorReviews']);
     Route::get('/reviews/order', [Vendor_Reviews::class, 'getOrderReviewById']);
     Route::get('/review-attributes/{id}', [Vendor_Reviews::class, 'getReviewAttributeById']);
-
 });
 
 
