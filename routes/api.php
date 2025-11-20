@@ -134,7 +134,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/restaurants/nearest', [RestaurantController::class, 'nearest']);
     Route::get('/restaurants/search', [RestaurantController::class, 'search']);
     Route::get('/restaurants/by-zone/{zone_id}', [RestaurantController::class, 'byZone']);
-    Route::get('/restaurants/{id}', [RestaurantController::class, 'show']);
+    Route::get('/restaurants/{id}', [RestaurantController::class, 'show'])
+    ->withoutMiddleware(['throttle:api']);
+
 });
 
 // Category API routes (Public - no auth required)
