@@ -222,6 +222,82 @@ class OrderSupportController extends Controller
         ], 'Order rollback completed');
     }
 
+    /**
+     * Create or update order billing record.
+     */
+    public function createOrderBilling(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'order_id' => ['required', 'string'],
+            'to_pay' => ['required', 'string'],
+            'surge_fee' => ['required', 'numeric', 'min:0'],
+            'admin_surge_fee' => ['required', 'string'],
+            'created_at' => ['nullable', 'string'],
+        ]);
+
+        if ($validator->fails()) {
+            return $this->error('Validation failed', 422, $validator->errors()->toArray());
+        }
+
+        try {
+            $orderId = $request->input('order_id');
+            $toPay = (string) $request->input('to_pay');
+            $surgeFee = (float) $request->input('surge_fee');
+            $adminSurgeFee = (string) $request->input('admin_surge_fee');
+            
+            // Calculate total surge fee
+            $adminSurgeFeeNumeric = (float) $adminSurgeFee;
+            $totalSurgeFee = (string) ($surgeFee + $adminSurgeFeeNumeric);
+            
+            // Use provided created_at or current time
+            $createdAt = $request->input('created_at');
+            if (empty($createdAt)) {
+                $createdAt = $this->toIsoString(Carbon::now());
+            }
+
+            // Check if billing record already exists
+            $existing = DB::table('order_billing')->where('orderId', $orderId)->first();
+            
+            $billingData = [
+                'createdAt' => $createdAt,
+                'orderId' => $orderId,
+                'ToPay' => $toPay,
+                'surge_fee' => $surgeFee,
+                'admin_surge_fee' => $adminSurgeFee,
+                'total_surge_fee' => $totalSurgeFee,
+            ];
+
+            if ($existing) {
+                // Update existing record
+                DB::table('order_billing')
+                    ->where('orderId', $orderId)
+                    ->update($billingData);
+                
+                return $this->success([
+                    'order_id' => $orderId,
+                    'billing' => $billingData,
+                ], 'Order billing updated successfully', 200);
+            } else {
+                // Create new record
+                $billingData['id'] = (string) Str::uuid();
+                DB::table('order_billing')->insert($billingData);
+                
+                return $this->success([
+                    'order_id' => $orderId,
+                    'billing' => $billingData,
+                ], 'Order billing created successfully', 201);
+            }
+        } catch (\Throwable $e) {
+            Log::error('Failed to create order billing', [
+                'order_id' => $request->input('order_id'),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return $this->error('Failed to create order billing: ' . $e->getMessage(), 500);
+        }
+    }
+
     protected function success($data = null, string $message = 'OK', int $status = 200): JsonResponse
     {
         return response()->json([

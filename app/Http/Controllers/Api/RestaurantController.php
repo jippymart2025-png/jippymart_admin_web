@@ -256,6 +256,7 @@ class RestaurantController extends Controller
             'isActive' => (bool) ($restaurant->publish ?? true), // Using publish field (NULL/TRUE = active)
             'isOpen' => (bool) ($restaurant->isOpen ?? false),
             'subscriptionPlan' => $subscriptionPlan,
+            'author' => $restaurant->author,
             'subscriptionTotalOrders' => $subscriptionTotalOrders,
             'subscriptionExpiryDate' => $subscriptionExpiryDate,
             'reviewsCount' => (int) ($restaurant->reviewsCount ?? 0),

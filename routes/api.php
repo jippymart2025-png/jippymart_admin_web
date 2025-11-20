@@ -2,6 +2,7 @@
 
 
 use App\Http\Controllers\AdminUserController;
+use App\Http\Controllers\Api\DriverControllerLogin;
 use App\Http\Controllers\Api\MobileSqlBridgeController;
 use App\Http\Controllers\Api\OrderSupportController;
 use App\Http\Controllers\Api\productcontroller;
@@ -29,6 +30,12 @@ use App\Http\Controllers\Api\OrderApiController;
 use App\Http\Controllers\Api\MartItemController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\Api\SwiggySearchController;
+
+
+
+Route::get('/settings/ringtone', [SettingsController::class, 'getRingtone']);
+Route::get('/orders/latest-id', [OrderController::class, 'getLatestOrderId']);
+Route::get('/orders/get/{id}', [OrderController::class, 'getOrder']);
 
 /*
 |--------------------------------------------------------------------------
@@ -113,6 +120,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/mobile/orders/{orderId}/billing/surge-fee', [OrderSupportController::class, 'fetchOrderSurgeFee']);
     Route::post('/mobile/orders/rollback-failed', [OrderSupportController::class, 'rollbackFailedOrder']);
     Route::post('/mobile/orders/place-basic', [OrderSupportController::class, 'placeOrder']);
+    Route::post('/order-billing', [OrderSupportController::class, 'createOrderBilling']);
     Route::get('/mobile/app/version', [MobileSqlBridgeController::class, 'getLatestVersionInfo']);
     Route::post('/mobile/chat/restaurant/messages', [MobileSqlBridgeController::class, 'addRestaurantChat']);
     Route::post('/mobile/chat/restaurant/inbox', [MobileSqlBridgeController::class, 'addRestaurantInbox']);
@@ -355,14 +363,19 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/chat/upload/video', [ChatController::class, 'uploadVideo']);
 });
 
-Route::get('/settings/ringtone', [SettingsController::class, 'getRingtone']);
-Route::get('/orders/latest-id', [OrderController::class, 'getLatestOrderId']);
-Route::get('/orders/get/{id}', [OrderController::class, 'getOrder']);
+
 
 Route::post('/mobile/orders/place-basic', [OrderSupportController::class, 'placeOrder']);
 Route::middleware('auth:sanctum')->group(function () {
 Route::post('/mobile/orders', [MobileSqlBridgeController::class, 'createOrder']);
 });
+
+
+//drivers api
+
+
+Route::post('/driver/login', [DriverControllerLogin::class, 'driverLogin']);
+    Route::post('/driver/signup', [DriverControllerLogin::class, 'driverSignup']);
 
 
 
