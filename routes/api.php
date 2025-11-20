@@ -182,9 +182,15 @@ Route::middleware('auth:sanctum')->group(function () {
     ->withoutMiddleware(['throttle:api'])   // REMOVE default throttle
     ->middleware('throttle:200,1');         // ADD custom throttle
     // Route::get('/users/profile/{firebase_id}', [UserProfileController::class, 'show']); // Public - get customer by firebase_id
-    Route::get('/user/profile', [UserProfileController::class, 'me']); // Get current customer profile
-    Route::post('/user/profile', [UserProfileController::class, 'update']); // Update current customer profile
-    Route::delete('/users/profile/{firebase_id}', [UserProfileController::class, 'destroy']); // Delete user and related data from database
+    Route::get('/user/profile', [UserProfileController::class, 'me']) // Get current customer profile
+    ->withoutMiddleware(['throttle:api']);  // REMOVE default throttle
+
+    Route::post('/user/profile', [UserProfileController::class, 'update']) // Update current customer profile
+        ->withoutMiddleware(['throttle:api']);  // REMOVE default throttle
+
+    Route::delete('/users/profile/{firebase_id}', [UserProfileController::class, 'destroy']) // Delete user and related data from database
+        ->withoutMiddleware(['throttle:api']);  // REMOVE default throttle
+
     // Route::delete('/user/profile/{firebase_id}', [UserProfileController::class, 'destroy']); // Backward compatibility
 
 });
