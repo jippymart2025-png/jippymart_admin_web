@@ -78,9 +78,14 @@ Route::post('/app-users', [AdminUserController::class, 'store']);
 Route::delete('/app-users/{id}', [AdminUserController::class, 'destroy']);
 Route::patch('/app-users/{id}/active', [AdminUserController::class, 'setActive']);
 
-Route::get('/settings/mobile', [SettingsApiController::class, 'mobileSettings']);
-Route::get('/settings/delivery-charge', [App\Http\Controllers\Api\SettingsApiController::class, 'getDeliveryChargeSettings']);
-Route::get('/settings/tax', [App\Http\Controllers\Api\TaxApiController::class, 'gettaxSettings']);
+Route::get('/settings/mobile', [SettingsApiController::class, 'mobileSettings'])
+    ->withoutMiddleware(['throttle:api']);  // REMOVE default throttle
+Route::get('/settings/delivery-charge', [App\Http\Controllers\Api\SettingsApiController::class, 'getDeliveryChargeSettings'])
+->withoutMiddleware(['throttle:api']);  // REMOVE default throttle
+
+Route::get('/settings/tax', [App\Http\Controllers\Api\TaxApiController::class, 'gettaxSettings'])
+    ->withoutMiddleware(['throttle:api']);  // REMOVE default throttle
+
 
 
 Route::post('/send-otp', [App\Http\Controllers\Api\OTPController::class, 'sendOtp']);
@@ -294,7 +299,8 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/vendor/{vendorId}/reviews', [Vendor_Reviews::class, 'getVendorReviews']);
+    Route::get('/vendor/{vendorId}/reviews', [Vendor_Reviews::class, 'getVendorReviews'])
+        ->withoutMiddleware(['throttle:api']);
     Route::get('/reviews/order', [Vendor_Reviews::class, 'getOrderReviewById']);
     Route::get('/review-attributes/{id}', [Vendor_Reviews::class, 'getReviewAttributeById']);
 });
