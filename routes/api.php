@@ -136,11 +136,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
 // Category API routes (Public - no auth required)
+    Route::get('/categories/home', [CategoryController::class, 'home'])
+     ->withoutMiddleware(['throttle:api']);
     Route::get('/categories', [CategoryController::class, 'index']);
     Route::get('/categories/{id}', [CategoryController::class, 'show']);
-
-Route::get('/categories/home', [CategoryController::class, 'home'])
-    ->withoutMiddleware(['throttle:api']);
 
 
 // Banner API routes (Public - no auth required)
