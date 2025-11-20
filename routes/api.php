@@ -97,13 +97,11 @@ Route::get('/debug-otp/{phone}', [App\Http\Controllers\Api\OTPController::class,
 
 
 // Zone detection routes
-Route::middleware('auth:sanctum')->group(function () {
     Route::get('/zones/current', [ZoneController::class, 'getCurrentZone']);
     Route::get('/zones/detect-id', [ZoneController::class, 'detectZoneId']);
     Route::get('/zones/check-service-area', [ZoneController::class, 'checkServiceArea']);
     Route::get('/zones/all', [ZoneController::class, 'getAllZones']);
     Route::get('/zones/debug-zone-detection', [ZoneController::class, 'debugZoneDetection']); // Add this
-});
 
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -130,40 +128,32 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 // Restaurant/Vendor API routes
-Route::middleware('auth:sanctum')->group(function () {
     Route::get('/restaurants/nearest', [RestaurantController::class, 'nearest']);
     Route::get('/restaurants/search', [RestaurantController::class, 'search']);
     Route::get('/restaurants/by-zone/{zone_id}', [RestaurantController::class, 'byZone']);
     Route::get('/restaurants/{id}', [RestaurantController::class, 'show'])
     ->withoutMiddleware(['throttle:api']);
 
-});
 
 // Category API routes (Public - no auth required)
-Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/categories/home', [CategoryController::class, 'home']);
     Route::get('/categories', [CategoryController::class, 'index']);
     Route::get('/categories/{id}', [CategoryController::class, 'show']);
-});
-Route::middleware('auth:sanctum')->group(function () {
+
+Route::get('/categories/home', [CategoryController::class, 'home']);
 
 // Banner API routes (Public - no auth required)
     Route::get('/banners/top', [BannerController::class, 'top']);
     Route::get('/banners', [BannerController::class, 'index']);
     Route::get('/banners/{id}', [BannerController::class, 'show']);
-});
-Route::middleware('auth:sanctum')->group(function () {
 // Menu Item Banner API routes (Public - no auth required)
     Route::get('/menu-items/banners/top', [MenuItemBannerController::class, 'top']);
     Route::get('/menu-items/banners/middle', [MenuItemBannerController::class, 'middle']);
     Route::get('/menu-items/banners/bottom', [MenuItemBannerController::class, 'bottom']);
 //Route::get('/menu-items/banners', [MenuItemBannerController::class, 'index']);
 Route::get('/menu-items/banners/{id}', [MenuItemBannerController::class, 'show']);
-});
-Route::middleware('auth:sanctum')->group(function () {
+
 // Stories API routes (Public - no auth required)
     Route::get('/stories', [StoryController::class, 'index']);
-});
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/users/{userId}/shipping-address', [ShippingAddressController::class, 'show']);
@@ -244,11 +234,9 @@ Route::prefix('vendors')->group(function () {
     Route::get('products/{id}', [VendorController::class, 'getProductById']);
 });
 
-Route::middleware('auth:sanctum')->group(function () {
     Route::get('/mart-vendor/default', [VendorController::class, 'getDefaultMartVendor']);
     Route::get('/mart-vendor/zone/{zoneId}', [VendorController::class, 'getMartVendorsByZone']);
     Route::get('/mart-vendor/{vendorId}', [VendorController::class, 'getMartVendorById']);
-});
 
 //wallet
 Route::middleware('auth:sanctum')->group(function () {
@@ -260,7 +248,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get(
         '/restaurants/{vendorId}/product-feed{extra?}',
         [ProductController::class, 'getRestaurantProductFeed']
-    )->where('extra', '.*');
+    )->where('extra', '.*')
+        ->withoutMiddleware(['throttle:api']);
+
 
 });
 
@@ -273,7 +263,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
 // mart all apis
-Route::middleware('auth:sanctum')->group(function () {
     Route::get('/mart-items/trending', [MartItemController::class, 'getTrendingItems']);
     Route::get('/mart-items/featured', [MartItemController::class, 'getFeaturedItems']);
     Route::get('/mart-items/on-sale', [MartItemController::class, 'getItemsOnSale']);
@@ -297,7 +286,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/mart-items/getItemsBySectionName', [MartItemController::class, 'getItemsBySectionName']);
     Route::get('/mart-items/getMartVendors', [MartItemController::class, 'getMartVendors']);
 
-});
 
 
 Route::middleware('auth:sanctum')->group(function () {
