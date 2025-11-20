@@ -35,7 +35,6 @@ class ShippingAddressController extends Controller
                     'message' => 'Missing user identifier. Provide route userId, firebase_id, or ?phone=.',
                 ], 400);
             }
-
             // 🔹 Step 2: Handle not found
             if (!$user) {
                 return response()->json([

@@ -68,6 +68,11 @@ class VendorProduct extends Model
         'takeawayOption' => 'boolean',
         'isAvailable' => 'boolean',
     ];
+
+    public function vendor()
+    {
+        return $this->belongsTo(Vendor::class, 'vendorID', 'id');
+    }
 }
 
 

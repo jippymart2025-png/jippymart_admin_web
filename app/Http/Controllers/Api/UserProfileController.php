@@ -34,9 +34,7 @@ class UserProfileController extends Controller
                     'message' => 'Firebase ID is required'
                 ], 400);
             }
-
             Log::info('getUserProfile: Fetching customer with firebase_id: ' . $firebase_id);
-
             // Find customer by firebase_id only
             $user = User::where('firebase_id', $firebase_id)
                 ->where('role', 'customer')
@@ -54,10 +52,8 @@ class UserProfileController extends Controller
 
             // Get subscription plan if exists
             $subscriptionPlan = $this->getSubscriptionPlan($user);
-
             // Format response
             $data = $this->formatUserProfile($user, $subscriptionPlan);
-
             return response()->json([
                 'success' => true,
                 'data' => $data
@@ -109,7 +105,6 @@ class UserProfileController extends Controller
 
             // Get subscription plan if exists
             $subscriptionPlan = $this->getSubscriptionPlan($user);
-
             // Format response
             $data = $this->formatUserProfile($user, $subscriptionPlan);
 
@@ -138,20 +133,20 @@ class UserProfileController extends Controller
         try {
             // ✅ Get user by firebase_id (if sent) OR by token
             $user = null;
-    
+
             if ($request->has('firebase_id')) {
                 $user = User::where('firebase_id', $request->input('firebase_id'))->first();
             } else {
                 $user = $request->user();
             }
-    
+
             if (!$user) {
                 return response()->json([
                     'success' => false,
                     'message' => 'User not found or not authenticated',
                 ], 404);
             }
-    
+
             // ✅ Validate base fields
             $validator = Validator::make($request->all(), [
                 'firstName' => 'nullable|string|max:100',
@@ -162,16 +157,16 @@ class UserProfileController extends Controller
                 'fcmToken' => 'nullable|string',
                 'shippingAddress' => 'nullable', // ✅ can't validate as array directly (could be JSON string)
             ]);
-    
+
             if ($validator->fails()) {
                 return response()->json([
                     'success' => false,
                     'errors' => $validator->errors()
                 ], 422);
             }
-    
+
             $updateData = [];
-    
+
             // ✅ Handle profile picture upload
             if ($request->hasFile('profile_picture')) {
                 $file = $request->file('profile_picture');
@@ -179,18 +174,18 @@ class UserProfileController extends Controller
                 $file->storeAs('public/users', $fileName);
                 $updateData['profilePictureURL'] = url('storage/users/' . $fileName);
             }
-    
+
             // ✅ Handle basic fields
             foreach (['firstName', 'lastName', 'email', 'fcmToken', 'countryCode', 'zoneId'] as $field) {
                 if ($request->has($field)) {
                     $updateData[$field] = $request->input($field);
                 }
             }
-    
+
             // ✅ Handle shipping address update
             if ($request->has('shippingAddress')) {
                 $addresses = $request->input('shippingAddress');
-    
+
                 // ✅ Decode JSON string if necessary
                 if (is_string($addresses)) {
                     $decoded = json_decode($addresses, true);
@@ -203,35 +198,35 @@ class UserProfileController extends Controller
                         ], 400);
                     }
                 }
-    
+
                 // ✅ Convert single address object to array
                 if (!empty($addresses) && !is_array(reset($addresses))) {
                     $addresses = [$addresses];
                 }
-    
+
                 // ✅ Decode existing addresses from DB
                 $existingAddresses = json_decode($user->shippingAddress ?? '[]', true);
                 if (!is_array($existingAddresses)) {
                     $existingAddresses = [];
                 }
-    
+
                 foreach ($addresses as $newAddress) {
                     if (!is_array($newAddress)) {
                         continue;
                     }
-    
+
                     // Auto-generate ID if missing
                     if (empty($newAddress['id'])) {
                         $newAddress['id'] = 'addr_' . Str::random(8);
                     }
-    
+
                     // If isDefault = 1, reset others to 0
                     if (isset($newAddress['isDefault']) && $newAddress['isDefault'] == 1) {
                         foreach ($existingAddresses as &$addr) {
                             $addr['isDefault'] = 0;
                         }
                     }
-    
+
                     // Check if existing address matches ID, then update
                     $found = false;
                     foreach ($existingAddresses as &$addr) {
@@ -241,26 +236,26 @@ class UserProfileController extends Controller
                             break;
                         }
                     }
-    
+
                     // If not found, append new one
                     if (!$found) {
                         $existingAddresses[] = $newAddress;
                     }
                 }
-    
+
                 // ✅ Save updated JSON
                 $updateData['shippingAddress'] = json_encode($existingAddresses);
             }
-    
+
             // ✅ Save user
             if (!empty($updateData)) {
                 $user->update($updateData);
                 $user->refresh();
             }
-    
+
             // ✅ Fetch subscription if any
             $subscriptionPlan = $this->getSubscriptionPlan($user);
-    
+
             return response()->json([
                 'success' => true,
                 'message' => 'Profile updated successfully',
@@ -268,7 +263,7 @@ class UserProfileController extends Controller
             ]);
         } catch (\Exception $e) {
             Log::error('Update User Profile Error: ' . $e->getMessage());
-    
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update user profile',
@@ -276,7 +271,7 @@ class UserProfileController extends Controller
             ], 500);
         }
     }
-    
+
 
     /**
      * Format user profile for API response
@@ -384,17 +379,22 @@ class UserProfileController extends Controller
             if (!is_array($addr)) {
                 return null;
             }
-
             return [
                 'id' => $addr['id'] ?? null,
                 'address' => $addr['address'] ?? '',
                 'addressAs' => $addr['addressAs'] ?? '',
                 'landmark' => $addr['landmark'] ?? '',
                 'locality' => $addr['locality'] ?? '',
-                'location' => isset($addr['location']) ? [
-                    'latitude' => (float) ($addr['location']['latitude'] ?? 0),
-                    'longitude' => (float) ($addr['location']['longitude'] ?? 0),
-                ] : null,
+                'latitude' => $addr['latitude'] ?? '',
+                'longitude' => $addr['longitude'] ?? '',
+                'location' =>  [
+                 'latitude' => $addr['latitude'] ?? '',
+                'longitude' => $addr['longitude'] ?? '',
+                ],
+                // 'location' => isset($addr['location']) ? [
+                //     'latitude' => (float) ($addr['location']['latitude'] ?? 0),
+                //     'longitude' => (float) ($addr['location']['longitude'] ?? 0),
+                // ] : null,
                 'isDefault' => (bool) ($addr['isDefault'] ?? false),
                 'zoneId' => $addr['zoneId'] ?? null,
             ];

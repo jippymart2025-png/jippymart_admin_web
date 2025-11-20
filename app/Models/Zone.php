@@ -7,13 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 class Zone extends Model
 {
     use HasFactory;
-
     // Specify the actual table name
     protected $table = 'zone';
-
     protected $keyType = 'string';
     public $incrementing = false;
-
     protected $fillable = [
         'id',
         'latitude',

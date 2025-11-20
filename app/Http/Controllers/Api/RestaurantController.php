@@ -392,11 +392,9 @@ class RestaurantController extends Controller
             }
 
             $restaurants = $query->get();
-
             $data = $restaurants->map(function ($restaurant) {
                 return $this->formatRestaurantResponse($restaurant);
             });
-
             return response()->json([
                 'success' => true,
                 'data' => $data,

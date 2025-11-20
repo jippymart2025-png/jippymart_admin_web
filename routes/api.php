@@ -28,7 +28,7 @@ use App\Http\Controllers\Api\WalletController;
 use App\Http\Controllers\Api\OrderApiController;
 use App\Http\Controllers\Api\MartItemController;
 use App\Http\Controllers\ChatController;
-
+use App\Http\Controllers\Api\SwiggySearchController;
 
 /*
 |--------------------------------------------------------------------------
@@ -95,6 +95,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/zones/detect-id', [ZoneController::class, 'detectZoneId']);
     Route::get('/zones/check-service-area', [ZoneController::class, 'checkServiceArea']);
     Route::get('/zones/all', [ZoneController::class, 'getAllZones']);
+    Route::get('/zones/debug-zone-detection', [ZoneController::class, 'debugZoneDetection']); // Add this
 });
 
 
@@ -117,6 +118,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/mobile/chat/restaurant/inbox', [MobileSqlBridgeController::class, 'addRestaurantInbox']);
     Route::post('/mobile/chat/driver/inbox', [MobileSqlBridgeController::class, 'addDriverInbox']);
     Route::post('/mobile/chat/driver/messages', [MobileSqlBridgeController::class, 'addDriverChat']);
+
 });
 
 // Restaurant/Vendor API routes
@@ -170,8 +172,10 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 // User Profile API routes (Customers only)
 Route::middleware('auth:sanctum')->group(function () {
-
-    Route::get('/users/profile/{firebase_id}', [UserProfileController::class, 'show']); // Public - get customer by firebase_id
+    Route::get('/users/profile/{firebase_id}', [UserProfileController::class, 'show'])
+    ->withoutMiddleware(['throttle:api'])   // REMOVE default throttle
+    ->middleware('throttle:200,1');         // ADD custom throttle
+    // Route::get('/users/profile/{firebase_id}', [UserProfileController::class, 'show']); // Public - get customer by firebase_id
     Route::get('/user/profile', [UserProfileController::class, 'me']); // Get current customer profile
     Route::post('/user/profile', [UserProfileController::class, 'update']); // Update current customer profile
     Route::delete('/users/profile/{firebase_id}', [UserProfileController::class, 'destroy']); // Delete user and related data from database
@@ -182,17 +186,39 @@ Route::middleware('auth:sanctum')->group(function () {
 //restaurants
 Route::middleware('auth:sanctum')->group(function () {
 
-    Route::prefix('favorites')->group(function () {
-        // Restaurants
-        Route::get('restaurants/{firebase_id}', [FavoriteController::class, 'getFavoriteRestaurants']);
-        Route::post('restaurants', [FavoriteController::class, 'addFavoriteRestaurant']);
-        Route::delete('restaurants', [FavoriteController::class, 'removeFavoriteRestaurant']);
+        Route::prefix('favorites')->group(function () {
 
-        // Items
-        Route::get('items/{firebase_id}', [FavoriteController::class, 'getFavoriteItems']);
-        Route::post('items', [FavoriteController::class, 'addFavoriteItem']);
-        Route::delete('items', [FavoriteController::class, 'removeFavoriteItem']);
-    });
+            Route::get('restaurants/{firebase_id}', [FavoriteController::class, 'getFavoriteRestaurants'])
+                ->withoutMiddleware(['throttle:api']);  // Disable default throttle
+
+            Route::post('restaurants', [FavoriteController::class, 'addFavoriteRestaurant'])
+                ->withoutMiddleware(['throttle:api']);
+
+            Route::delete('restaurants', [FavoriteController::class, 'removeFavoriteRestaurant'])
+                ->withoutMiddleware(['throttle:api']);
+
+            Route::get('items/{firebase_id}', [FavoriteController::class, 'getFavoriteItems'])
+                ->withoutMiddleware(['throttle:api']);
+
+            Route::post('items', [FavoriteController::class, 'addFavoriteItem'])
+                ->withoutMiddleware(['throttle:api']);
+
+            Route::delete('items', [FavoriteController::class, 'removeFavoriteItem'])
+                ->withoutMiddleware(['throttle:api']);
+        });
+
+
+    // Route::prefix('favorites')->group(function () {
+    //     // Restaurants
+    //     Route::get('restaurants/{firebase_id}', [FavoriteController::class, 'getFavoriteRestaurants']);
+    //     Route::post('restaurants', [FavoriteController::class, 'addFavoriteRestaurant']);
+    //     Route::delete('restaurants', [FavoriteController::class, 'removeFavoriteRestaurant']);
+
+    //     // Items
+    //     Route::get('items/{firebase_id}', [FavoriteController::class, 'getFavoriteItems']);
+    //     Route::post('items', [FavoriteController::class, 'addFavoriteItem']);
+    //     Route::delete('items', [FavoriteController::class, 'removeFavoriteItem']);
+    // });
 });
 
 
@@ -337,3 +363,8 @@ Route::post('/mobile/orders/place-basic', [OrderSupportController::class, 'place
 Route::middleware('auth:sanctum')->group(function () {
 Route::post('/mobile/orders', [MobileSqlBridgeController::class, 'createOrder']);
 });
+
+
+
+///NEW FILEDS
+Route::get('/unified-search', [SwiggySearchController::class, 'unifiedSearch']);
