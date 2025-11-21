@@ -7,11 +7,13 @@ use App\Http\Controllers\Api\MobileSqlBridgeController;
 use App\Http\Controllers\Api\OrderSupportController;
 use App\Http\Controllers\Api\productcontroller;
 use App\Http\Controllers\Api\FirestoreBridgeController;
+use App\Http\Controllers\Api\RestaurantAppSettingController;
 use App\Http\Controllers\Api\restaurantControllerLogin;
 use App\Http\Controllers\Api\restaurantUserController;
 use App\Http\Controllers\Api\SettingsApiController;
 use App\Http\Controllers\Api\VendorController;
 use App\Http\Controllers\Api\Vendor_Reviews;
+use App\Http\Controllers\Api\WalletTransactionController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\SettingsController;
 use Illuminate\Http\Request;
@@ -392,6 +394,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
 Route::post('/restaurant/login', [restaurantControllerLogin::class, 'restaurantLogin']);
 Route::post('/restaurant/signup', [restaurantControllerLogin::class, 'restaurantSignup']);
-Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/restaurant/users/{firebase_id}', [restaurantUserController::class, 'getUserProfile']);
-});
+Route::get('/restaurant/users/{firebase_id}', [restaurantUserController::class, 'getUserProfile']);
+Route::post('/restaurant/update-user-wallet', [WalletTransactionController::class, 'updateUserWallet']);
+Route::post('/restaurant/updateUser', [restaurantUserController::class, 'updateUser']);
+Route::post('/restaurant/updateUser', [restaurantUserController::class, 'updateDriverUser']);
+Route::post('/restaurant/withdraw', [WalletTransactionController::class, 'withdrawWalletAmount']);
+Route::get('/onboarding/{type}', [RestaurantAppSettingController::class, 'getOnBoardingList']);
+Route::post('/wallet/transaction', [WalletTransactionController::class, 'setWalletTransaction']);
+Route::get('/settings/document-verification', [RestaurantAppSettingController::class, 'getDocumentVerification']);
+
+
+
