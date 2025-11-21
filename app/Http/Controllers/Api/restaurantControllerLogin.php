@@ -7,9 +7,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 
-class DriverControllerLogin extends Controller
+class restaurantControllerLogin extends Controller
 {
-    public function driverLogin(Request $request)
+    public function restaurantLogin(Request $request)
     {
         $request->validate([
             "email" => "required|email",
@@ -27,10 +27,10 @@ class DriverControllerLogin extends Controller
         }
 
         // Check driver role only
-        if ($user->role !== "driver") {
+        if ($user->role !== "vendor") {
             return response()->json([
                 "success" => false,
-                "message" => "This user is not created in driver application."
+                "message" => "This user is not created in vendor application."
             ], 403);
         }
 
@@ -64,7 +64,7 @@ class DriverControllerLogin extends Controller
     }
 
 
-    public function driverSignup(Request $request): \Illuminate\Http\JsonResponse
+    public function restaurantSignup(Request $request): \Illuminate\Http\JsonResponse
     {
         // Common validation
         $request->validate([
@@ -76,7 +76,7 @@ class DriverControllerLogin extends Controller
         ]);
 
         // Auto-approve settings
-        $autoApprove = true;
+        $autoApprove = false;
         $isDocumentVerify = false;
 
         // EMAIL SIGNUP
@@ -97,49 +97,10 @@ class DriverControllerLogin extends Controller
                 "phoneNumber" => $request->phone_number,
                 "countryCode" => $request->country_code,
                 "password" => Hash::make($request->password),
-                "role" => "driver",
+                "role" => "vendor",
+                "vType" => "restaurant",
                 "fcmToken" => $request->fcm_token,
-                "isActive" => $autoApprove ? 1 : 0,
-                "isDocumentVerify" => $isDocumentVerify ? 0 : 1,
-                "zoneId" => $request->zone_id,
-                "provider" => "email",
-                "appIdentifier" => $request->app_identifier,
-            ]);
-
-            return response()->json([
-                "success" => true,
-                "auto_approve" => $autoApprove,
-                "message" => $autoApprove ? "Account created successfully" : "Your signup is under approval.",
-                "data" => $user
-            ]);
-        }
-
-        // GOOGLE / APPLE / MOBILE SIGNUP
-        if (in_array($request->type, ["google", "apple", "mobileNumber"])) {
-
-            if ($request->email) {
-                $existing = User::where("email", strtolower($request->email))->first();
-                if ($existing) {
-                    return response()->json([
-                        "success" => false,
-                        "message" => "Email already exists"
-                    ], 409);
-                }
-            }
-
-            $firebaseId = $this->generateFirebaseId();
-
-            $user = User::create([
-                "firebase_id" => $firebaseId,
-                "firstName" => $request->first_name,
-                "lastName" => $request->last_name,
-                "email" => strtolower($request->email),
-                "phoneNumber" => $request->phone_number,
-                "countryCode" => $request->country_code,
-                "password" => Hash::make($request->password),
-                "role" => "driver",
-                "fcmToken" => $request->fcm_token,
-                "isActive" => $autoApprove ? 1 : 0,
+                "isActive" => $autoApprove ? 0 : 1,
                 "isDocumentVerify" => $isDocumentVerify ? 0 : 1,
                 "zoneId" => $request->zone_id,
                 "provider" => "email",
@@ -180,6 +141,8 @@ class DriverControllerLogin extends Controller
 
         return $id;
     }
+
+
 
 
 }

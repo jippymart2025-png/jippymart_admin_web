@@ -1,12 +1,14 @@
 <?php
 
-
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\Api\DriverControllerLogin;
+use App\Http\Controllers\Api\DriverUserController;
 use App\Http\Controllers\Api\MobileSqlBridgeController;
 use App\Http\Controllers\Api\OrderSupportController;
 use App\Http\Controllers\Api\productcontroller;
 use App\Http\Controllers\Api\FirestoreBridgeController;
+use App\Http\Controllers\Api\restaurantControllerLogin;
+use App\Http\Controllers\Api\restaurantUserController;
 use App\Http\Controllers\Api\SettingsApiController;
 use App\Http\Controllers\Api\VendorController;
 use App\Http\Controllers\Api\Vendor_Reviews;
@@ -364,7 +366,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Upload video
     Route::post('/chat/upload/video', [ChatController::class, 'uploadVideo']);
 });
-
+///NEW FILEDS
+Route::get('/unified-search', [SwiggySearchController::class, 'unifiedSearch']);
 
 
 Route::post('/mobile/orders/place-basic', [OrderSupportController::class, 'placeOrder']);
@@ -373,13 +376,22 @@ Route::post('/mobile/orders', [MobileSqlBridgeController::class, 'createOrder'])
 });
 
 
-//drivers api
+//drivers apis
 
 
 Route::post('/driver/login', [DriverControllerLogin::class, 'driverLogin']);
-    Route::post('/driver/signup', [DriverControllerLogin::class, 'driverSignup']);
+Route::post('/driver/signup', [DriverControllerLogin::class, 'driverSignup']);
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/users/{firebase_id}', [DriverUserController::class, 'getUserProfile']);
+});
 
 
 
-///NEW FILEDS
-Route::get('/unified-search', [SwiggySearchController::class, 'unifiedSearch']);
+
+//restaurant apis
+
+Route::post('/restaurant/login', [restaurantControllerLogin::class, 'restaurantLogin']);
+Route::post('/restaurant/signup', [restaurantControllerLogin::class, 'restaurantSignup']);
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/restaurant/users/{firebase_id}', [restaurantUserController::class, 'getUserProfile']);
+});
