@@ -586,7 +586,15 @@ class MartItemController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'search' => 'nullable|string|max:255',
-                'isAvailable' => 'nullable',
+                'categoryID' => 'nullable|string|max:255',
+                'subcategoryID' => 'nullable|string|max:255',
+                'section' => 'nullable|string|max:255',
+                'isTrending' => 'nullable',
+                'isFeature' => 'nullable',
+                'isBestSeller' => 'nullable',
+                'isNew' => 'nullable',
+                'on_sale' => 'nullable',
+                'publish' => 'nullable',
                 'limit' => 'nullable|integer|min:1|max:200',
             ]);
 
@@ -600,16 +608,43 @@ class MartItemController extends Controller
 
             $limit = $this->normalizeLimit($request, 100, 200);
             $search = Str::lower((string) $request->get('search', ''));
-            $isAvailable = $this->interpretBoolean($request->get('isAvailable'));
 
-            $query = MartItem::query()
-                ->where('publish', $this->truthyValues);
+            $query = MartItem::query();
 
-            if ($isAvailable !== null) {
-                $query->where(
-                    'isAvailable',
-                    $isAvailable ? $this->truthyValues : $this->falsyValues
-                );
+            // Publish filter always applied
+            $query->where('publish', $this->truthyValues);
+
+            // Category filters
+            if ($request->filled('categoryID')) {
+                $query->where('categoryID', $request->categoryID);
+            }
+
+            if ($request->filled('subcategoryID')) {
+                $query->where('subcategoryID', $request->subcategoryID);
+            }
+
+            // Section filter
+            if ($request->filled('section')) {
+                $query->where('section', $request->section);
+            }
+
+            // Boolean filters
+            $booleanFilters = [
+                'isTrending'   => 'isTrending',
+                'isFeature'    => 'isFeature',
+                'isBestSeller' => 'isBestSeller',
+                'isNew'        => 'isNew',
+            ];
+
+            foreach ($booleanFilters as $reqKey => $dbColumn) {
+                if ($request->filled($reqKey)) {
+                    $query->where(
+                        $dbColumn,
+                        $this->interpretBoolean($request->get($reqKey))
+                            ? $this->truthyValues
+                            : $this->falsyValues
+                    );
+                }
             }
 
             $items = $query
@@ -618,20 +653,11 @@ class MartItemController extends Controller
                 ->limit($limit)
                 ->get();
 
-            if ($items->isEmpty()) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'No items found',
-                    'data' => []
-                ]);
-            }
-
+            // Local Search Filter
             if ($search !== '') {
                 $items = $items->filter(function (MartItem $item) use ($search) {
-                    $name = Str::lower($item->name ?? '');
-                    $description = Str::lower($item->description ?? '');
-
-                    return Str::contains($name, $search) || Str::contains($description, $search);
+                    return Str::contains(Str::lower($item->name ?? ''), $search) ||
+                        Str::contains(Str::lower($item->description ?? ''), $search);
                 })->values();
             }
 
@@ -641,10 +667,9 @@ class MartItemController extends Controller
                 'count' => $items->count(),
                 'data' => $items
             ]);
+
         } catch (\Exception $e) {
-            Log::error('Failed to fetch mart items', [
-                'error' => $e->getMessage(),
-            ]);
+            Log::error('Failed to fetch mart items', ['error' => $e->getMessage()]);
             return response()->json([
                 'status' => false,
                 'message' => 'Error fetching mart items',

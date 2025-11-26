@@ -153,7 +153,7 @@ class UserProfileController extends Controller
                 'lastName' => 'nullable|string|max:100',
                 'email' => 'nullable|email|max:255',
                 'countryCode' => 'nullable|string|max:10',
-                'profile_picture' => 'nullable|image|max:4096',
+                'profilePictureURL' => 'nullable|image|max:4096',
                 'fcmToken' => 'nullable|string',
                 'shippingAddress' => 'nullable', // ✅ can't validate as array directly (could be JSON string)
             ]);
@@ -168,8 +168,8 @@ class UserProfileController extends Controller
             $updateData = [];
 
             // ✅ Handle profile picture upload
-            if ($request->hasFile('profile_picture')) {
-                $file = $request->file('profile_picture');
+            if ($request->hasFile('profilePictureURL')) {
+                $file = $request->file('profilePictureURL');
                 $fileName = Str::uuid() . '.' . $file->getClientOriginalExtension();
                 $file->storeAs('public/users', $fileName);
                 $updateData['profilePictureURL'] = url('storage/users/' . $fileName);

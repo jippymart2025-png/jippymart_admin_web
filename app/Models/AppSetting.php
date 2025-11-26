@@ -7,13 +7,13 @@ use Illuminate\Database\Eloquent\Model;
 class AppSetting extends Model
 {
     protected $table = 'app_settings';
-    
+
     public $incrementing = false;
-    
+
     protected $keyType = 'string';
-    
+
     public $timestamps = false;
-    
+
     protected $fillable = [
         'id',
         'update_url',
@@ -43,6 +43,11 @@ class AppSetting extends Model
     public static function getVersionInfo()
     {
         return self::where('id', 'version_info')->first();
+    }
+
+    public static function getrestaurantVersionInfo()
+    {
+        return self::where('app_type', 'restaurant')->first();
     }
 
     /**

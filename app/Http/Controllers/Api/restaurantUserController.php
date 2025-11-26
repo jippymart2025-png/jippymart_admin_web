@@ -33,7 +33,7 @@ class restaurantUserController extends Controller
                     "lastName" => $user->lastName,
                     'email' => $user->email,
                     'phone' => $user->phoneNumber ?? null,
-                    'shippingAddress' => $user->shippingAddress,
+                    'shippingAddress' => $user->shippingAddress ? json_decode($user->shippingAddress, true) : null,
                     'appIdentifier' => $user->appIdentifier,
                     'vendorID' => $user->vendorID,
                     'isDocumentVerify' => $user->isDocumentVerify,
@@ -45,9 +45,12 @@ class restaurantUserController extends Controller
                     "zoneId" => $user->zoneId ?? null,
                     "wallet_amount" => $user->wallet_amount ?? null,
                     "isActive" => $user->isActive ?? null,
-                    "userBankDetails" => $user->userBankDetails ?? null,
+
+                    // ↓ JSON DECODE APPLIED
+                    "userBankDetails" => $user->userBankDetails ? json_decode($user->userBankDetails, true) : null,
+
                     "photos" => $user->photos ?? null,
-                    'location' => $location,   // 👈 Added here
+                    'location' => $location,
                     '_created_at' => $user->_created_at ?? null,
                     '_updated_at' => $user->_updated_at ?? null,
                     'orderCompleted' => $user->orderCompleted ?? null,
@@ -60,7 +63,8 @@ class restaurantUserController extends Controller
                     'carName' => $user->carName ?? null,
                     'carNumber' => $user->carNumber ?? null,
                     'carPictureURL' => $user->carPictureURL ?? null,
-                ],
+                ]
+
             ]);
         } catch (\Exception $e) {
             return response()->json([

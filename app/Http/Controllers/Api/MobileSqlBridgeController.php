@@ -425,6 +425,35 @@ class MobileSqlBridgeController extends Controller
         ]);
     }
 
+
+
+    public function getLatestrestVersionInfo(): JsonResponse
+    {
+        $setting = AppSetting::getrestaurantVersionInfo();
+
+        if (!$setting) {
+            return $this->error('Version info not configured', 404);
+        }
+
+        return $this->success([
+            'id' => $setting->id,
+            'android_version' => $setting->android_version,
+            'ios_version' => $setting->ios_version,
+            'android_build' => $setting->android_build,
+            'ios_build' => $setting->ios_build,
+            'latest_version' => $setting->latest_version,
+            'min_required_version' => $setting->min_required_version,
+            'package_name' => $setting->package_name,
+            'force_update' => (bool) $setting->force_update,
+            'update_message' => $setting->update_message,
+            'update_url' => $setting->update_url,
+            'android_update_url' => $setting->android_update_url,
+            'ios_update_url' => $setting->ios_update_url,
+            'last_updated' => $setting->last_updated,
+        ]);
+    }
+
+
     /**
      * Add restaurant chat message (SQL backed).
      */
@@ -1023,6 +1052,150 @@ class MobileSqlBridgeController extends Controller
                     $request->merge([$field => $decoded]);
                 }
             }
+        }
+    }
+
+    public function getStorySettings(): JsonResponse
+    {
+        try {
+            $setting = DB::table('settings')
+                ->where('document_name', 'story')
+                ->first();
+
+            if (!$setting) {
+                return $this->error('Story settings not found', 404);
+            }
+
+            $array = (array)$setting;
+            unset($array['id'], $array['document_name']);
+            $jsonColumnValue = reset($array);
+
+            $settingsData = json_decode($jsonColumnValue, true);
+
+            return $this->success([
+                'videoDuration' => (double)($settingsData['videoDuration'] ?? 0),
+                'isEnabled' => (bool)($settingsData['isEnabled'] ?? false),
+            ]);
+        } catch (\Throwable $e) {
+            return $this->error('Error fetching settings: ' . $e->getMessage(), 500);
+        }
+    }
+
+    public function getActiveCurrency(): JsonResponse
+    {
+        try {
+            $currency = DB::table('currencies')
+                ->where('isActive', 1)
+                ->first();
+
+            // If no active currency → return default USD
+            if (!$currency) {
+                return $this->success([
+                    'id' => '',
+                    'code' => 'USD',
+                    'name' => 'US Dollar',
+                    'symbol' => '$',
+                    'decimalDigits' => 2,
+                    'symbolAtRight' => false,
+                    'enable' => true,
+                ]);
+            }
+
+            return $this->success([
+                'id' => $currency->id ?? '',
+                'code' => $currency->code ?? 'INR',
+                'name' => $currency->name ?? 'Indian Rupee',
+                'symbol' => $currency->symbol ?? '₹',
+                'decimalDigits' => isset($currency->decimalDigits)
+                    ? (int)$currency->decimalDigits
+                    : 2,
+                'symbolAtRight' => isset($currency->symbolAtRight)
+                    ? (bool)$currency->symbolAtRight
+                    : false,
+                'enable' => isset($currency->isActive)
+                    ? (bool)$currency->isActive
+                    : true,
+            ]);
+
+        } catch (\Throwable $e) {
+            return $this->error('Error fetching active currency: ' . $e->getMessage(), 500);
+        }
+    }
+
+
+
+    public function getLanguages(): JsonResponse
+    {
+        try {
+            $setting = DB::table('settings')
+                ->where('document_name', 'languages')
+                ->first();
+
+            if (!$setting) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Languages settings not found'
+                ], 404);
+            }
+
+            $array = (array) $setting;
+            unset($array['id'], $array['document_name']);
+            $jsonColumnValue = reset($array);
+
+            $settingsData = json_decode($jsonColumnValue, true);
+
+            $languages = $settingsData['list'] ?? [];
+
+            // Optional: Normalize types (because they are strings in DB)
+            $languages = array_map(function ($lang) {
+                return [
+                    'slug' => $lang['slug'] ?? '',
+                    'title' => $lang['title'] ?? '',
+                    'image' => $lang['image'] ?? '',
+                    'isActive' => filter_var($lang['isActive'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                    'is_rtl' => filter_var($lang['is_rtl'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                ];
+            }, $languages);
+
+            return response()->json([
+                "success" => true,
+                "data" => $languages
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching languages: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+
+
+    public function getRestaurantSettings(): JsonResponse
+    {
+        try {
+            $setting = DB::table('settings')
+                ->where('document_name', 'restaurant')
+                ->first();
+
+            if (!$setting) {
+                return $this->error('Story settings not found', 404);
+            }
+
+            $array = (array)$setting;
+            unset($array['id'], $array['document_name']);
+            $jsonColumnValue = reset($array);
+
+            $settingsData = json_decode($jsonColumnValue, true);
+
+            return $this->success([
+                'subscription_model' => (bool)($settingsData['subscription_model'] ?? false),
+                'auto_approve_restaurant' => (bool)($settingsData['auto_approve_restaurant'] ?? false),
+            ]);
+        } catch (\Throwable $e) {
+            return $this->error('Error fetching settings: ' . $e->getMessage(), 500);
         }
     }
 }

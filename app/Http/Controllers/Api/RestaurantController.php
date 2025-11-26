@@ -262,6 +262,7 @@ class RestaurantController extends Controller
             'reviewsCount' => (int) ($restaurant->reviewsCount ?? 0),
             'reviewsSum' => (float) ($restaurant->reviewsSum ?? 0),
             'reviewsAverage' => $reviewsAverage,
+            'workingHours' => json_decode($restaurant->workingHours ?? ''),
             'restaurantCost' => $restaurant->restaurantCost ?? $restaurant->DeliveryCharge ?? '0',
             'createdAt' => $restaurant->createdAt ?? $restaurant->created_at ?? now()->toISOString(),
             'photo' => $restaurant->photo ?? $restaurant->categoryPhoto ?? $restaurant->photos ?? '',
@@ -412,5 +413,10 @@ class RestaurantController extends Controller
             ], 500);
         }
     }
+
+
 }
+
+
+
 

@@ -502,30 +502,30 @@ class SettingsApiController extends Controller
     {
         try {
             // Default structure (ensures consistent response)
-            $defaultData = [
-                'base_delivery_charge' => 234,
-                'minimum_delivery_charges' => null,
-                'minimum_delivery_charges_within_km' => null,
-                'delivery_charges_per_km' => null,
-                'amount' => null,
-                'item_total_threshold' => 1994,
-                'vendor_can_modify' => false,
-                'per_km_charge_above_free_distance' => 74,
-                'free_delivery_distance_km' => 54,
-            ];
+//            $defaultData = [
+//                'base_delivery_charge' => 234,
+//                'minimum_delivery_charges' => null,
+//                'minimum_delivery_charges_within_km' => null,
+//                'delivery_charges_per_km' => null,
+//                'amount' => null,
+//                'item_total_threshold' => 1994,
+//                'vendor_can_modify' => false,
+//                'per_km_charge_above_free_distance' => 74,
+//                'free_delivery_distance_km' => 54,
+//            ];
 
             // Fetch record from DB
             $setting = DB::table('settings')
                 ->where('document_name', 'DeliveryCharge')
                 ->first();
 
-            $data = $defaultData;
+//            $data = $defaultData;
 
             if ($setting && !empty($setting->fields)) {
                 $decoded = json_decode($setting->fields, true);
                 if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
                     // Merge DB values with defaults (DB overrides defaults)
-                    $data = array_merge($defaultData, $decoded);
+                    $data = array_merge( $decoded);
                 } else {
                     Log::warning('Invalid JSON format in DeliveryCharge settings, using defaults.');
                 }

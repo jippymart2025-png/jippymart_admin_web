@@ -3,9 +3,16 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\restaurant_orders;
+use App\Models\restaurants_orders;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
+
+
 
 class restaurantControllerLogin extends Controller
 {
@@ -18,7 +25,6 @@ class restaurantControllerLogin extends Controller
 
         // Check if user exists
         $user = User::where("email", $request->email)->first();
-
         if (!$user) {
             return response()->json([
                 "success" => false,
@@ -26,7 +32,7 @@ class restaurantControllerLogin extends Controller
             ], 404);
         }
 
-        // Check driver role only
+        // Allow only vendor login
         if ($user->role !== "vendor") {
             return response()->json([
                 "success" => false,
@@ -34,7 +40,7 @@ class restaurantControllerLogin extends Controller
             ], 403);
         }
 
-        // Check active
+        // Check active status
         if ((int)$user->active !== 1) {
             return response()->json([
                 "success" => false,
@@ -42,7 +48,7 @@ class restaurantControllerLogin extends Controller
             ], 403);
         }
 
-        // Check password
+        // Validate password
         if (!Hash::check($request->password, $user->password)) {
             return response()->json([
                 "success" => false,
@@ -52,9 +58,17 @@ class restaurantControllerLogin extends Controller
 
         // Update FCM token
         if ($request->has('fcmToken')) {
-            $user->fcm_token = $request->fcm_token;
-            $user->save();
+            $user->update([
+                'fcmToken' => $request->fcmToken
+            ]);
         }
+
+        /**
+         * 👉 JSON Decoding Fields
+         */
+        $user->shippingAddress       = !empty($user->shippingAddress)       ? json_decode($user->shippingAddress)       : null;
+        $user->userBankDetails       = !empty($user->userBankDetails)       ? json_decode($user->userBankDetails)       : null;
+        $user->subscriptionExpiryDate = !empty($user->subscriptionExpiryDate) ? json_decode($user->subscriptionExpiryDate) : null;
 
         return response()->json([
             "success" => true,
@@ -142,6 +156,146 @@ class restaurantControllerLogin extends Controller
         return $id;
     }
 
+
+    public function checkUserExists($uid)
+    {
+        try {
+            $exists = \DB::table('users')->where('firebase_id', $uid)->exists();
+
+            return response()->json([
+                'success' => true,
+                'exists' => $exists
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to check user',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function deleteUserById(Request $request)
+    {
+        try {
+            $request->validate([
+                'user_id' => 'required|string'
+            ]);
+
+            $userId = $request->input('user_id');
+
+            $user = DB::table('users')->where('firebase_id', $userId)->first();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found'
+                ], 404);
+            }
+
+            $vendorId = $user->vendorID ?? null;
+
+            if ($vendorId) {
+
+                // Delete coupons related to vendor
+                DB::table('coupons')->where('resturant_id', $vendorId)->delete();
+
+                // Delete food reviews related to vendor
+                DB::table('foods_review')->where('VendorId', $vendorId)->delete();
+
+                // Get vendor products
+                $vendorProducts = DB::table('vendor_products')
+                    ->where('vendorID', $vendorId)
+                    ->get();
+
+                foreach ($vendorProducts as $product) {
+
+                    // Delete favourite items for each product
+                    DB::table('favorite_item')
+                        ->where('product_id', $product->id)
+                        ->delete();
+                }
+
+                // Delete vendor products
+                DB::table('vendor_products')->where('vendorID', $vendorId)->delete();
+
+                // Delete vendor
+                DB::table('vendors')->where('id', $vendorId)->delete();
+            }
+
+            // Delete user
+            DB::table('users')->where('firebase_id', $userId)->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'User deleted successfully'
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error("Delete user error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong!',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+
+    public function getVendorOrders($vendorId)
+    {
+        try {
+            $orders = restaurants_orders::where('vendorID', $vendorId)
+                ->orderBy('createdAt', 'DESC')
+                ->get()
+                ->map(function ($order) {
+                    // Fix timestamp parsing
+                    try {
+                        $createdAt = Carbon::parse($order->createdAt)->toIso8601String();
+                    } catch (\Exception $e) {
+                        $createdAt = $order->createdAt; // fallback to raw string
+                    }
+
+                    return [
+                        'id' => $order->id,
+                        'vendorID' => $order->vendorID,
+                        'authorID' => $order->authorID,
+                        'driverID' => $order->driverID,
+                        'status' => $order->status,
+                        'payment_method' => $order->payment_method,
+                        'couponCode' => $order->couponCode,
+                        'deliveryCharge' => (float)$order->deliveryCharge,
+                        'discount' => (float)$order->discount,
+                        'tip_amount' => (float)$order->tip_amount,
+                        'ToPay' => (float)$order->ToPay,
+                        'toPayAmount' => (float)$order->toPayAmount,
+                        'adminCommission' => (float)$order->adminCommission,
+                        'adminCommissionType' => $order->adminCommissionType,
+                        'specialDiscount' => $order->specialDiscount,
+                        'products' => $order->products,
+                        'author' => $order->author,
+                        'address' => $order->address,
+                        'rejectedByDrivers' => $order->rejectedByDrivers,
+                        'scheduleTime' => $order->scheduleTime,
+                        'triggerDelivery' => $order->triggerDelivery,
+                        'notes' => $order->notes,
+                        'createdAt' => $createdAt,
+                    ];
+                });
+
+            return response()->json([
+                "success" => true,
+                "data" => $orders
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                "success" => false,
+                "message" => "Error fetching orders: " . $e->getMessage()
+            ], 500);
+        }
+    }
 
 
 

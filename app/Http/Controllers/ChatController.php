@@ -504,5 +504,48 @@ class ChatController extends Controller
             'message' => 'Chat deleted successfully'
         ]);
     }
+
+
+    //restaurant api
+
+    public function getAdminChats(Request $request)
+    {
+        $request->validate([
+            'restaurantId' => 'required|string'
+        ]);
+
+        $messages = ChatAdmin::where('chatType', 'admin')
+            ->where('restaurantId', $request->restaurantId)
+            ->orderBy('createdAt', 'DESC')
+            ->get();
+
+        return response()->json([
+            "success" => true,
+            "data" => $messages
+        ]);
+    }
+
+
+    public function getRestaurantChats(Request $request)
+    {
+        $request->validate([
+            'restaurantId' => 'required|string'
+        ]);
+
+        $messages = ChatRestaurant::where('chatType', 'restaurant')
+            ->where('restaurantId', $request->restaurantId)
+            ->orderBy('createdAt', 'DESC')
+            ->get();
+
+        return response()->json([
+            "success" => true,
+            "data" => $messages
+        ]);
+    }
+
+
+
+
+
 }
 

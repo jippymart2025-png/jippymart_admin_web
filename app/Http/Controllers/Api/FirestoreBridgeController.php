@@ -80,12 +80,53 @@ class FirestoreBridgeController extends Controller
         $limit = (int) $request->query('limit', 50);
         $limit = max(1, min($limit, 200));
 
+        // Fetch orders
         $orders = DB::table('restaurant_orders')
             ->where('authorID', $authorId)
             ->orderByDesc(DB::raw("COALESCE(createdAt, '1970-01-01T00:00:00Z')"))
             ->limit($limit)
             ->get()
-            ->map(fn ($row) => $this->mapOrderRow((array) $row));
+            ->map(function ($row) {
+
+                $order = (array) $row;
+
+                // Decode JSON fields in order if any
+                $orderJsonFields = ['specialDiscount', 'calculatedCharges', 'products', 'address', 'taxSetting'];
+                foreach ($orderJsonFields as $field) {
+                    if (isset($order[$field]) && is_string($order[$field])) {
+                        $order[$field] = json_decode($order[$field], true);
+                    }
+                }
+
+                // Fetch vendor data
+                $vendor = DB::table('vendors')
+                    ->where('id', $order['vendorID'])
+                    ->first();
+
+                if ($vendor) {
+                    $vendor = (array) $vendor;
+
+                    // Decode all relevant vendor JSON fields
+                    $vendorJsonFields = [
+                        'photos', 'categoryID', 'workingHours', 'restaurantMenuPhotos',
+                        'categoryTitle', 'filters', 'specialDiscount', 'adminCommission',
+                        'g', 'coordinates', 'lastAutoScheduleUpdate'
+                    ];
+
+                    foreach ($vendorJsonFields as $field) {
+                        if (isset($vendor[$field]) && is_string($vendor[$field])) {
+                            $vendor[$field] = json_decode($vendor[$field], true);
+                        }
+                    }
+
+                    $order['vendor'] = $vendor;
+                } else {
+                    $order['vendor'] = null;
+                }
+
+                // Map the order row if you have other mapping logic
+                return $this->mapOrderRow($order);
+            });
 
         return $this->success([
             'orders' => $orders,
