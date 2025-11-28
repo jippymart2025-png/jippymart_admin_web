@@ -487,7 +487,6 @@
                         var specialDiscount = snapshotsProducts.specialDiscount;
                         var intRegex = /^\d+$/;
                         var floatRegex = /^((\d+(\.\d+)?)|((\d+\.)?\d+))$/;
-                        var baseDeliveryCharge = 23; // default, override with settings if available
                         var gstRate = 18;
                         var sgstRate = 5;
                         var subtotal = 0;
@@ -526,15 +525,7 @@
                         var sgst = subtotal * (sgstRate / 100); // SGST on subtotal only
                         var gst = 0;
                         if (parseFloat(deliveryCharge) > 0) {
-                            // If delivery charge equals base delivery charge (₹23), only calculate GST once
-                            if (parseFloat(deliveryCharge) === baseDeliveryCharge) {
-                                gst = baseDeliveryCharge * (gstRate / 100); // 18% of base delivery charge only
-                            } else {
-                                // If delivery charge is different from base delivery charge, calculate GST on actual delivery charge + base delivery charge
-                                gst = (parseFloat(deliveryCharge) * (gstRate / 100)) + (baseDeliveryCharge * (gstRate / 100)); // 18% of delivery charge + 18% of base delivery charge
-                            }
-                        } else {
-                            gst = baseDeliveryCharge * (gstRate / 100); // 18% of base delivery charge only
+                            gst = parseFloat(deliveryCharge) * (gstRate / 100); // GST only when delivery charge exists
                         }
 
                         var total_tax_amount = sgst + gst;
@@ -624,7 +615,6 @@
                         // Reference: buildHTMLProductstotal from edit.blade.php
                         var intRegex = /^\d+$/;
                         var floatRegex = /^((\d+(\.\d+)?)|((\d+\.)?\d+))$/;
-                        var baseDeliveryCharge = 23; // default, same as edit.blade.php
                         var gstRate = 18;
                         var sgstRate = 5;
                         var subtotal = 0;
@@ -678,22 +668,12 @@
                         console.log('=== fillPrintOrderSummary Debug ===');
                         console.log('restaurantorders deliveryCharge:', order.deliveryCharge);
                         console.log('Final deliveryCharge:', deliveryCharge);
-                        console.log('Base delivery charge:', baseDeliveryCharge);
                         console.log('GST calculation logic:');
                         console.log('- Delivery charge:', deliveryCharge);
-                        console.log('- Base delivery charge:', baseDeliveryCharge);
                         console.log('- GST rate:', gstRate + '%');
 
                         if (parseFloat(deliveryCharge) > 0) {
-                            // If delivery charge equals base delivery charge (₹23), only calculate GST once
-                            if (parseFloat(deliveryCharge) === baseDeliveryCharge) {
-                                gst = baseDeliveryCharge * (gstRate / 100); // 18% of base delivery charge only
-                            } else {
-                                // If delivery charge is different from base delivery charge, calculate GST on actual delivery charge + base delivery charge
-                                gst = (parseFloat(deliveryCharge) * (gstRate / 100)) + (baseDeliveryCharge * (gstRate / 100)); // 18% of delivery charge + 18% of base delivery charge
-                            }
-                        } else {
-                            gst = baseDeliveryCharge * (gstRate / 100); // 18% of base delivery charge only
+                            gst = parseFloat(deliveryCharge) * (gstRate / 100); // GST only when delivery charge is non-zero
                         }
 
                         var total_tax_amount = sgst + gst;

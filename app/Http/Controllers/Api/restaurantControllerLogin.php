@@ -250,44 +250,99 @@ class restaurantControllerLogin extends Controller
                 ->orderBy('createdAt', 'DESC')
                 ->get()
                 ->map(function ($order) {
-                    // Fix timestamp parsing
-                    try {
-                        $createdAt = Carbon::parse($order->createdAt)->toIso8601String();
-                    } catch (\Exception $e) {
-                        $createdAt = $order->createdAt; // fallback to raw string
+
+                    // Fetch vendor details
+                    $vendor = DB::table('vendors')->where('id', $order->vendorID)->first();
+
+
+                    // Date render - Format like "Oct 1, 2025 11:27 PM"
+                    // Date render - Format like "Oct 1, 2025 11:27 PM"
+                    $dateText = '';
+
+                    if (!empty($order->createdAt)) {
+                        try {
+                            // Parse ISO 8601 string (e.g., "2025-10-14T14:53:43.860219Z")
+                            $date = \Carbon\Carbon::parse($order->createdAt)
+                                ->setTimezone('Asia/Kolkata');
+
+                            $dateText = $date->format('M j, Y g:i A'); // Output Example: Oct 1, 2025 11:27 PM
+
+                        } catch (\Throwable $e) {
+                            \Log::warning('⚠️ Date parsing failed:', [
+                                'date' => $order->createdAt,
+                                'error' => $e->getMessage()
+                            ]);
+
+                            $dateText = (string) $order->createdAt; // fallback
+                        }
                     }
 
+
+                    $vendorData = $vendor ? [
+                        "id" => $vendor->id,
+                        "title" => $vendor->title,
+                        "phonenumber" => $vendor->phonenumber,
+//                        "email" => $vendor->email ?? null,
+                        "description" => $vendor->description,
+                        "address" => $vendor->location,
+                        "categoryID" => $vendor->categoryID,
+                        "categoryTitle" => $vendor->categoryTitle,
+                        "zoneId" => $vendor->zoneId,
+                        "zone_slug" => $vendor->zone_slug,
+                        "cuisineID" => $vendor->cuisineID,
+                        "cuisineTitle" => $vendor->cuisineTitle,
+                        "longitude" => $vendor->longitude,
+                        "latitude" => $vendor->latitude,
+                        "walletAmount" => (float) $vendor->walletAmount,
+                        "restaurantCost" => $vendor->restaurantCost,
+                        "author" => $vendor->author,
+                        "isOpen" => (bool) $vendor->isOpen,
+                        "reststatus" => (bool) $vendor->reststatus,
+                        "publish" => (bool) $vendor->publish,
+                        "isSelfDelivery" => (bool) $vendor->isSelfDelivery,
+                        "specialDiscountEnable" => (bool) $vendor->specialDiscountEnable,
+                        "workingHours" => json_decode($vendor->workingHours, true),
+                        "photos" => json_decode($vendor->photos, true),
+                        "categoryPhoto" => $vendor->categoryPhoto,
+                        "restaurantMenuPhotos" => $vendor->restaurantMenuPhotos,
+                        "reviewsCount" => $vendor->reviewsCount,
+                        "reviewsSum" => $vendor->reviewsSum,
+                        "subscriptionPlanId" => $vendor->subscriptionPlanId,
+                        "subscriptionTotalOrders" => $vendor->subscriptionTotalOrders,
+                        "subscription_plan" => $vendor->subscription_plan,
+                        "subscriptionExpiryDate" => $vendor->subscriptionExpiryDate,
+                    ] : null;
+
                     return [
-                        'id' => $order->id,
-                        'vendorID' => $order->vendorID,
-                        'authorID' => $order->authorID,
-                        'driverID' => $order->driverID,
-                        'status' => $order->status,
-                        'payment_method' => $order->payment_method,
-                        'couponCode' => $order->couponCode,
-                        'deliveryCharge' => (float)$order->deliveryCharge,
-                        'discount' => (float)$order->discount,
-                        'tip_amount' => (float)$order->tip_amount,
-                        'ToPay' => (float)$order->ToPay,
-                        'toPayAmount' => (float)$order->toPayAmount,
-                        'adminCommission' => (float)$order->adminCommission,
+                        'id'                => $order->id,
+                        'vendorID'          => $order->vendorID,
+                        'vendor'            => $vendorData,
+                        'authorID'          => $order->authorID,
+                        'driverID'          => $order->driverID,
+                        'status'            => $order->status,
+                        'payment_method'    => $order->payment_method,
+                        'couponCode'        => $order->couponCode,
+                        'deliveryCharge'    => (float)$order->deliveryCharge,
+                        'discount'          => (float)$order->discount,
+                        'tip_amount'        => (float)$order->tip_amount,
+                        'ToPay'             => (float)$order->ToPay,
+                        'toPayAmount'       => (float)$order->toPayAmount,
+                        'adminCommission'   => (float)$order->adminCommission,
                         'adminCommissionType' => $order->adminCommissionType,
-                        'specialDiscount' => $order->specialDiscount,
-                        'products' => $order->products,
-                        'author' => $order->author,
-                        'address' => $order->address,
+                        'specialDiscount'   => is_string($order->specialDiscount) ? json_decode($order->specialDiscount, true) : $order->specialDiscount,
+                        'products'          => is_string($order->products) ? json_decode($order->products, true) : $order->products,
+                        'author'            => is_string($order->author) ? json_decode($order->author, true) : $order->author,
+                        'address'           => is_string($order->address) ? json_decode($order->address, true) : $order->address,
                         'rejectedByDrivers' => $order->rejectedByDrivers,
-                        'scheduleTime' => $order->scheduleTime,
-                        'triggerDelivery' => $order->triggerDelivery,
-                        'notes' => $order->notes,
-                        'createdAt' => $createdAt,
+                        'scheduleTime'      => $order->scheduleTime,
+                        'triggerDelivery'   => $order->triggerDelivery,
+                        'notes'             => $order->notes,
+                        'createdAt' => $dateText,
+                    // ⬅ EXACT OUTPUT
                     ];
                 });
 
-            return response()->json([
-                "success" => true,
-                "data" => $orders
-            ]);
+            return response()->json(["success" => true, "data" => $orders]);
 
         } catch (\Throwable $e) {
             return response()->json([

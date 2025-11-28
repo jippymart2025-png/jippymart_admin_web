@@ -85,6 +85,7 @@ class OrderController extends Controller
         $order->address = !empty($order->address) ? json_decode($order->address, true) : [];
         $order->vendor = !empty($order->vendor) ? json_decode($order->vendor, true) : [];
         $order->specialDiscount = !empty($order->specialDiscount) ? json_decode($order->specialDiscount, true) : null;
+        $order->calculatedCharges = $this->decodeJsonField($order->calculatedCharges ?? null);
 
         // Load currency settings
         $currency = DB::table('currencies')
@@ -109,6 +110,9 @@ class OrderController extends Controller
                 ->select('id', 'firstName', 'lastName', 'phoneNumber', 'email')
                 ->get();
         }
+
+        // Mirror mobile app billing logic for admin view
+        $order->calculatedBillDetails = $this->calculateOrderBillDetails($order);
 
         return view('orders.edit', compact('order', 'currency', 'zones', 'availableDrivers', 'id'));
     }
@@ -513,6 +517,456 @@ class OrderController extends Controller
             ->get(['id', 'name']);
 
         return view('orders.index', compact('status', 'id', 'zones'));
+    }
+
+    private function calculateOrderBillDetails($order): array
+    {
+        $defaults = [
+            'subTotal' => 0.0,
+            'deliveryCharges' => 0.0,
+            'originalDeliveryFee' => 0.0,
+            'couponAmount' => 0.0,
+            'specialDiscountAmount' => 0.0,
+            'taxAmount' => 0.0,
+            'deliveryTips' => $this->floatValue($order->tip_amount ?? 0),
+            'totalAmount' => 0.0,
+            'isFreeDelivery' => false,
+            'totalDistance' => 0.0,
+            'hasPromotionalItems' => false,
+        ];
+
+        $products = is_array($order->products) ? $order->products : [];
+        if (empty($products)) {
+            return $defaults;
+        }
+
+        $products = array_map(function ($product) {
+            return is_array($product) ? $product : (array) $product;
+        }, $products);
+
+        $vendorData = is_array($order->vendor) ? $order->vendor : (array) ($order->vendor ?? []);
+        $deliveryConfig = $this->getDeliveryChargeSettings();
+        $vendorDelivery = [];
+        if (!empty($vendorData['DeliveryCharge'])) {
+            $vendorDelivery = is_array($vendorData['DeliveryCharge'])
+                ? $vendorData['DeliveryCharge']
+                : $this->decodeJsonField($vendorData['DeliveryCharge'], []);
+        }
+        if (!empty($vendorDelivery)) {
+            $vendorDelivery = array_filter($vendorDelivery, function ($value) {
+                return $value !== null && $value !== '';
+            });
+            $deliveryConfig = array_merge($deliveryConfig, $vendorDelivery);
+        }
+
+        $threshold = (float) ($deliveryConfig['item_total_threshold'] ?? 299.0);
+        $baseCharge = (float) ($deliveryConfig['base_delivery_charge'] ?? 23.0);
+        $freeKm = (float) ($deliveryConfig['free_delivery_distance_km'] ?? 5.0);
+        $perKm = (float) ($deliveryConfig['per_km_charge_above_free_distance'] ?? 7.0);
+
+        $subTotal = 0.0;
+        $promotionalProducts = [];
+
+        foreach ($products as $product) {
+            $priceValue = $this->floatValue($product['price'] ?? 0);
+            $discountPriceValue = $this->floatValue($product['discountPrice'] ?? 0);
+            $promoId = $product['promoId'] ?? ($product['promo_id'] ?? null);
+            $hasPromo = !empty($promoId);
+            $isPricePromotional = $priceValue > 0 && $discountPriceValue > 0 && $priceValue < $discountPriceValue;
+            $isPromotional = $hasPromo || $isPricePromotional;
+
+            if ($isPromotional) {
+                $promotionalProducts[] = $product;
+            }
+
+            if ($isPromotional) {
+                if ($priceValue > 0 && $discountPriceValue > 0) {
+                    $itemPrice = min($priceValue, $discountPriceValue);
+                } elseif ($discountPriceValue > 0) {
+                    $itemPrice = $discountPriceValue;
+                } else {
+                    $itemPrice = $priceValue;
+                }
+            } elseif ($discountPriceValue <= 0) {
+                $itemPrice = $priceValue;
+            } else {
+                $itemPrice = $discountPriceValue;
+            }
+
+            $quantity = $this->floatValue($product['quantity'] ?? 1);
+            if ($quantity <= 0) {
+                $quantity = 1;
+            }
+            $extrasPrice = $this->floatValue($product['extrasPrice'] ?? ($product['extras_price'] ?? 0));
+            $itemTotal = ($itemPrice * $quantity) + ($extrasPrice * $quantity);
+            $subTotal += $itemTotal;
+        }
+
+        $hasPromotionalItems = !empty($promotionalProducts);
+        $deliveryTips = $this->floatValue($order->tip_amount ?? 0);
+        $totalDistance = $this->resolveTotalDistanceKm($order);
+        $vendorId = $order->vendorID ?? ($vendorData['id'] ?? null);
+        $selfDeliveryFeature = $this->isSelfDeliveryFeatureEnabled();
+        $vendorSelfDelivery = $this->boolValue($vendorData['isSelfDelivery'] ?? false);
+
+        $deliveryCharges = 0.0;
+        $originalDeliveryFee = $baseCharge;
+        $promotionDetails = null;
+
+        if ($vendorSelfDelivery && $selfDeliveryFeature) {
+            $deliveryCharges = 0.0;
+            $originalDeliveryFee = 0.0;
+        } elseif ($hasPromotionalItems) {
+            $firstPromotionalProduct = (array) $promotionalProducts[0];
+            $promoProductId = $firstPromotionalProduct['id'] ?? ($firstPromotionalProduct['product_id'] ?? null);
+            $promotionDetails = $this->fetchPromotionDetails($promoProductId, $vendorId);
+
+            if ($promotionDetails) {
+                $promoFreeKm = (float) ($promotionDetails['free_delivery_km'] ?? $freeKm);
+                $promoExtraKmCharge = (float) ($promotionDetails['extra_km_charge'] ?? $perKm);
+
+                if ($totalDistance <= $promoFreeKm) {
+                    $deliveryCharges = 0.0;
+                    $originalDeliveryFee = $baseCharge;
+                } else {
+                    $extraKm = max(0.0, ceil($totalDistance - $promoFreeKm));
+                    $deliveryCharges = $extraKm * $promoExtraKmCharge;
+                    $originalDeliveryFee = $deliveryCharges;
+                }
+            } else {
+                [$deliveryCharges, $originalDeliveryFee] = $this->calculateRegularDeliveryCharges(
+                    $subTotal,
+                    $threshold,
+                    $totalDistance,
+                    $freeKm,
+                    $baseCharge,
+                    $perKm
+                );
+            }
+        } else {
+            [$deliveryCharges, $originalDeliveryFee] = $this->calculateRegularDeliveryCharges(
+                $subTotal,
+                $threshold,
+                $totalDistance,
+                $freeKm,
+                $baseCharge,
+                $perKm
+            );
+        }
+
+        $couponAmount = 0.0;
+        if (!$hasPromotionalItems && !empty($order->couponId)) {
+            $couponAmount = $this->floatValue($order->discount ?? 0);
+        }
+        $couponAmount = max(0.0, min($couponAmount, $subTotal));
+
+        $specialDiscountData = is_array($order->specialDiscount) ? $order->specialDiscount : (array) ($order->specialDiscount ?? []);
+        $specialDiscountAmount = $this->floatValue($specialDiscountData['special_discount'] ?? 0);
+        $specialDiscountCap = max(0.0, $subTotal - $couponAmount);
+        $specialDiscountAmount = max(0.0, min($specialDiscountAmount, $specialDiscountCap));
+
+        $sgst = $subTotal * 0.05;
+        $gst = $deliveryCharges > 0 ? ($deliveryCharges * 0.18) : 0.0;
+
+        if (!is_finite($sgst) || $sgst < 0) {
+            $sgst = 0.0;
+        }
+        if (!is_finite($gst) || $gst < 0) {
+            $gst = 0.0;
+        }
+
+        $taxAmount = $sgst + $gst;
+        if (!is_finite($taxAmount) || $taxAmount < 0) {
+            $taxAmount = 0.0;
+        }
+
+        $isFreeDelivery = false;
+        if ($hasPromotionalItems) {
+            if ($promotionDetails && isset($promotionDetails['free_delivery_km'])) {
+                if ($totalDistance <= (float) $promotionDetails['free_delivery_km']) {
+                    $isFreeDelivery = true;
+                }
+            } elseif ($subTotal >= $threshold && $totalDistance <= $freeKm) {
+                $isFreeDelivery = true;
+            }
+        } else {
+            if ($subTotal >= $threshold && $totalDistance <= $freeKm) {
+                $isFreeDelivery = true;
+            }
+        }
+
+        $netSubtotal = max(0.0, $subTotal - $couponAmount - $specialDiscountAmount);
+        $totalAmount = $netSubtotal + $taxAmount + ($isFreeDelivery ? 0.0 : $deliveryCharges) + $deliveryTips;
+        $totalAmount = max(0.0, $totalAmount);
+
+        return [
+            'subTotal' => round($subTotal, 2),
+            'deliveryCharges' => round($deliveryCharges, 2),
+            'originalDeliveryFee' => round($originalDeliveryFee, 2),
+            'couponAmount' => round($couponAmount, 2),
+            'specialDiscountAmount' => round($specialDiscountAmount, 2),
+            'taxAmount' => round($taxAmount, 2),
+            'deliveryTips' => round($deliveryTips, 2),
+            'totalAmount' => round($totalAmount, 2),
+            'isFreeDelivery' => $isFreeDelivery,
+            'totalDistance' => round($totalDistance, 2),
+            'hasPromotionalItems' => $hasPromotionalItems,
+        ];
+    }
+
+    private function getDeliveryChargeSettings(): array
+    {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+
+        $defaults = [
+            'base_delivery_charge' => 23,
+            'free_delivery_distance_km' => 5,
+            'per_km_charge_above_free_distance' => 7,
+            'item_total_threshold' => 299,
+        ];
+
+        $record = DB::table('settings')->where('document_name', 'DeliveryCharge')->first();
+        if ($record && !empty($record->fields)) {
+            $decoded = json_decode($record->fields, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                $filtered = array_filter($decoded, function ($value) {
+                    return $value !== null && $value !== '';
+                });
+                $cache = array_merge($defaults, $filtered);
+                return $cache;
+            }
+        }
+
+        return $cache = $defaults;
+    }
+
+    private function isSelfDeliveryFeatureEnabled(): bool
+    {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+
+        $record = DB::table('settings')->where('document_name', 'globalSettings')->first();
+        if ($record && !empty($record->fields)) {
+            $decoded = json_decode($record->fields, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && array_key_exists('isSelfDelivery', $decoded)) {
+                return $cache = (bool) $decoded['isSelfDelivery'];
+            }
+        }
+
+        return $cache = false;
+    }
+
+    private function fetchPromotionDetails(?string $productId, ?string $vendorId): ?array
+    {
+        if (empty($productId) || empty($vendorId)) {
+            return null;
+        }
+
+        try {
+            $promotion = DB::table('promotions')
+                ->where('product_id', $productId)
+                ->where('restaurant_id', $vendorId)
+                ->where('isAvailable', 1)
+                ->orderByDesc('id')
+                ->first();
+
+            if (!$promotion) {
+                return null;
+            }
+
+            $now = Carbon::now();
+            if (!empty($promotion->start_time)) {
+                try {
+                    if (Carbon::parse($promotion->start_time)->gt($now)) {
+                        return null;
+                    }
+                } catch (\Throwable $e) {
+                }
+            }
+            if (!empty($promotion->end_time)) {
+                try {
+                    if (Carbon::parse($promotion->end_time)->lt($now)) {
+                        return null;
+                    }
+                } catch (\Throwable $e) {
+                }
+            }
+
+            $config = $this->getDeliveryChargeSettings();
+
+            return [
+                'free_delivery_km' => (float) ($promotion->free_delivery_km ?? $config['free_delivery_distance_km']),
+                'extra_km_charge' => (float) ($promotion->extra_km_charge ?? $config['per_km_charge_above_free_distance']),
+            ];
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function calculateRegularDeliveryCharges(
+        float $subTotal,
+        float $threshold,
+        float $distance,
+        float $freeKm,
+        float $baseCharge,
+        float $perKm
+    ): array {
+        $deliveryCharges = 0.0;
+        $originalDeliveryFee = $baseCharge;
+
+        if ($subTotal < $threshold) {
+            if ($distance <= $freeKm) {
+                $deliveryCharges = $baseCharge;
+                $originalDeliveryFee = $baseCharge;
+            } else {
+                $extraKm = max(0.0, ceil($distance - $freeKm));
+                $deliveryCharges = $baseCharge + ($extraKm * $perKm);
+                $originalDeliveryFee = $deliveryCharges;
+            }
+        } else {
+            if ($distance <= $freeKm) {
+                $deliveryCharges = 0.0;
+                $originalDeliveryFee = $baseCharge;
+            } else {
+                $extraKm = max(0.0, ceil($distance - $freeKm));
+                $deliveryCharges = $extraKm * $perKm;
+                $originalDeliveryFee = $baseCharge + ($extraKm * $perKm);
+            }
+        }
+
+        return [max(0.0, $deliveryCharges), max(0.0, $originalDeliveryFee)];
+    }
+
+    private function resolveTotalDistanceKm($order): float
+    {
+        $candidates = [];
+        if (is_array($order->calculatedCharges ?? null)) {
+            $candidates[] = $order->calculatedCharges;
+        }
+        $distanceKeys = ['total_distance', 'distance', 'distance_km', 'delivery_distance', 'distanceKm', 'km'];
+        foreach ($candidates as $payload) {
+            foreach ($distanceKeys as $key) {
+                $value = data_get($payload, $key);
+                if (is_numeric($value)) {
+                    $dist = (float) $value;
+                    if ($dist > 0) {
+                        return $dist;
+                    }
+                }
+            }
+        }
+
+        $addressDistance = data_get($order->address ?? [], 'distance');
+        if (is_numeric($addressDistance)) {
+            return max(0.0, (float) $addressDistance);
+        }
+
+        $addressLat = $this->resolveCoordinate($order->address ?? [], ['location.latitude', 'latitude', 'lat']);
+        $addressLng = $this->resolveCoordinate($order->address ?? [], ['location.longitude', 'longitude', 'lng', 'lon']);
+        $vendorLat = $this->resolveCoordinate($order->vendor ?? [], [
+            'coordinates.latitude',
+            'location.latitude',
+            'latitude',
+            'lat',
+            'g.geopoint.latitude'
+        ]);
+        $vendorLng = $this->resolveCoordinate($order->vendor ?? [], [
+            'coordinates.longitude',
+            'location.longitude',
+            'longitude',
+            'lng',
+            'g.geopoint.longitude'
+        ]);
+
+        if ($addressLat !== null && $addressLng !== null && $vendorLat !== null && $vendorLng !== null) {
+            return $this->haversineDistanceKm($addressLat, $addressLng, $vendorLat, $vendorLng);
+        }
+
+        return 0.0;
+    }
+
+    private function resolveCoordinate($source, array $paths): ?float
+    {
+        if (empty($source)) {
+            return null;
+        }
+        $data = is_array($source) ? $source : (array) $source;
+        foreach ($paths as $path) {
+            $value = data_get($data, $path);
+            if (is_numeric($value)) {
+                return (float) $value;
+            }
+        }
+        return null;
+    }
+
+    private function haversineDistanceKm(float $lat1, float $lon1, float $lat2, float $lon2): float
+    {
+        $earthRadius = 6371;
+        $latDelta = deg2rad($lat2 - $lat1);
+        $lonDelta = deg2rad($lon2 - $lon1);
+        $a = sin($latDelta / 2) ** 2 +
+            cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($lonDelta / 2) ** 2;
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+        return max(0.0, $earthRadius * $c);
+    }
+
+    private function floatValue($value): float
+    {
+        if (is_null($value)) {
+            return 0.0;
+        }
+
+        if (is_bool($value)) {
+            return $value ? 1.0 : 0.0;
+        }
+
+        if (is_numeric($value)) {
+            return (float) $value;
+        }
+
+        if (is_string($value)) {
+            $clean = preg_replace('/[^0-9\.\-]+/', '', $value);
+            if ($clean === '' || !is_numeric($clean)) {
+                return 0.0;
+            }
+            return (float) $clean;
+        }
+
+        return 0.0;
+    }
+
+    private function boolValue($value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        $normalized = strtolower((string) $value);
+        return in_array($normalized, ['1', 'true', 'yes', 'y', 'on'], true);
+    }
+
+    private function decodeJsonField($value, $default = [])
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if (!is_string($value)) {
+            return $default;
+        }
+        $trimmed = trim($value);
+        if ($trimmed === '' || strtolower($trimmed) === 'null') {
+            return $default;
+        }
+        $decoded = json_decode($trimmed, true);
+        if (json_last_error() === JSON_ERROR_NONE && $decoded !== null) {
+            return $decoded;
+        }
+        return $default;
     }
 
     private function extractNameFromJson($json)

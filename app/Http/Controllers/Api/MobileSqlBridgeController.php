@@ -225,8 +225,6 @@ class MobileSqlBridgeController extends Controller
      */
     public function createOrder(Request $request): JsonResponse
     {
-        $this->prepareOrderPayload($request);
-
         $validator = Validator::make($request->all(), [
             'author_id' => ['nullable', 'string'],
             'cart_items' => ['required', 'array', 'min:1'],
@@ -251,126 +249,111 @@ class MobileSqlBridgeController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->error('Validation failed', 422, $validator->errors()->toArray());
+            return $this->error('Validation failed', 422, (array)$validator->errors());
         }
 
         $authorId = $request->input('author_id') ?? $this->resolveUserId($request);
-
-        if (!$authorId) {
-            return $this->error('Author ID is required', 422);
-        }
+        if (!$authorId) return $this->error('Author ID is required', 422);
 
         $user = $this->resolveUser($authorId);
-        $authorPayload = $this->mapUserPayload($user, $this->normalizeArray($request->input('author')));
+        $authorPayload = $this->mapUserPayload($user);
 
-        $cartItems = array_values(array_map(fn ($item) => $this->normalizeArray($item), $request->input('cart_items', [])));
-        $selectedAddress = $this->normalizeArray($request->input('selected_address'));
+        $cartItems = $request->input('cart_items');
+        $selectedAddress = $request->input('selected_address');
+
         $specialDiscount = array_merge([
             'special_discount' => 0,
             'special_discount_label' => null,
-            'specialType' => null,
-        ], $this->normalizeArray($request->input('special_discount')));
-        $calculatedCharges = $this->normalizeArray($request->input('calculated_charges'));
-        $taxSetting = $this->normalizeArray($request->input('tax_setting'));
+            'specialType' => null
+        ], $request->input('special_discount', []));
 
         $deliveryCharges = (float) $request->input('delivery_charges', 0);
         $tipAmount = (float) $request->input('tip_amount', 0);
         $discount = (float) $request->input('discount', 0);
         $totalAmount = (float) $request->input('total_amount', 0);
         $surgePercent = (int) $request->input('surge_percent', 0);
-        $adminFeeInput = $request->input('admin_surge_fee');
-        $adminFee = $adminFeeInput !== null ? (int) $adminFeeInput : ($surgePercent > 0 ? $this->resolveAdminSurgeFeeValue() : 0);
+
+        // -------- Surge fee handling -------
+        $adminFee = $request->filled('admin_surge_fee')
+            ? (int) $request->admin_surge_fee
+            : ($surgePercent > 0 ? $this->resolveAdminSurgeFeeValue() : 0);
+
         $totalSurgeFee = $surgePercent + $adminFee;
 
-        $scheduleTimeIso = $request->filled('schedule_time')
-            ? $this->toIsoString(Carbon::parse($request->input('schedule_time')))
+        // -------- Schedule Date ----------
+        $scheduleTime = $request->filled('schedule_time')
+            ? Carbon::parse($request->schedule_time)->toISOString()
             : null;
 
-        $vendorContext = $this->resolveVendorContext($request->input('vendor_id'));
-        $vendorModel = $vendorContext['model'];
-        $vendorPayload = $vendorContext['payload'];
+        // Vendor info resolve
+        $vendorContext = $this->resolveVendorContext($request->vendor_id);
         $adminCommission = $vendorContext['commission'];
 
-        try {
-            $this->assertVendorCapacity($vendorModel);
-        } catch (Throwable $e) {
-            return $this->error($e->getMessage(), 409);
-        }
-
         $orderId = $this->generateOrderId();
-        $nowIso = $this->toIsoString(Carbon::now());
+        $now = Carbon::now()->toISOString();
 
         $orderData = [
-            'id' => $orderId,
-            'triggerDelivery' => null,
-            'scheduleTime' => $scheduleTimeIso,
-            'estimatedTimeToPrepare' => $request->input('estimated_time_to_prepare'),
-            'notes' => $request->input('notes'),
-            'vendorID' => $vendorContext['id'],
-            'discount' => (string) $discount,
-            'deliveryCharge' => (string) $deliveryCharges,
-            'couponId' => $request->input('coupon_id') ?? '',
-            'authorID' => $authorId,
-            'adminCommission' => (string) $adminCommission['amount'],
-            'createdAt' => $nowIso,
-            'driverID' => null,
-            'driver' => null,
-            'rejectedByDrivers' => '[]',
-            'adminCommissionType' => $adminCommission['commissionType'],
-            'specialDiscount' => json_encode($specialDiscount, JSON_UNESCAPED_UNICODE),
-            'tip_amount' => (string) $tipAmount,
-            'takeAway' => $request->boolean('takeaway') ? 'true' : 'false',
-            'couponCode' => $request->input('coupon_code') ?? '',
-            'payment_method' => $request->input('payment_method'),
-            'ToPay' => (string) $totalAmount,
-            'status' => 'Order Placed',
-            'calculatedCharges' => empty($calculatedCharges) ? null : json_encode($calculatedCharges, JSON_UNESCAPED_UNICODE),
-            'products' => json_encode($cartItems, JSON_UNESCAPED_UNICODE),
-            'vendor' => null,
-            'address' => json_encode($selectedAddress, JSON_UNESCAPED_UNICODE),
-            'author' => json_encode($authorPayload, JSON_UNESCAPED_UNICODE),
-            'taxSetting' => empty($taxSetting) ? null : json_encode($taxSetting, JSON_UNESCAPED_UNICODE),
-            'orderAutoCancelAt' => null,
-            'toPayAmount' => $totalAmount,
-            'surge_fee' => (string) $totalSurgeFee,
+            'id'                    => $orderId,
+            'vendorID'              => $vendorContext['id'],
+            'authorID'              => $authorId,
+            'status'                => 'Order Placed',
+            'createdAt'             => $now,
+            'scheduleTime'          => $scheduleTime,
+            'deliveryCharge'        => $deliveryCharges,
+            'discount'              => $discount,
+            'tip_amount'            => $tipAmount,
+            'takeAway'              => $request->boolean('takeaway'),
+            'payment_method'        => $request->payment_method,
+            'couponId'              => $request->coupon_id ?? '',
+            'couponCode'            => $request->coupon_code ?? '',
+            'ToPay'                 => $totalAmount,
+            'toPayAmount'           => $totalAmount,
+            'surge_fee'             => $totalSurgeFee,
+            'adminCommission'       => (string) $adminCommission['amount'],
+            'adminCommissionType'   => $adminCommission['commissionType'],
+            'specialDiscount'       => json_encode($specialDiscount),
+            'calculatedCharges'     => $request->calculated_charges ? json_encode($request->calculated_charges) : null,
+            'taxSetting'            => $request->tax_setting ? json_encode($request->tax_setting) : null,
+            'products'              => json_encode($cartItems),
+            'address'               => json_encode($selectedAddress),
+            'author'                => json_encode($authorPayload),
+            'notes'                 => $request->notes,
         ];
 
         try {
-            DB::transaction(function () use ($orderData, $orderId, $surgePercent, $adminFee, $totalSurgeFee, $totalAmount, $authorId, $request) {
-                RestaurantOrder::query()->create($orderData);
+            DB::transaction(function () use ($orderData, $orderId, $totalAmount, $surgePercent, $adminFee, $request, $authorId) {
+
+                RestaurantOrder::create($orderData);
 
                 if ($request->filled('coupon_id')) {
-                    $this->storeCouponUsage($authorId, (string) $request->input('coupon_id'));
+                    $this->storeCouponUsage($authorId, $request->coupon_id);
                 }
 
                 DB::table('order_billing')->updateOrInsert(
                     ['orderId' => $orderId],
                     [
-                        'id' => (string) Str::uuid(),
-                        'createdAt' => $this->toIsoString(Carbon::now()),
-                        'orderId' => $orderId,
-                        'ToPay' => (string) $totalAmount,
-                        'serge_fee' => $surgePercent,
-                        'surge_fee' => $surgePercent,
-                        'admin_surge_fee' => (string) $adminFee,
-                        'total_surge_fee' => (string) $totalSurgeFee,
+                        'id'            => (string) Str::uuid(),
+                        'createdAt'     => now()->toISOString(),
+                        'orderId'       => $orderId,
+                        'ToPay'         => $totalAmount,
+                        'surge_fee'     => $surgePercent,
+                        'admin_surge_fee' => $adminFee,
+                        'total_surge_fee'=> $adminFee + $surgePercent,
                     ]
                 );
             });
-        } catch (Throwable $e) {
-            Log::error('Failed to create order', [
-                'order_id' => $orderId,
-                'error' => $e->getMessage(),
-            ]);
 
-            return $this->error('Failed to place order. Please try again.', 500);
+        } catch (\Throwable $e) {
+
+            Log::error('Order Failed', ['orderId' => $orderId, 'error' => $e->getMessage()]);
+            return $this->error('Failed to place order, try again later.', 500);
         }
 
         return $this->success([
-            'order_id' => $orderId,
-            'surge_fee' => $surgePercent,
-            'admin_surge_fee' => $adminFee,
-            'total_surge_fee' => $totalSurgeFee,
+            'order_id'          => $orderId,
+            'surge_fee'         => $surgePercent,
+            'admin_surge_fee'   => $adminFee,
+            'total_surge_fee'   => $totalSurgeFee
         ], 'Order placed successfully');
     }
 
@@ -789,24 +772,24 @@ class MobileSqlBridgeController extends Controller
     /**
      * Ensure vendor subscription capacity is available when required.
      */
-    protected function assertVendorCapacity(?Vendor $vendor): void
-    {
-        if (!$vendor) {
-            return;
-        }
-
-        $subscriptionEnabled = $this->isSubscriptionModelEnabled();
-        $commissionEnabled = $this->isAdminCommissionEnabled();
-
-        if (($subscriptionEnabled || $commissionEnabled) && $vendor->subscriptionPlanId) {
-            $remaining = $vendor->subscriptionTotalOrders;
-            if ($remaining === null || $remaining === '0' || (is_numeric($remaining) && (int) $remaining <= 0)) {
-                throw new \RuntimeException(
-                    'This vendor has reached their maximum order capacity. Please select a different vendor or try again later.'
-                );
-            }
-        }
-    }
+//    protected function assertVendorCapacity(?Vendor $vendor): void
+//    {
+//        if (!$vendor) {
+//            return;
+//        }
+//
+//        $subscriptionEnabled = $this->isSubscriptionModelEnabled();
+//        $commissionEnabled = $this->isAdminCommissionEnabled();
+//
+//        if (($subscriptionEnabled || $commissionEnabled) && $vendor->subscriptionPlanId) {
+//            $remaining = $vendor->subscriptionTotalOrders;
+//            if ($remaining === null || $remaining === '0' || (is_numeric($remaining) && (int) $remaining <= 0)) {
+//                throw new \RuntimeException(
+//                    'This vendor has reached their maximum order capacity. Please select a different vendor or try again later.'
+//                );
+//            }
+//        }
+//    }
 
     /**
      * Determine if a product belongs to mart module.

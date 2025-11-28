@@ -2247,7 +2247,6 @@
             var specialDiscount = snapshotsProducts.specialDiscount;
             var intRegex = /^\d+$/;
             var floatRegex = /^((\d+(\.\d+)?)|((\d+\.)?\d+))$/;
-            var baseDeliveryCharge = 23; // default, override with settings if available
             var perKmChargeAboveFreeDistance = 8;
             var freeDeliveryDistanceKm = 7;
             var itemTotalThreshold = 299;
@@ -2322,7 +2321,7 @@
             // // Debug delivery charge (same as print.blade.php)
             // console.log('=== buildHTMLProductstotal Debug ===');
             // console.log('Delivery charge from order data:', deliveryCharge);
-            // console.log('Base delivery charge:', baseDeliveryCharge);
+            // console.log('Using active delivery charge settings');
 
             // Initialize total_price with subtotal
             var total_price = subtotal;
@@ -2338,15 +2337,7 @@
             var sgst = subtotal * (sgstRate / 100); // 5% of subtotal only
             var gst = 0;
             if (parseFloat(deliveryCharge) > 0) {
-                // If delivery charge equals base delivery charge (₹23), only calculate GST once
-                if (parseFloat(deliveryCharge) === baseDeliveryCharge) {
-                    gst = baseDeliveryCharge * (gstRate / 100); // 18% of base delivery charge only
-                } else {
-                    // If delivery charge is different from base delivery charge, calculate GST on actual delivery charge + base delivery charge
-                    gst = (parseFloat(deliveryCharge) * (gstRate / 100)) + (baseDeliveryCharge * (gstRate / 100)); // 18% of delivery charge + 18% of base delivery charge
-                }
-            } else {
-                gst = baseDeliveryCharge * (gstRate / 100); // 18% of base delivery charge only
+                gst = parseFloat(deliveryCharge) * (gstRate / 100); // GST only on payable delivery charges
             }
 
             // Log tax calculations
@@ -2589,17 +2580,10 @@
                 var tip = parseFloat(order.tip_amount||0);
                 var sgstRate = 5, gstRate = 18;
                 var sgst = subtotal * (sgstRate/100);
-                // GST based on delivery like print page logic baseline 23
-                var baseDeliveryCharge = 23;
+                // GST should only be charged on payable delivery amounts
                 var gst = 0;
-                if(delivery>0){
-                    if(parseFloat(delivery)===baseDeliveryCharge){
-                        gst = baseDeliveryCharge * (gstRate/100);
-                    }else{
-                        gst = (delivery*(gstRate/100)) + (baseDeliveryCharge*(gstRate/100));
-                    }
-                }else{
-                    gst = baseDeliveryCharge * (gstRate/100);
+                if (delivery > 0) {
+                    gst = delivery * (gstRate / 100);
                 }
                 var total = subtotal - discount - special + sgst + gst + (delivery>0?delivery:0) + (tip>0?tip:0);
 

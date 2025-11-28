@@ -416,7 +416,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
 Route::post('/restaurant/login', [restaurantControllerLogin::class, 'restaurantLogin']);
 Route::post('/restaurant/signup', [restaurantControllerLogin::class, 'restaurantSignup']);
-Route::get('/restaurant/users/{firebase_id}', [restaurantUserController::class, 'getUserProfile']);
+Route::get('/restaurant/users/{firebase_id}', [restaurantUserController::class, 'getUserProfile'])
+    ->withoutMiddleware(['throttle:api']);
 Route::post('/restaurant/update-user-wallet', [WalletTransactionController::class, 'updateUserWallet']);
 Route::post('/restaurant/updateUser', [restaurantUserController::class, 'updateUser']);
 Route::post('/restaurant/updateUser', [restaurantUserController::class, 'updateDriverUser']);
@@ -440,9 +441,13 @@ Route::get('/settings/getStorySettings', [MobileSqlBridgeController::class, 'get
     Route::post('/restaurant/referral/add', [FirestoreUtilsController::class, 'referralAdd']);
 
     // Orders
-    Route::get('/restaurant/orders/{orderId}', [FirestoreUtilsController::class, 'getOrderByOrderId']);
-    Route::get('/restaurant/orders', [FirestoreUtilsController::class, 'getAllOrder']);
-    Route::post('/restaurant/orders', [FirestoreUtilsController::class, 'setOrder']);
+    Route::get('/restaurant/orders/{orderId}', [FirestoreUtilsController::class, 'getOrderByOrderId'])
+        ->withoutMiddleware(['throttle:api']);
+
+Route::get('/restaurant/orders', [FirestoreUtilsController::class, 'getAllOrder'])
+        ->withoutMiddleware(['throttle:api']);
+
+Route::post('/restaurant/orders', [FirestoreUtilsController::class, 'setOrder']);
     Route::post('/restaurant/orders/{orderId}', [FirestoreUtilsController::class, 'updateOrder']);
     Route::post('/restaurant/orders/wallet-credit', [FirestoreUtilsController::class, 'restaurantVendorWalletSet']);
 
@@ -477,8 +482,10 @@ Route::get('/settings/getStorySettings', [MobileSqlBridgeController::class, 'get
     Route::get('/settings/payment', [FirestoreUtilsController::class, 'getPaymentSettingsData']);
 
     // Vendors
-    Route::get('/restaurant/vendors/{vendorId}', [FirestoreUtilsController::class, 'getVendorById']);
-    Route::post('/restaurant/vendors', [FirestoreUtilsController::class, 'firebaseCreateNewVendor']);
+    Route::get('/restaurant/vendors/{vendorId}', [FirestoreUtilsController::class, 'getVendorById'])
+        ->withoutMiddleware(['throttle:api']);
+
+Route::post('/restaurant/vendors', [FirestoreUtilsController::class, 'firebaseCreateNewVendor']);
     Route::put('/restaurant/vendors/{vendorId}', [FirestoreUtilsController::class, 'updateVendor']);
 
     // Categories & Attributes

@@ -21,6 +21,11 @@ class restaurants_orders extends Model
         'takeAway' => 'boolean',
         'ToPay' => 'float',
         'toPayAmount' => 'float',
-        'createdAt' => 'float',
+        'createdAt' => 'string',
     ];
+
+    public function vendor()
+    {
+        return $this->belongsTo(Vendor::class, 'vendorID', 'id');
+    }
 }
