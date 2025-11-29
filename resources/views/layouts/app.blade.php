@@ -2540,9 +2540,11 @@
         function showNewOrderNotification(order) {
             const orderId = order?.id ?? "Unknown";
             const vendorTitle =
-                order?.vendor?.title ||
-                order?.vendorTitle ||
+                order?.vendor?.title ||          // Firestore JSON format
+                order?.vendor_title ||           // MySQL JOIN column (CORRECT FOR YOU)
+                order?.vendorTitle ||            // Some backends return CamelCase
                 "Restaurant";
+
 
             playNotificationSound();
 

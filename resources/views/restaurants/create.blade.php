@@ -866,7 +866,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                             </div>
 
                         </fieldset>
-                        <fieldset id="story_upload_div" style="display: none;">
+                        <fieldset id="story_upload_div">
                             <legend>Story</legend>
 
                             <div class="form-group row width-50 vendor_image">
@@ -1617,7 +1617,7 @@ foreach ($countries as $keycountry => $valuecountry) {
 
                 const MenuIMG = await storeMenuImageData();
                 console.log('Menu images stored successfully:', MenuIMG);
-
+                var createdAt = new Date().toISOString();
                 // Create restaurant data (no Firebase GeoPoint needed)
                 const restaurantData = {
                     'title': restaurantname,

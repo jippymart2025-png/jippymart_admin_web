@@ -6,7 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use App\Services\FirebaseImpersonationService;
+use App\Services\MySQLImpersonationService;
 
 class ImpersonationSecurityMiddleware
 {
@@ -14,7 +14,6 @@ class ImpersonationSecurityMiddleware
 
     public function __construct()
     {
-        $this->impersonationService = new FirebaseImpersonationService();
     }
 
     /**
@@ -45,22 +44,22 @@ class ImpersonationSecurityMiddleware
     {
         $adminId = auth()->id();
         $ip = $request->ip();
-        
+
         // Multiple rate limit keys for comprehensive protection
         $rateLimits = [
-            "impersonation_admin_{$adminId}" => ['max' => 10, 'window' => 3600], // 10/hour per admin
+            "impersonation_admin_{$adminId}" => ['max' => 100, 'window' => 3600], // 10/hour per admin
             "impersonation_ip_{$ip}" => ['max' => 20, 'window' => 3600],        // 20/hour per IP
             "impersonation_global" => ['max' => 100, 'window' => 3600]          // 100/hour global
         ];
-        
+
         foreach ($rateLimits as $key => $limit) {
             $attempts = Cache::get($key, 0);
-            
+
             if ($attempts >= $limit['max']) {
                 // Exponential backoff for repeated violations
                 $backoffTime = min(3600, pow(2, $attempts - $limit['max']) * 60);
                 Cache::put($key, $attempts + 1, now()->addSeconds($backoffTime));
-                
+
                 Log::warning('Impersonation rate limit exceeded', [
                     'admin_id' => $adminId,
                     'ip' => $ip,
@@ -72,7 +71,7 @@ class ImpersonationSecurityMiddleware
 
                 abort(429, 'Too many impersonation attempts. Please try again later.');
             }
-            
+
             Cache::put($key, $attempts + 1, now()->addSeconds($limit['window']));
         }
     }
@@ -95,7 +94,7 @@ class ImpersonationSecurityMiddleware
         // Check if request is from allowed origin
         $isValidOrigin = false;
         foreach ($allowedOrigins as $allowedOrigin) {
-            if (strpos($origin, $allowedOrigin) !== false || 
+            if (strpos($origin, $allowedOrigin) !== false ||
                 strpos($referer, $allowedOrigin) !== false ||
                 strpos($host, $allowedOrigin) !== false) {
                 $isValidOrigin = true;

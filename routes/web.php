@@ -83,14 +83,7 @@ Route::middleware(['permission:pending_vendors,pending.vendors.list'])->group(fu
 // Admin Impersonation Routes
 Route::middleware(['permission:restaurants,restaurants.impersonate', 'impersonation.security'])->group(function () {
     Route::post('/admin/impersonate/generate-token', [App\Http\Controllers\ImpersonationController::class, 'generateToken'])->name('admin.impersonate.generate');
-    Route::get('/admin/impersonate/restaurant-info', [App\Http\Controllers\ImpersonationController::class, 'getRestaurantInfo'])->name('admin.impersonate.info');
 });
-
-// Restaurant Panel Impersonation Handler (No auth required - handles custom tokens)
-Route::get('/auth/impersonate', function () {
-    return view('restaurant_auth_handler');
-})->name('restaurant.impersonate');
-
 // Mart controller Routes
 Route::middleware(['permission:marts,marts'])->group(function () {
     Route::get('/marts', [App\Http\Controllers\MartController::class, 'index'])->name('marts');
