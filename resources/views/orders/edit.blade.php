@@ -900,23 +900,6 @@
                     payment_shared = order.payment_shared;
                 }
 
-                // ========== PROMOTIONAL PRICING SYSTEM START ==========
-                console.log('🚀 ===== PROMOTIONAL PRICING SYSTEM STARTING =====');
-                console.log('🚀 This log should appear in console if code is reached');
-
-                // Calculate promotional totals first
-                console.log('💰 ===== CALCULATING PROMOTIONAL TOTALS FOR ORDER =====');
-                console.log('💰 restaurantorders ID:', order.id);
-                console.log('💰 restaurantorders vendor ID:', order.vendorID);
-                console.log('💰 restaurantorders products count:', order.products ? order.products.length : 0);
-                console.log('💰 restaurantorders products:', order.products);
-                console.log('💰 Current time:', new Date().toISOString());
-
-                console.log('🧪 ===== TESTING PROMOTIONAL PRICING FUNCTIONS =====');
-                console.log('🧪 testPromotionalPricing function exists:', typeof testPromotionalPricing);
-                console.log('🧪 getPromotionalPrice function exists:', typeof getPromotionalPrice);
-                console.log('🧪 buildHTMLProductsListWithPromotions function exists:', typeof buildHTMLProductsListWithPromotions);
-
                 let promotionalTotals = null;
                 try {
                     promotionalTotals = await calculatePromotionalTotals(productsSafe, vendorIDSafe);
@@ -946,9 +929,6 @@
                     console.error('❌ Test failed:', error);
                 }
 
-                // Build product list with promotional pricing
-                console.log('🎯 ===== BUILDING PRODUCT LIST WITH PROMOTIONS =====');
-                console.log('🎯 Testing promotional pricing for first product...');
                 if (productsSafe && productsSafe.length > 0) {
                     const testProduct = productsSafe[0];
                     console.log('🎯 TEST PRODUCT DETAILS:', {
@@ -961,11 +941,6 @@
 
                     try {
                         const testPriceInfo = await getPromotionalPrice(testProduct, order.vendorID);
-                        console.log('🎯 TEST RESULT - Product:', testProduct.name);
-                        console.log('🎯 TEST RESULT - Original Price:', testProduct.discountPrice || testProduct.price);
-                        console.log('🎯 TEST RESULT - Promotional Price:', testPriceInfo.price);
-                        console.log('🎯 TEST RESULT - Is Promotional:', testPriceInfo.isPromotional);
-                        console.log('🎯 TEST RESULT - Full Price Info:', testPriceInfo);
                     } catch (error) {
                         console.error('❌ Test price info failed:', error);
                     }
@@ -1009,6 +984,9 @@
                 // Firebase vendor fetch removed; vendor details already filled from MySQL above
                 tip_amount = order.tip_amount;
                 jQuery("#data-table_processing").hide();
+                
+                // Load reviews for this order (MySQL-based)
+                initializeReviews();
             })
 
             function getTwentyFourFormat(h, timeslot) {
@@ -1097,304 +1075,6 @@
                 }
                 // Close click handler cleanly
             });
-
-            // Legacy code below - removed for MySQL build (Firebase logic)
-                /*
-                if (old_order_status != orderStatus) {
-                    if (orderStatus == "restaurantorders Placed") {
-                        manfcmTokenVendor = fcmTokenVendor;
-                        manname = customername;
-                    } else {
-                        manfcmTokenVendor = fcmToken;
-                        manname = vendorname;
-                    }
-                    if (orderStatus == "restaurantorders Accepted") {
-                        // This section removed - handled by Laravel route
-
-                            var scheduleTime = '';
-                            if (order.hasOwnProperty('scheduleTime') && order
-                                .scheduleTime != null) {
-                                scheduleTime = order.scheduleTime;
-                                var scheduleDate = scheduleTime.toDate().toDateString();
-                                var OrderTime = order.scheduleTime.toDate()
-                                    .toLocaleTimeString('en-US');
-                                var scheduleDate = new Date(scheduleDate);
-                                var dd = String(scheduleDate.getDate()).padStart(2, '0');
-                                var mm = String(scheduleDate.getMonth() + 1).padStart(2,
-                                    '0'); //January is 0!
-                                var yyyy = scheduleDate.getFullYear();
-                                var scheduleDate = yyyy + '-' + mm + '-' + dd;
-                                today = new Date();
-                                var dd = String(today.getDate()).padStart(2, '0');
-                                var mm = String(today.getMonth() + 1).padStart(2,
-                                    '0'); //January is 0!
-                                var yyyy = today.getFullYear();
-                                var todayDate = yyyy + '-' + mm + '-' + dd;
-                                var currentTime = today.toLocaleTimeString('en-US');
-                                var [h, m, s] = currentTime.split(":");
-                                var timeslot = s.split(" ")[1];
-                                h = getTwentyFourFormat(h, timeslot);
-                                var currentTime = (h + ":" + m + ":" + s);
-                                var [h, m, s] = OrderTime.split(":");
-                                var timeslot = s.split(" ")[1];
-                                h = getTwentyFourFormat(h, timeslot);
-                                var orderTime = (h + ":" + m + ":" + s);
-                                if (todayDate > scheduleDate) {
-                                    $('#addPreparationTimeModal').modal('show');
-                                } else if (todayDate == scheduleDate) {
-                                    if (currentTime >= orderTime) {
-                                        $('#addPreparationTimeModal').modal('show');
-                                    } else {
-                                        alert(
-                                            "{{ trans('lang.accept_before_time_error') }}");
-                                        return false;
-                                    }
-                                } else {
-                                    alert("{{ trans('lang.accept_before_date_error') }}");
-                                    return false;
-                                }
-                            } else {
-                                $('#addPreparationTimeModal').modal('show');
-                            }
-                        })
-                    } else {
-                        database.collection('restaurant_orders').doc(id).update({
-                            'status': orderStatus,
-                        }).then(async function (result) {
-                            console.log('✅ restaurantorders status updated successfully, now logging activity...');
-                            try {
-                                if (typeof logActivity === 'function') {
-                                    console.log('🔍 Calling logActivity for order status update...');
-                                    await logActivity('orders', 'status_updated', 'Updated order #' + id + ' status to: ' + orderStatus);
-                                    console.log('✅ Activity logging completed successfully');
-                                } else {
-                                    console.error('❌ logActivity function is not available');
-                                }
-                            } catch (error) {
-                                console.error('❌ Error calling logActivity:', error);
-                            }
-                            var subject = '';
-                            var message = '';
-                            if (orderStatus == "restaurantorders Completed" && orderTakeAwayOption ==
-                                true) {
-                                subject = takeAwayOrderCompletedSubject;
-                                message = takeAwayOrderCompletedMsg;
-                            } else if (orderStatus == "restaurantorders Completed" &&
-                                orderTakeAwayOption == false) {
-                                subject = orderCompletedSubject;
-                                message = orderCompletedMsg;
-                            } else if (orderStatus == "Driver Accepted") {
-                                subject = driverAcceptedSubject;
-                                message = driverAcceptedMsg;
-                            } else if (orderStatus == "restaurantorders Rejected") {
-                                subject = orderRejectedSubject;
-                                message = orderRejectedMsg;
-                            }
-                            if (orderStatus != orderPreviousStatus && payment_shared ==
-                                false) {
-                                if (orderStatus == 'restaurantorders Completed') {
-                                    driverAmount = parseFloat(deliveryCharge) + parseFloat(
-                                        tip_amount);
-                                    if (driverId && driverAmount) {
-                                        var driver = database.collection('users').where(
-                                            "id", "==", driverId);
-                                        await driver.get().then(async function (
-                                            snapshotsdriver) {
-                                            var driverdata = snapshotsdriver
-                                                .docs[0].data();
-                                            if (driverdata) {
-                                                if (isNaN(driverdata
-                                                        .wallet_amount) ||
-                                                    driverdata.wallet_amount ==
-                                                    undefined) {
-                                                    driverWallet = 0;
-                                                } else {
-                                                    driverWallet = driverdata
-                                                        .wallet_amount;
-                                                }
-                                                if (orderPaymentMethod ==
-                                                    'cod' &&
-                                                    orderTakeAwayOption == true
-                                                ) {
-                                                    driverWallet = parseFloat(
-                                                            driverWallet) -
-                                                        parseFloat(total_price);
-                                                } else {
-                                                    driverWallet = parseFloat(
-                                                            driverWallet) +
-                                                        parseFloat(
-                                                            driverAmount);
-                                                }
-                                                if (!isNaN(driverWallet)) {
-                                                    await database.collection(
-                                                        'users').doc(
-                                                        driverdata.id)
-                                                        .update({
-                                                            'wallet_amount': parseFloat(
-                                                                driverWallet
-                                                            )
-                                                        }).then(async function (
-                                                            result) {
-                                                        });
-                                                }
-                                            }
-                                        })
-                                    }
-                                }
-                                await $.ajax({
-                                    type: 'POST',
-                                    url: "<?php echo route('order-status-notification'); ?>",
-                                    data: {
-                                        _token: '<?php echo csrf_token(); ?>',
-                                        'fcm': manfcmTokenVendor,
-                                        'vendorname': manname,
-                                        'orderStatus': orderStatus,
-                                        'subject': subject,
-                                        'message': message
-                                    },
-                                    success: function (data) {
-                                        if (orderPreviousStatus !=
-                                            'restaurantorders Rejected' &&
-                                            orderPaymentMethod != 'cod' &&
-                                            orderTakeAwayOption == false) {
-                                            if (orderStatus ==
-                                                'restaurantorders Rejected') {
-                                                var walletId = database
-                                                    .collection('temp').doc()
-                                                    .id;
-                                                var canceldateNew = new Date();
-                                                var orderCancelDate = new Date(
-                                                    canceldateNew.setHours(
-                                                        23, 59, 59, 999));
-                                                database.collection('wallet')
-                                                    .doc(walletId).set({
-                                                    'amount': parseFloat(
-                                                        orderPaytableAmount
-                                                    ),
-                                                    'date': orderCancelDate,
-                                                    'id': walletId,
-                                                    'payment_status': 'success',
-                                                    'user_id': orderCustomerId,
-                                                    'payment_method': 'Cancelled restaurantorders Payment'
-                                                }).then(function (result) {
-                                                    database.collection(
-                                                        'users')
-                                                        .where("id",
-                                                            "==",
-                                                            orderCustomerId
-                                                        ).get()
-                                                        .then(async function (
-                                                            userSnapshots
-                                                        ) {
-                                                            if (userSnapshots
-                                                                    .docs
-                                                                    .length >
-                                                                0
-                                                            ) {
-                                                                data =
-                                                                    userSnapshots
-                                                                        .docs[
-                                                                        0
-                                                                        ]
-                                                                        .data();
-                                                                var wallet_amount =
-                                                                    0;
-                                                                if (data
-                                                                        .wallet_amount !=
-                                                                    undefined &&
-                                                                    data
-                                                                        .wallet_amount !=
-                                                                    '' &&
-                                                                    data
-                                                                        .wallet_amount !=
-                                                                    null &&
-                                                                    !
-                                                                        isNaN(
-                                                                            data
-                                                                                .wallet_amount
-                                                                        )
-                                                                ) {
-                                                                    wallet_amount
-                                                                        =
-                                                                        parseFloat(
-                                                                            data
-                                                                                .wallet_amount
-                                                                        );
-                                                                }
-                                                                var newWalletAmount =
-                                                                    wallet_amount +
-                                                                    parseFloat(
-                                                                        orderPaytableAmount
-                                                                    );
-                                                                database
-                                                                    .collection(
-                                                                        'users')
-                                                                    .doc(
-                                                                        orderCustomerId
-                                                                    )
-                                                                    .update({
-                                                                        'wallet_amount': parseFloat(
-                                                                            newWalletAmount
-                                                                        )
-                                                                    })
-                                                                    .then(
-                                                                        function (
-                                                                            result
-                                                                        ) {
-                                                                            <?php if (isset($_GET['eid']) && $_GET['eid'] != '') { ?>
-                                                                                window
-                                                                                .location
-                                                                                .href =
-                                                                                "{{ route('restaurants.orders', $_GET['eid']) }}";
-                                                                            <?php } else { ?>
-                                                                                window
-                                                                                .location
-                                                                                .href =
-                                                                                '{{ route('orders') }}';
-                                                                            <?php } ?>
-                                                                        }
-                                                                    )
-                                                            } else {
-                                                                <?php if (isset($_GET['eid']) && $_GET['eid'] != '') { ?>
-                                                                    window
-                                                                    .location
-                                                                    .href =
-                                                                    "{{ route('restaurants.orders', $_GET['eid']) }}";
-                                                                <?php } else { ?>
-                                                                    window
-                                                                    .location
-                                                                    .href =
-                                                                    '{{ route('orders') }}';
-                                                                <?php } ?>
-                                                            }
-                                                        });
-                                                })
-                                            } else {
-                                                <?php if (isset($_GET['eid']) && $_GET['eid'] != '') { ?>
-                                                    window.location.href =
-                                                    "{{ route('restaurants.orders', $_GET['eid']) }}";
-                                                <?php } else { ?>
-                                                    window.location.href =
-                                                    '{{ route('orders') }}';
-                                                <?php } ?>
-                                            }
-                                        } else {
-                                            <?php if (isset($_GET['eid']) && $_GET['eid'] != '') { ?>
-                                                window.location.href =
-                                                "{{ route('restaurants.orders', $_GET['eid']) }}";
-                                            <?php } else { ?>
-                                                window.location.href =
-                                                '{{ route('orders') }}';
-                                            <?php } ?>
-                                        }
-                                    }
-                                });
-                            }
-                        });
-                    }
-                }
-            */
-
         // Initialize promotional pricing interceptor to catch any order loading
         function initializePromotionalPricingInterceptor() {
             console.log('🔄 ===== INITIALIZING PROMOTIONAL PRICING INTERCEPTOR =====');
@@ -1479,11 +1159,6 @@
 
         // Universal order processing function that works with any order loading system
         async function processOrderWithPromotionalPricing(order) {
-            console.log('🚀 ===== UNIVERSAL ORDER PROCESSING START =====');
-            console.log('🚀 restaurantorders ID:', order.id);
-            console.log('🚀 Vendor ID:', order.vendorID);
-            console.log('🚀 Products:', order.products ? order.products.length : 0);
-
             try {
                 // Get DOM elements
                 const append_procucts_list = document.getElementById('order_products');
@@ -1610,11 +1285,6 @@
 
             for (const product of products) {
                 try {
-                    console.log('🎯 ===== PROCESSING PRODUCT =====');
-                    console.log('🎯 Product:', product.name, 'ID:', product.id);
-                    console.log('🎯 Original Price:', product.price, 'Discount Price:', product.discountPrice);
-                    console.log('🎯 Quantity:', product.quantity);
-
                     const priceInfo = await getPromotionalPrice(product, vendorID);
                     console.log('🎯 Price Info Result:', priceInfo);
 
@@ -1622,15 +1292,6 @@
                         promotionalItemsCount++;
                         const savings = (priceInfo.originalPrice - priceInfo.price) * (parseInt(product.quantity) || 1);
                         totalPromotionalSavings += savings;
-
-                        console.log('🎯 ===== APPLYING PROMOTIONAL PRICE =====');
-                        console.log('🎯 Product:', product.name);
-                        console.log('🎯 Original Price:', priceInfo.originalPrice);
-                        console.log('🎯 Promotional Price:', priceInfo.price);
-                        console.log('🎯 Quantity:', product.quantity);
-                        console.log('🎯 Savings per item:', (priceInfo.originalPrice - priceInfo.price));
-                        console.log('🎯 Total savings for this item:', savings);
-                        console.log('🎯 Running total savings:', totalPromotionalSavings);
 
                         // Update the product price in the DOM
                         const productRow = document.querySelector(`[data-product-id="${product.id}"]`);
@@ -1685,24 +1346,12 @@
                         }
                     } else {
                         regularItemsCount++;
-                        console.log('ℹ️ ===== REGULAR PRICE ITEM =====');
-                        console.log('ℹ️ Product:', product.name);
-                        console.log('ℹ️ Using regular price:', priceInfo.price);
-                        console.log('ℹ️ Quantity:', product.quantity);
-                        console.log('ℹ️ Total for this item:', priceInfo.price * (parseInt(product.quantity) || 1));
                     }
                 } catch (error) {
                     console.error('❌ Error enhancing product with promotional pricing:', error);
                     console.error('❌ Product:', product.name, 'ID:', product.id);
                 }
             }
-
-            console.log('🎯 ===== ENHANCEMENT SUMMARY =====');
-            console.log('🎯 Total products processed:', products.length);
-            console.log('🎯 Promotional items:', promotionalItemsCount);
-            console.log('🎯 Regular items:', regularItemsCount);
-            console.log('🎯 Total promotional savings:', totalPromotionalSavings);
-            console.log('🎯 ===== PRODUCT ENHANCEMENT COMPLETE =====');
         }
 
         // Enhanced function to build product list with promotional pricing
@@ -1720,11 +1369,6 @@
 
                 for (const product of snapshotsProducts) {
                     try {
-                        console.log('🎯 ===== PROCESSING PRODUCT FOR LIST =====');
-                        console.log('🎯 Product:', product.name, 'ID:', product.id);
-                        console.log('🎯 Original Price:', product.price, 'Discount Price:', product.discountPrice);
-                        console.log('🎯 Quantity:', product.quantity);
-
                         // Get promotional price for this product
                         const priceInfo = await getPromotionalPrice(product, vendorID);
                         console.log('🎯 Price Info Result:', priceInfo);
@@ -1813,14 +1457,6 @@
                             totalProductPrice_val = currentCurrency + "" + parseFloat(totalProductPrice).toFixed(
                                 decimal_degits);
                         }
-
-                        console.log('🎯 ===== PRODUCT LIST CALCULATION =====');
-                        console.log('🎯 Product:', product.name);
-                        console.log('🎯 Final price used:', final_price);
-                        console.log('🎯 Quantity:', val.quantity);
-                        console.log('🎯 Total for this item:', totalProductPrice);
-                        console.log('🎯 Price display:', price_val);
-                        console.log('🎯 Total display:', totalProductPrice_val);
 
                         // Add promotional badge and styling if this is a promotional item
                         var promotionalBadge = '';
@@ -2012,20 +1648,11 @@
         // Function to enhance total calculation with promotional savings
         async function enhanceTotalWithPromotionalSavings(products, vendorID) {
             try {
-                console.log('💰 ===== TOTAL ENHANCEMENT START =====');
-                console.log('💰 Processing', products.length, 'products for promotional savings');
-                console.log('💰 Vendor ID:', vendorID);
-
                 let totalPromotionalSavings = 0;
                 let promotionalItems = [];
                 let regularItems = [];
 
                 for (const product of products) {
-                    console.log('💰 ===== PROCESSING PRODUCT FOR TOTAL =====');
-                    console.log('💰 Product:', product.name, 'ID:', product.id);
-                    console.log('💰 Original Price:', product.price, 'Discount Price:', product.discountPrice);
-                    console.log('💰 Quantity:', product.quantity);
-
                     const priceInfo = await getPromotionalPrice(product, vendorID);
                     console.log('💰 Price Info Result:', priceInfo);
 
@@ -2042,14 +1669,6 @@
                         };
                         promotionalItems.push(promotionalItem);
 
-                        console.log('💰 ===== PROMOTIONAL ITEM FOUND =====');
-                        console.log('💰 Product:', product.name);
-                        console.log('💰 Original Price:', priceInfo.originalPrice);
-                        console.log('💰 Promotional Price:', priceInfo.price);
-                        console.log('💰 Quantity:', product.quantity);
-                        console.log('💰 Savings per item:', (priceInfo.originalPrice - priceInfo.price));
-                        console.log('💰 Total savings for this item:', savings);
-                        console.log('💰 Running total savings:', totalPromotionalSavings);
                     } else {
                         const regularItem = {
                             name: product.name,
@@ -2058,21 +1677,8 @@
                             total: priceInfo.price * (parseInt(product.quantity) || 1)
                         };
                         regularItems.push(regularItem);
-
-                        console.log('💰 ===== REGULAR ITEM =====');
-                        console.log('💰 Product:', product.name);
-                        console.log('💰 Price:', priceInfo.price);
-                        console.log('💰 Quantity:', product.quantity);
-                        console.log('💰 Total for this item:', priceInfo.price * (parseInt(product.quantity) || 1));
                     }
                 }
-
-                console.log('💰 ===== CALCULATION SUMMARY =====');
-                console.log('💰 Promotional items:', promotionalItems.length);
-                console.log('💰 Regular items:', regularItems.length);
-                console.log('💰 Total promotional savings:', totalPromotionalSavings);
-                console.log('💰 Promotional items details:', promotionalItems);
-                console.log('💰 Regular items details:', regularItems);
 
                 if (totalPromotionalSavings > 0) {
                     console.log('💰 ===== ADDING PROMOTIONAL SAVINGS TO TOTAL =====');
@@ -2126,10 +1732,7 @@
 
         // Enhanced function to calculate totals with promotional pricing
         async function calculatePromotionalTotals(products, vendorID) {
-            console.log('💰 ===== CALCULATING PROMOTIONAL TOTALS =====');
             products = Array.isArray(products) ? products : [];
-            console.log('💰 Products:', products.length);
-            console.log('💰 Vendor ID:', vendorID);
 
             let promotionalSubtotal = 0;
             let originalSubtotal = 0;
@@ -2138,11 +1741,6 @@
             let regularItems = [];
 
             for (const product of products) {
-                console.log('💰 ===== CALCULATING PRODUCT TOTAL =====');
-                console.log('💰 Product:', product.name, 'ID:', product.id);
-                console.log('💰 Original Price:', product.price, 'Discount Price:', product.discountPrice);
-                console.log('💰 Quantity:', product.quantity);
-
                 const priceInfo = await getPromotionalPrice(product, vendorID);
                 console.log('💰 Price Info Result:', priceInfo);
 
@@ -2172,16 +1770,6 @@
                         savings: savings
                     });
 
-                    console.log('💰 ===== PROMOTIONAL ITEM CALCULATION =====');
-                    console.log('💰 Product:', product.name);
-                    console.log('💰 Original Price:', originalPrice);
-                    console.log('💰 Promotional Price:', promotionalPrice);
-                    console.log('💰 Quantity:', quantity);
-                    console.log('💰 Original Total:', originalTotal);
-                    console.log('💰 Promotional Total:', itemTotal);
-                    console.log('💰 Savings:', savings);
-                    console.log('💰 Running Promotional Subtotal:', promotionalSubtotal);
-                    console.log('💰 Running Promotional Savings:', promotionalSavings);
                 } else {
                     const itemTotal = originalPrice * quantity;
                     promotionalSubtotal += itemTotal;
@@ -2193,24 +1781,8 @@
                         quantity: quantity,
                         total: itemTotal
                     });
-
-                    console.log('💰 ===== REGULAR ITEM CALCULATION =====');
-                    console.log('💰 Product:', product.name);
-                    console.log('💰 Price:', originalPrice);
-                    console.log('💰 Quantity:', quantity);
-                    console.log('💰 Total:', itemTotal);
-                    console.log('💰 Running Promotional Subtotal:', promotionalSubtotal);
                 }
             }
-
-            console.log('💰 ===== FINAL CALCULATION SUMMARY =====');
-            console.log('💰 Original Subtotal:', originalSubtotal);
-            console.log('💰 Promotional Subtotal:', promotionalSubtotal);
-            console.log('💰 Total Promotional Savings:', promotionalSavings);
-            console.log('💰 Promotional Items:', promotionalItems.length);
-            console.log('💰 Regular Items:', regularItems.length);
-            console.log('💰 Promotional Items Details:', promotionalItems);
-            console.log('💰 Regular Items Details:', regularItems);
 
             return {
                 promotionalSubtotal: promotionalSubtotal,
@@ -2318,10 +1890,6 @@
             // Use delivery charge from order data (exact same logic as print.blade.php)
             var deliveryCharge = snapshotsProducts.deliveryCharge;
 
-            // // Debug delivery charge (same as print.blade.php)
-            // console.log('=== buildHTMLProductstotal Debug ===');
-            // console.log('Delivery charge from order data:', deliveryCharge);
-            // console.log('Using active delivery charge settings');
 
             // Initialize total_price with subtotal
             var total_price = subtotal;
@@ -2396,16 +1964,6 @@
             var total_tax_amount = sgst + gst;
             total_price = parseFloat(total_price) + parseFloat(total_tax_amount);
             var totalAmount = total_price;
-
-            // // Debug takeAway value
-            // console.log('=== takeAway Debug ===');
-            // console.log('takeAway value:', takeAway);
-            // console.log('takeAway type:', typeof takeAway);
-            // console.log('takeAway == false:', takeAway == false);
-            // console.log('takeAway === false:', takeAway === false);
-            // console.log('takeAway == "":', takeAway == '');
-            // console.log('takeAway == null:', takeAway == null);
-            // console.log('takeAway == undefined:', takeAway == undefined);
 
             // Always show delivery charge for delivery orders (not takeaway)
             // Temporarily force show to debug
@@ -2612,119 +2170,181 @@
             }
         }
 
-        //Review code GA
-        // Reviews (disabled for MySQL build - Firebase removed)
-        // Leave reviewAttributes empty
-
-        function getUserReview(vendorOrder, reviewAttr) {
-            var refUserReview = database.collection('foods_review').where('orderid', '==', vendorOrder.id);
-            refUserReview.limit(page_size).get().then(async function (userreviewsnapshot) {
-                var reviewHTML = '';
-                reviewHTML = buildRatingsAndReviewsHTML(vendorOrder, userreviewsnapshot);
-                if (userreviewsnapshot.docs.length > 0) {
-                    jQuery("#customers_rating_and_review").append(reviewHTML);
-                } else {
+        // MySQL-based Reviews System
+        var reviewAttributes = {}; // Will store review attributes from database
+        
+        // Load review attributes from MySQL
+        function loadReviewAttributes() {
+            $.ajax({
+                url: '/review-attributes',
+                method: 'GET',
+                success: function(response) {
+                    if (Array.isArray(response)) {
+                        response.forEach(function(attr) {
+                            reviewAttributes[attr.id] = attr.title;
+                        });
+                        console.log('✅ Review attributes loaded:', reviewAttributes);
+                    }
+                },
+                error: function(error) {
+                    console.error('❌ Error loading review attributes:', error);
+                }
+            });
+        }
+        
+        // Load and display order reviews from MySQL
+        function loadOrderReviews(orderId, orderProducts) {
+            $.ajax({
+                url: '/order/' + orderId + '/reviews',
+                method: 'GET',
+                success: function(response) {
+                    console.log('📥 Reviews response:', response);
+                    var reviews = response.data || [];
+                    
+                    if (reviews.length > 0) {
+                        var reviewHTML = buildRatingsAndReviewsHTML(reviews, orderProducts);
+                        jQuery("#customers_rating_and_review").html(reviewHTML);
+                    } else {
+                        jQuery("#customers_rating_and_review").html('<h4>No Reviews Found</h4>');
+                    }
+                },
+                error: function(error) {
+                    console.error('❌ Error loading reviews:', error);
                     jQuery("#customers_rating_and_review").html('<h4>No Reviews Found</h4>');
                 }
             });
         }
+        
+        // Initialize reviews when order data is loaded
+        function initializeReviews() {
+            if (orderData && orderData.id) {
+                loadReviewAttributes();
+                // Wait a bit for review attributes to load, then load reviews
+                setTimeout(function() {
+                    var orderProducts = orderData.products || [];
+                    loadOrderReviews(orderData.id, orderProducts);
+                }, 500);
+            }
+        }
 
-        function buildRatingsAndReviewsHTML(vendorOrder, userreviewsnapshot) {
-            var allreviewdata = [];
-            var reviewhtml = '';
-            userreviewsnapshot.docs.forEach((listval) => {
-                var reviewDatas = listval.data();
-                reviewDatas.id = listval.id;
-                allreviewdata.push(reviewDatas);
-            });
-            reviewhtml += '<div class="user-ratings">';
-            allreviewdata.forEach((listval) => {
-                var val = listval;
-                vendorOrder.products.forEach((productval) => {
-                    if (productval.id == val.productId) {
-                        rating = val.rating;
-                        reviewhtml = reviewhtml +
-                            '<div class="reviews-members py-3 border mb-3"><div class="media">';
-                        if (productval.photo != '' && productval.photo != null) {
-                            reviewhtml = reviewhtml +
-                                '<a href="javascript:void(0);"><img onerror="this.onerror=null;this.src=\'' +
-                                place_image + '\'" alt="#" src="' + productval.photo +
-                                '" class=" img-circle img-size-32 mr-2" style="width:60px;height:60px"></a>';
-                        } else {
-                            reviewhtml = reviewhtml + '<a href="javascript:void(0);"><img alt="#" src="' +
-                                place_image +
-                                '" class=" img-circle img-size-32 mr-2" style="width:60px;height:60px"></a>';
-                        }
-                        reviewhtml = reviewhtml +
-                            '<div class="media-body d-flex"><div class="reviews-members-header"><h6 class="mb-0"><a class="text-dark" href="javascript:void(0);">' +
-                            productval.name +
-                            '</a></h6><div class="star-rating"><div class="d-inline-block" style="font-size: 14px;">';
-                        reviewhtml = reviewhtml + ' <ul class="rating" data-rating="' + rating + '">';
-                        reviewhtml = reviewhtml + '<li class="rating__item"></li>';
-                        reviewhtml = reviewhtml + '<li class="rating__item"></li>';
-                        reviewhtml = reviewhtml + '<li class="rating__item"></li>';
-                        reviewhtml = reviewhtml + '<li class="rating__item"></li>';
-                        reviewhtml = reviewhtml + '<li class="rating__item"></li>';
-                        reviewhtml = reviewhtml + '</ul>';
-                        reviewhtml = reviewhtml + '</div></div>';
-                        reviewhtml = reviewhtml + '</div>';
-                        reviewhtml = reviewhtml + '<div class="review-date ml-auto">';
-                        if (val.createdAt != null && val.createdAt != "") {
-                            var review_date = val.createdAt.toDate().toLocaleDateString('en', {
-                                year: "numeric",
-                                month: "short",
-                                day: "numeric"
-                            });
-                            reviewhtml = reviewhtml + '<span>' + review_date + '</span>';
-                        }
-                        reviewhtml = reviewhtml + '</div>';
-                        var photos = '';
-                        if (val.photos.length > 0) {
-                            photos += '<div class="photos"><ul>';
-                            $.each(val.photos, function (key, img) {
-                                photos += '<li><img src="' + img + '" width="100"></li>';
-                            });
-                            photos += '</ul></div>';
-                        }
-                        reviewhtml = reviewhtml +
-                            '</div></div><div class="reviews-members-body w-100"><p class="mb-2">' + val
-                                .comment + '</p>' + photos + '</div>';
-                        if (val.hasOwnProperty('reviewAttributes') && val.reviewAttributes != null) {
-                            reviewhtml += '<div class="attribute-ratings feature-rating mb-2">';
-                            var label_feature = "{{ trans('lang.byfeature') }}";
-                            reviewhtml += '<h3 class="mb-2">' + label_feature + '</h3>';
-                            reviewhtml += '<div class="media-body">';
-                            $.each(val.reviewAttributes, function (aid, data) {
-                                var at_id = aid;
-                                var at_title = reviewAttributes[aid];
-                                var at_value = data;
-                                reviewhtml +=
-                                    '<div class="feature-reviews-members-header d-flex mb-3">';
-                                reviewhtml += '<h6 class="mb-0">' + at_title + '</h6>';
-                                reviewhtml = reviewhtml +
-                                    '<div class="rating-info ml-auto d-flex">';
-                                reviewhtml = reviewhtml + '<div class="star-rating">';
-                                reviewhtml = reviewhtml + ' <ul class="rating" data-rating="' +
-                                    at_value + '">';
-                                reviewhtml = reviewhtml + '<li class="rating__item"></li>';
-                                reviewhtml = reviewhtml + '<li class="rating__item"></li>';
-                                reviewhtml = reviewhtml + '<li class="rating__item"></li>';
-                                reviewhtml = reviewhtml + '<li class="rating__item"></li>';
-                                reviewhtml = reviewhtml + '<li class="rating__item"></li>';
-                                reviewhtml = reviewhtml + '</ul>';
-                                reviewhtml += '</div>';
-                                reviewhtml += '<div class="count-rating ml-2">';
-                                reviewhtml += '<span class="count">' + at_value + '</span>';
-                                reviewhtml += '</div>';
-                                reviewhtml += '</div></div>';
-                            });
-                            reviewhtml += '</div></div>';
-                        }
-                        reviewhtml += '</div>';
-                    }
-                    reviewhtml += '</div>';
+        // MySQL-based: Build reviews HTML from reviews array and products
+        function buildRatingsAndReviewsHTML(reviews, orderProducts) {
+            var reviewhtml = '<div class="user-ratings">';
+            
+            if (!reviews || reviews.length === 0) {
+                reviewhtml += '<h4>No Reviews Found</h4>';
+                reviewhtml += '</div>';
+                return reviewhtml;
+            }
+            
+            // Create a map of products for quick lookup
+            var productsMap = {};
+            if (orderProducts && Array.isArray(orderProducts)) {
+                orderProducts.forEach(function(product) {
+                    productsMap[product.id] = product;
                 });
+            }
+            
+            // Build review HTML for each review
+            reviews.forEach(function(review) {
+                var product = productsMap[review.productId] || null;
+                
+                // Skip if product not found in order
+                if (!product) {
+                    console.warn('Product not found for review:', review.productId);
+                    return;
+                }
+                
+                var rating = review.rating || 0;
+                var productName = product.name || 'Unknown Product';
+                var productPhoto = product.photo || '';
+                var comment = review.comment || '';
+                var photos = review.photos || [];
+                var reviewAttributesData = review.reviewAttributes || {};
+                // Use formatted date: "Nov 29, 2025" (matching screenshot format)
+                var reviewDate = review.createdAtFormatted || '';
+                
+                reviewhtml += '<div class="reviews-members py-3 border mb-3">';
+                reviewhtml += '<div class="media">';
+                
+                // Product image
+                if (productPhoto) {
+                    reviewhtml += '<a href="javascript:void(0);"><img onerror="this.onerror=null;this.src=\'' + place_image + '\'" alt="#" src="' + productPhoto + '" class="img-circle img-size-32 mr-2" style="width:60px;height:60px"></a>';
+                } else {
+                    reviewhtml += '<a href="javascript:void(0);"><img alt="#" src="' + place_image + '" class="img-circle img-size-32 mr-2" style="width:60px;height:60px"></a>';
+                }
+                
+                // Product name and rating
+                reviewhtml += '<div class="media-body d-flex">';
+                reviewhtml += '<div class="reviews-members-header">';
+                reviewhtml += '<h6 class="mb-0"><a class="text-dark" href="javascript:void(0);">' + productName + '</a></h6>';
+                reviewhtml += '<div class="star-rating"><div class="d-inline-block" style="font-size: 14px;">';
+                reviewhtml += '<ul class="rating" data-rating="' + rating + '">';
+                for (var i = 0; i < 5; i++) {
+                    reviewhtml += '<li class="rating__item"></li>';
+                }
+                reviewhtml += '</ul>';
+                reviewhtml += '</div></div>';
+                reviewhtml += '</div>';
+                reviewhtml += '</div>';
+                
+                // Review date
+                reviewhtml += '<div class="review-date ml-auto">';
+                if (reviewDate) {
+                    reviewhtml += '<span>' + reviewDate + '</span>';
+                }
+                reviewhtml += '</div>';
+                reviewhtml += '</div>';
+                
+                // Review body (comment and photos)
+                reviewhtml += '<div class="reviews-members-body w-100">';
+                if (comment) {
+                    reviewhtml += '<p class="mb-2">' + comment + '</p>';
+                }
+                
+                // Photos
+                if (photos && Array.isArray(photos) && photos.length > 0) {
+                    reviewhtml += '<div class="photos"><ul>';
+                    photos.forEach(function(img) {
+                        if (img) {
+                            reviewhtml += '<li><img src="' + img + '" width="100"></li>';
+                        }
+                    });
+                    reviewhtml += '</ul></div>';
+                }
+                reviewhtml += '</div>';
+                
+                // Review attributes (feature ratings)
+                if (reviewAttributesData && Object.keys(reviewAttributesData).length > 0) {
+                    reviewhtml += '<div class="attribute-ratings feature-rating mb-2">';
+                    var label_feature = "{{ trans('lang.byfeature') }}";
+                    reviewhtml += '<h3 class="mb-2">' + label_feature + '</h3>';
+                    reviewhtml += '<div class="media-body">';
+                    
+                    $.each(reviewAttributesData, function(attributeId, attributeValue) {
+                        var attributeTitle = reviewAttributes[attributeId] || attributeId;
+                        reviewhtml += '<div class="feature-reviews-members-header d-flex mb-3">';
+                        reviewhtml += '<h6 class="mb-0">' + attributeTitle + '</h6>';
+                        reviewhtml += '<div class="rating-info ml-auto d-flex">';
+                        reviewhtml += '<div class="star-rating">';
+                        reviewhtml += '<ul class="rating" data-rating="' + attributeValue + '">';
+                        for (var i = 0; i < 5; i++) {
+                            reviewhtml += '<li class="rating__item"></li>';
+                        }
+                        reviewhtml += '</ul>';
+                        reviewhtml += '</div>';
+                        reviewhtml += '<div class="count-rating ml-2">';
+                        reviewhtml += '<span class="count">' + attributeValue + '</span>';
+                        reviewhtml += '</div>';
+                        reviewhtml += '</div></div>';
+                    });
+                    
+                    reviewhtml += '</div></div>';
+                }
+                
+                reviewhtml += '</div>';
             });
+            
             reviewhtml += '</div>';
             return reviewhtml;
         }
