@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DriverUserController extends Controller
 {
@@ -50,4 +52,46 @@ class DriverUserController extends Controller
             ], 500);
         }
     }
+
+
+    public function getDocumentList()
+    {
+        $documents = DB::table('documents')
+            ->where('type', 'driver')
+            ->where('enable', 1) // true
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Driver document type list fetched',
+            'data' => $documents
+        ]);
+    }
+
+
+
+    public function getDriverDocuments($driver_id)
+    {
+        $driverDocs = DB::table('documents_verify')
+            ->where('id', $driver_id)  // firebase_id stored as 'id' in documents_verify
+            ->first();
+
+        if (!$driverDocs) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No document uploaded yet',
+                'data' => null
+            ], 404);
+        }
+
+        // convert JSON documents to array
+        $driverDocs->documents = json_decode($driverDocs->documents, true);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Driver uploaded document fetched',
+            'data' => $driverDocs
+        ]);
+    }
+
 }

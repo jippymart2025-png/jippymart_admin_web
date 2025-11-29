@@ -737,9 +737,9 @@ class DriverSqlBridgeController extends FirestoreUtilsController
     /**
      * Determine if author has any order history aside from supplied order.
      */
-    public function getFirstOrderOrNot(string $orderId): JsonResponse
+    public function getFirstOrderOrNot(string $authorID): JsonResponse
     {
-        $order = DB::table('restaurant_orders')->where('id', $orderId)->first();
+        $order = DB::table('restaurant_orders')->where('authorID', $authorID)->first();
         if (!$order) {
             return response()->json([
                 'success' => false,
@@ -748,7 +748,7 @@ class DriverSqlBridgeController extends FirestoreUtilsController
         }
 
         $count = DB::table('restaurant_orders')
-            ->where('authorID', $order->authorID)
+            ->where('authorID', $authorID)
             ->count();
 
         return response()->json([
@@ -762,57 +762,76 @@ class DriverSqlBridgeController extends FirestoreUtilsController
     /**
      * Propagate referral reward to parent user when criteria met.
      */
-    public function updateReferralAmount(Request $request): JsonResponse
+//    public function updateReferralAmount(Request $request): JsonResponse
+//    {
+//        $request->validate([
+//            'author_id' => 'required|string',
+//            'order_id' => 'required|string',
+//        ]);
+//
+//        $referral = DB::table('referral')
+//            ->where('id', $request->author_id)
+//            ->first();
+//
+//        if (!$referral || empty($referral->referralBy)) {
+//            return response()->json([
+//                'success' => true,
+//                'message' => 'Referral not found or no parent user',
+//            ]);
+//        }
+//
+//        $settings = Setting::getByDocument('referral_amount');
+//        $amount = (float) Arr::get($settings, 'referralAmount', 0);
+//
+//        if ($amount <= 0) {
+//            return response()->json([
+//                'success' => true,
+//                'message' => 'Referral amount disabled',
+//            ]);
+//        }
+//
+//        DB::transaction(function () use ($referral, $amount, $request) {
+//            DB::table('wallet')->insert([
+//                'id' => (string) Str::uuid(),
+//                'date' => now()->toIso8601String(),
+//                'note' => "Referral bonus for order #{$request->order_id}",
+//                'transactionUser' => 'driver',
+//                'amount' => $amount,
+//                'user_id' => $referral->referralBy,
+//                'payment_status' => 'success',
+//                'isTopUp' => 1,
+//                'order_id' => $request->order_id,
+//                'payment_method' => 'referral',
+//            ]);
+//
+//            User::query()
+//                ->where('firebase_id', $referral->referralBy)
+//                ->increment('wallet_amount', $amount);
+//        });
+//
+//        return response()->json([
+//            'success' => true,
+//            'message' => 'Referral amount credited',
+//        ]);
+//    }
+
+
+
+    public function getReferralById($id)
     {
-        $request->validate([
-            'author_id' => 'required|string',
-            'order_id' => 'required|string',
-        ]);
+        $referral = Referral::where('id', $id)->first();
 
-        $referral = DB::table('referral')
-            ->where('id', $request->author_id)
-            ->first();
-
-        if (!$referral || empty($referral->referralBy)) {
+        if (!$referral) {
             return response()->json([
-                'success' => true,
-                'message' => 'Referral not found or no parent user',
-            ]);
+                'success' => false,
+                'message' => 'Data not found'
+            ], 404);
         }
-
-        $settings = Setting::getByDocument('referral_amount');
-        $amount = (float) Arr::get($settings, 'referralAmount', 0);
-
-        if ($amount <= 0) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Referral amount disabled',
-            ]);
-        }
-
-        DB::transaction(function () use ($referral, $amount, $request) {
-            DB::table('wallet')->insert([
-                'id' => (string) Str::uuid(),
-                'date' => now()->toIso8601String(),
-                'note' => "Referral bonus for order #{$request->order_id}",
-                'transactionUser' => 'driver',
-                'amount' => $amount,
-                'user_id' => $referral->referralBy,
-                'payment_status' => 'success',
-                'isTopUp' => 1,
-                'order_id' => $request->order_id,
-                'payment_method' => 'referral',
-            ]);
-
-            User::query()
-                ->where('firebase_id', $referral->referralBy)
-                ->increment('wallet_amount', $amount);
-        });
 
         return response()->json([
             'success' => true,
-            'message' => 'Referral amount credited',
-        ]);
+            'data' => $referral
+        ], 200);
     }
 
     /**
@@ -825,44 +844,149 @@ class DriverSqlBridgeController extends FirestoreUtilsController
             'driver_id' => 'required|string',
         ]);
 
-        $success = DB::transaction(function () use ($request) {
-            $order = DB::table('restaurant_orders')
-                ->where('id', $request->order_id)
-                ->lockForUpdate()
-                ->first();
+        try {
+            $success = DB::transaction(function () use ($request) {
 
-            if (!$order) {
-                return false;
+                // Get the order with row lock to prevent race condition
+                $order = DB::table('restaurant_orders')
+                    ->where('id', $request->order_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$order) {
+                    return false; // Order not found
+                }
+
+                // Order assignable?
+                $isAvailable = empty($order->driverID)
+                    || in_array($order->status, ['driverPending','Order Placed','Order Accepted']);
+
+                if (!$isAvailable) {
+                    return false; // Order already assigned
+                }
+
+                // Fetch driver details to store inside order record
+                $driver = DB::table('users')->where('firebase_id', $request->driver_id)->first();
+
+                if (!$driver) return false;
+
+                $driverData = [
+                    'id'               => $driver->id,
+                    'firebase_id'      => $driver->firebase_id,
+                    'firstName'        => $driver->firstName,
+                    'lastName'         => $driver->lastName,
+                    'email'            => $driver->email,
+                    'profilePictureURL'=> $driver->profilePictureURL,
+                    'fcmToken'         => $driver->fcmToken,
+                    'countryCode'      => $driver->countryCode,
+                    'phoneNumber'      => $driver->phoneNumber,
+                    'createdAt' => $driver->createdAt,
+                    'isActive'         => $driver->active,
+                    'role' => $driver->role,
+                    'isDocumentVerify' => $driver->isDocumentVerify,
+                    'location' => $driver->location,
+                    'userBankDetails' => $driver->userBankDetails,
+                    'shippingAddress' => $driver->shippingAddress,
+                    'appIdentifier' => $driver->appIdentifier,
+                    'provider' => $driver->provider,
+                    'vendorID' => $driver->vendorID,
+                    'inProgressOrderID' => $driver->inProgressOrderID,
+                    'rotation' => $driver->rotation,
+                    'orderRequestData' => $driver->orderRequestData,
+                    'wallet_amount'    => $driver->wallet_amount,
+                    'deliveryAmount'   => $driver->deliveryAmount,
+                    'carName'          => $driver->carName,
+                    'carNumber'        => $driver->carNumber,
+                    'carPictureURL'    => $driver->carPictureURL,
+                    'zoneId'           => $driver->zoneId,
+                ];
+
+                // Update order table
+                DB::table('restaurant_orders')
+                    ->where('id', $request->order_id)
+                    ->update([
+                        'driverID' => $request->driver_id,
+                        'driver'   => json_encode($driverData), // store full driver JSON like firestore
+                        'status'   => 'Driver Accepted',
+                    ]);
+
+                return true;
+            });
+
+            if (!$success) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order already assigned!',
+                ], 409);
             }
 
-            $isAvailable = empty($order->driverID) || in_array($order->status, ['driverPending', 'Order Placed', 'Order Accepted']);
+            return response()->json([
+                'success' => true,
+                'message' => 'Order successfully assigned to driver',
+            ], 200);
 
-            if (!$isAvailable) {
-                return false;
-            }
-
-            DB::table('restaurant_orders')
-                ->where('id', $request->order_id)
-                ->update([
-                    'driverID' => $request->driver_id,
-                    'status' => 'Driver Accepted',
-                ]);
-
-            return true;
-        });
-
-        if (!$success) {
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Order already assigned',
-            ], 409);
+                'error' => $e->getMessage(),
+            ], 500);
         }
+    }
+
+
+    public function getDriverPayoutsByDriver(Request $request)
+    {
+        $request->validate([
+            'driverID' => 'required|string'
+        ]);
+
+        $payouts = DB::table('driver_payouts')
+            ->where('driverID', $request->driverID)
+            ->select('id','note','amount','withdrawMethod','paidDate','driverID','vendorID','adminNote','paymentStatus')
+            ->orderBy('paidDate','DESC')
+            ->get();
 
         return response()->json([
             'success' => true,
-            'message' => 'Order assigned',
+            'message' => 'Driver payout history fetched successfully',
+            'data' => $payouts
         ]);
     }
+
+
+    public function addDriverPayout(Request $request)
+    {
+        $request->validate([
+            'id' => 'required|string|unique:driver_payouts,id',
+            'note' => 'nullable|string',
+            'amount' => 'nullable|string',
+            'withdrawMethod' => 'nullable|string',
+            'paidDate' => 'nullable|string',
+            'driverID' => 'nullable|string',
+            'vendorID' => 'nullable|string',
+            'adminNote' => 'nullable|string',
+            'paymentStatus' => 'nullable|string',
+        ]);
+
+        $payout = DriverPayout::create([
+            'id' => $request->id,
+            'note' => $request->note,
+            'amount' => $request->amount,
+            'withdrawMethod' => $request->withdrawMethod,
+            'paidDate' => $request->paidDate,
+            'driverID' => $request->driverID,
+            'vendorID' => $request->vendorID,
+            'adminNote' => $request->adminNote,
+            'paymentStatus' => $request->paymentStatus,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Payout stored successfully',
+            'data' => $payout
+        ]);
+    }
+
 
     /**
      * Remove order from every driver's request queue except assigned one.

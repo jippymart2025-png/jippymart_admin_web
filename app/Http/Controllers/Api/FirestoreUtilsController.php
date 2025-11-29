@@ -1640,7 +1640,7 @@ class FirestoreUtilsController extends Controller
             documents_verify::updateOrCreate(
                 ['id' => $userId],
                 [
-                    'type' => $request->type ?? 'restaurant',
+                    'type' => $request->type,
                     'documents' => $documents
                 ]
             );

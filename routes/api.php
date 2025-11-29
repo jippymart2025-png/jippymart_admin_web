@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\Api\ChatadminController;
+use App\Http\Controllers\Api\ChatDriverContoller;
 use App\Http\Controllers\Api\ChatRestaurantController;
 use App\Http\Controllers\Api\DriverControllerLogin;
 use App\Http\Controllers\Api\DriverUserController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\Api\SettingsApiController;
 use App\Http\Controllers\Api\VendorController;
 use App\Http\Controllers\Api\Vendor_Reviews;
 use App\Http\Controllers\Api\WalletTransactionController;
+use App\Http\Controllers\Api\WalletApiController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\SettingsController;
 use Illuminate\Http\Request;
@@ -293,7 +295,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/mart-items/by-category-only', [MartItemController::class, 'getItemsByCategoryOnly']);
     Route::get('/mart-items/by-vendor', [MartItemController::class, 'getItemsByVendor']);
     Route::get('/mart-items/by-section', [MartItemController::class, 'getItemsBySection']);
-    Route::get('/mart-items/all', [MartItemController::class, 'getMartItems']);
+    Route::get('/mart-items/all', [MartItemController::class, 'getMartItems'])
+        ->withoutMiddleware(['throttle:api']);
     Route::get('/mart-items/by-brand', [MartItemController::class, 'getItemsByBrand']);
     Route::get('/mart-items/sections', [MartItemController::class, 'getUniqueSections']);
     Route::get('/mart-items/getmartcategory', [MartItemController::class, 'getmartcategory']);
@@ -594,9 +597,28 @@ Route::prefix('driver-sql')->group(function () {
     Route::delete('/users/{driver_id}', [DriverSqlBridgeController::class, 'deleteDriver']);
     Route::post('/wallet/topup-email', [DriverSqlBridgeController::class, 'sendTopUpMail']);
     Route::post('/wallet/payout-email', [DriverSqlBridgeController::class, 'sendPayoutMail']);
-    Route::get('/orders/{orderId}/is-first', [DriverSqlBridgeController::class, 'getFirstOrderOrNot']);
-    Route::post('/referrals/credit', [DriverSqlBridgeController::class, 'updateReferralAmount']);
+    Route::get('/orders/{authorID}/is-first', [DriverSqlBridgeController::class, 'getFirstOrderOrNot']);
+    Route::get('/referrals/{id}', [DriverSqlBridgeController::class, 'getReferralById']);
     Route::post('/orders/assign', [DriverSqlBridgeController::class, 'assignOrderToDriverFCFS']);
     Route::post('/orders/remove-from-others', [DriverSqlBridgeController::class, 'removeOrderFromOtherDrivers']);
+    Route::post('/wallet/withdraw', [DriverSqlBridgeController::class, 'addDriverPayout']);
+    Route::get('/wallet/withdraw', [DriverSqlBridgeController::class, 'getDriverPayoutsByDriver']);
+
 });
 
+Route::prefix('chat-driver')->group(function () {
+    Route::post('inbox', [ChatDriverContoller::class, 'addInbox']); // Add/Update inbox
+    Route::post('thread', [ChatDriverContoller::class, 'addThread']); // Add chat message
+    Route::get('inbox/{id}', [ChatDriverContoller::class, 'getInbox']); // Get inbox + threads
+    Route::get('threads/{chatId}', [ChatDriverContoller::class, 'getThreads']); // Get threads only
+});
+
+
+Route::get('documents/driver/list', [DriverUserController::class, 'getDocumentList']);
+Route::get('/driver/documents/{driver_id}', [DriverUserController::class, 'getDriverDocuments']);
+
+// Wallet API routes
+Route::post('/driver/wallet/transaction', [WalletApiController::class, 'setWalletTransaction']);
+Route::get('/driver/wallet/withdraw-method', [WalletApiController::class, 'getWithdrawMethod']);
+Route::post('/driver/wallet/withdraw-method', [WalletApiController::class, 'setWithdrawMethod']);
+Route::post('/driver/wallet/driver/record', [WalletApiController::class, 'setDriverWalletRecord']);
