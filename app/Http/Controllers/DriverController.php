@@ -445,8 +445,10 @@ class DriverController extends Controller
             $driver->carNumber = $driverData['carNumber'] ?? '';
             $driver->carPictureURL = $driverData['carPictureURL'] ?? '';
             $driver->zoneId = $driverData['zoneId'] ?? '';
-            $driver->active = $toBool($driverData['active'] ?? 1);
-            $driver->isActive = $toBool($driverData['isActive'] ?? 1);
+//            $driver->active = $toBool($driverData['active'] ?? 1);
+//            $driver->isActive = $toBool($driverData['isActive'] ?? 1);
+            $driver->active   = '1';  // approved
+            $driver->isActive = '1';  // allowed for orders
             $driver->isDocumentVerify = $toBool($driverData['isDocumentVerify'] ?? 0);
             $driver->wallet_amount = floatval($driverData['wallet_amount'] ?? 0);
 

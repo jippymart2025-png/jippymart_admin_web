@@ -249,6 +249,8 @@ Route::middleware(['permission:orders,orders.edit'])->group(function () {
 Route::middleware(['permission:orders,vendors.orderprint'])->group(function () {
     Route::get('/orders/print/{id}', [App\Http\Controllers\OrderController::class, 'orderprint'])->name('vendors.orderprint');
 });
+Route::get('/review-attributes', [App\Http\Controllers\OrderController::class, 'attributes']);
+Route::get('/order/{orderId}/reviews', [App\Http\Controllers\OrderController::class, 'orderReviews']);
 
 // Catering Requests Routes
 Route::middleware(['permission:catering,catering'])->group(function () {
@@ -463,7 +465,9 @@ Route::middleware(['permission:drivers,drivers.edit'])->group(function () {
 Route::middleware(['permission:drivers,drivers.delete'])->group(function () {
     Route::delete('/drivers/{id}', [App\Http\Controllers\DriverController::class, 'destroy'])->name('drivers.delete');
 });
-
+Route::middleware(['permission:drivers,drivers.create'])->group(function () {
+    Route::post('/drivers', [App\Http\Controllers\DriverController::class, 'createDriver'])->name('drivers.create.post');
+});
 ////Driver Wallet Management Routes
 //Route::middleware(['permission:driver-wallets,driverWallets'])->group(function () {
 //    Route::get('driver-wallets', [App\Http\Controllers\DriverWalletController::class, 'index'])->name('driver.wallets');

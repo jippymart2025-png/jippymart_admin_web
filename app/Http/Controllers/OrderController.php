@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
+use App\Models\ReviewAttribute;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -1288,4 +1289,43 @@ class OrderController extends Controller
 
         return response()->json($order);
     }
+
+    public function attributes(){
+        return ReviewAttribute::select('id', 'title')->get();
+    }
+
+    public function orderReviews($orderId)
+    {
+        $reviews = DB::table('foods_review')
+            ->where('orderid', $orderId)
+            ->orderByDesc('createdAt')
+            ->get()
+            ->map(function ($review) {
+                // decode json values
+                $review->photos = json_decode($review->photos ?? '[]', true);
+                $review->reviewAttributes = json_decode($review->reviewAttributes ?? '{}', true);
+
+                // ⭐ format the createdAt datetime in Asia/Kolkata timezone
+                // Format: "Nov 29, 2025" (like screenshot)
+                if (!empty($review->createdAt)) {
+                    try {
+                        $date = \Carbon\Carbon::parse($review->createdAt)
+                            ->setTimezone('Asia/Kolkata');
+                        $review->createdAtFormatted = $date->format('M j, Y'); // "Nov 29, 2025"
+                        $review->createdAtFormattedWithTime = $date->format('M j, Y h:i A'); // "Nov 29, 2025 6:06 PM"
+                    } catch (\Exception $e) {
+                        $review->createdAtFormatted = null;
+                        $review->createdAtFormattedWithTime = null;
+                    }
+                } else {
+                    $review->createdAtFormatted = null;
+                    $review->createdAtFormattedWithTime = null;
+                }
+
+                return $review;
+            });
+
+        return response()->json(['data' => $reviews]);
+    }
+
 }
