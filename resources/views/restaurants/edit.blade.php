@@ -11,7 +11,6 @@
         $newcountriesjs[$valuecountry->phoneCode] = $valuecountry->code;
     }
     ?>
-
     <div class="page-wrapper">
         <div class="row page-titles">
             <div class="col-md-5 align-self-center">
@@ -713,6 +712,39 @@
                                             </div>
                                         </div>
                                     </div>
+                                </fieldset>
+                                <fieldset id="story_upload_div">
+                                    <legend>Story</legend>
+
+                                    <div class="form-group row width-50 vendor_image">
+                                        <label class="col-3 control-label">Choose humbling GIF/Image</label>
+                                        <div class="">
+                                            <div id="story_thumbnail"></div>
+                                        </div>
+                                    </div>
+
+
+                                    <div class="form-group row">
+                                        <div>
+                                            <input type="file" id="file" onChange="handleStoryThumbnailFileSelect(event)">
+                                            <div id="uploding_story_thumbnail"></div>
+                                        </div>
+                                    </div>
+
+
+                                    <div class="form-group row vendor_image">
+                                        <label class="col-3 control-label">Select Story Video</label>
+                                        <div class="">
+                                            <div id="story_vedios" class="row"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="form-group row">
+                                        <div>
+                                            <input type="file" id="video_file" onChange="handleStoryFileSelect(event)">
+                                            <div id="uploding_story_video"></div>
+                                        </div>
+                                    </div>handleStoryThumbnailFileSelect
                                 </fieldset>
                             </div>
                         </div>

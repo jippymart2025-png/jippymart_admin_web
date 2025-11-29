@@ -838,7 +838,7 @@
             console.log('✅ Commission found for restaurant ' + val.title + ':', formattedCommission);
         } else {
             // No commission set
-            adminCommissionDisplay = '<span style="color: #999; font-style: italic;">-</span>';
+            adminCommissionDisplay = '<span style="color: #999; font-style: italic;">N/A</span>';
             console.log('ℹ️ No commission set for restaurant ' + val.title);
         }
         html.push(adminCommissionDisplay);

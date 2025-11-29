@@ -365,7 +365,8 @@ class OrderController extends Controller
                 if (!empty($row->createdAt)) {
                     try {
                         // Parse ISO 8601 string (e.g., "2025-10-14T14:53:43.860219Z")
-                        $date = \Carbon\Carbon::parse($row->createdAt);
+                        $date = \Carbon\Carbon::parse($row->createdAt)
+                            ->setTimezone('Asia/Kolkata');
                         // Format: "Oct 1, 2025 11:27 PM"
                         $dateText = $date->format('M j, Y g:i A');
 
@@ -1273,7 +1274,16 @@ class OrderController extends Controller
         if (!$order) return response()->json([]);
 
         // Convert JSON fields if needed
-        $order->vendor = json_decode($order->vendor, true);
+        // Fetch vendor details from vendors table
+        $vendor = DB::table('vendors')
+            ->where('id', $order->vendorID)
+            ->select('id', 'title', 'photo', 'vType', 'phonenumber', 'location')
+            ->first();
+
+        $order->vendor_title = $vendor->title ?? null;
+        $order->vendor_photo = $vendor->photo ?? null;
+        $order->vendor_full = $vendor;   // optional full vendor object
+
         $order->author = json_decode($order->author, true);
 
         return response()->json($order);

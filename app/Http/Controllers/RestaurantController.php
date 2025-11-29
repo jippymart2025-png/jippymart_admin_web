@@ -2140,7 +2140,7 @@ class RestaurantController extends Controller
             $restaurant->subscription_plan = isset($restaurantData['subscription_plan']) ? $toJson($restaurantData['subscription_plan'], null) : null;
             $restaurant->subscriptionExpiryDate = $restaurantData['subscriptionExpiryDate'] ?? '';
             $restaurant->subscriptionTotalOrders = $restaurantData['subscriptionTotalOrders'] ?? '';
-            $restaurant->createdAt = '"' . gmdate('Y-m-d\TH:i:s.u\Z') . '"';
+            $restaurant->createdAt = now('Asia/Kolkata')->format('M j, Y g:i A');
 
             $restaurant->save();
 
