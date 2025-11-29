@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\ChatadminController;
 use App\Http\Controllers\Api\ChatRestaurantController;
 use App\Http\Controllers\Api\DriverControllerLogin;
 use App\Http\Controllers\Api\DriverUserController;
+use App\Http\Controllers\Api\DriverSqlBridgeController;
 use App\Http\Controllers\Api\MobileSqlBridgeController;
 use App\Http\Controllers\Api\OrderSupportController;
 use App\Http\Controllers\Api\productcontroller;
@@ -405,9 +406,7 @@ Route::post('/mobile/orders', [MobileSqlBridgeController::class, 'createOrder'])
 
 Route::post('/driver/login', [DriverControllerLogin::class, 'driverLogin']);
 Route::post('/driver/signup', [DriverControllerLogin::class, 'driverSignup']);
-Route::middleware('auth:sanctum')->group(function () {
     Route::get('/users/{firebase_id}', [DriverUserController::class, 'getUserProfile']);
-});
 
 
 
@@ -570,4 +569,34 @@ Route::get('/restaurant/settings/restaurant', [MobileSqlBridgeController::class,
 
 Route::post('/restaurant/forgot-password', [restaurentrestpassword::class, 'sendResetLink']);
 Route::post('/restaurant/reset-password',  [restaurentrestpassword::class, 'resetPassword']);
+
+
+// ------------------------------------------------------------------
+// Driver SQL bridge routes (new Firestore -> SQL parity endpoints)
+// ------------------------------------------------------------------
+Route::prefix('driver-sql')->group(function () {
+//    Route::post('/is-login', [DriverSqlBridgeController::class, 'isLogin']);
+    Route::get('/users/{uid}/exists', [DriverSqlBridgeController::class, 'userExistOrNot']);
+//    Route::get('/users/{uid}', [DriverSqlBridgeController::class, 'getDriverProfile']);
+    Route::post('/users/update', [DriverSqlBridgeController::class, 'updateDriver']);
+    Route::post('/wallet/update', [DriverSqlBridgeController::class, 'updateUserWallet']);
+    Route::post('/delivery-amount/update', [DriverSqlBridgeController::class, 'updateUserDeliveryAmount']);
+    Route::get('/onboarding', [DriverSqlBridgeController::class, 'getDriverOnBoardingList']);
+    Route::get('/vendors', [DriverSqlBridgeController::class, 'getDriverZoneVendors']);
+    Route::post('/wallet/records', [DriverSqlBridgeController::class, 'setDriverWalletRecord']);
+    Route::get('/charges', [DriverSqlBridgeController::class, 'getDriverCharges']);
+    Route::get('/settings', [DriverSqlBridgeController::class, 'getDriverSettings']);
+    Route::get('/wallet/transactions', [DriverSqlBridgeController::class, 'getDriverWalletTransactions']);
+    Route::get('/wallet/delivery-records', [DriverSqlBridgeController::class, 'getDriverAmountWalletTransaction']);
+    Route::get('/tax', [DriverSqlBridgeController::class, 'getDriverTaxList']);
+    Route::post('/wallet/auto-update', [DriverSqlBridgeController::class, 'updateWalletAmount']);
+    Route::get('/vendors/{vendorId}/cuisines', [DriverSqlBridgeController::class, 'getVendorCuisines']);
+    Route::delete('/users/{driver_id}', [DriverSqlBridgeController::class, 'deleteDriver']);
+    Route::post('/wallet/topup-email', [DriverSqlBridgeController::class, 'sendTopUpMail']);
+    Route::post('/wallet/payout-email', [DriverSqlBridgeController::class, 'sendPayoutMail']);
+    Route::get('/orders/{orderId}/is-first', [DriverSqlBridgeController::class, 'getFirstOrderOrNot']);
+    Route::post('/referrals/credit', [DriverSqlBridgeController::class, 'updateReferralAmount']);
+    Route::post('/orders/assign', [DriverSqlBridgeController::class, 'assignOrderToDriverFCFS']);
+    Route::post('/orders/remove-from-others', [DriverSqlBridgeController::class, 'removeOrderFromOtherDrivers']);
+});
 

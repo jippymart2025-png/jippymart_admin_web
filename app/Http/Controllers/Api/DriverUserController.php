@@ -25,7 +25,7 @@ class DriverUserController extends Controller
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'id' => $user->firebase_id,
+                    'firebase_id' => $user->firebase_id,
                     'firstName' => $user->firstName,
                     "lastName" => $user->lastName,
                     'email' => $user->email,
