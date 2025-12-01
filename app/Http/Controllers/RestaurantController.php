@@ -2114,6 +2114,7 @@ class RestaurantController extends Controller
             $restaurant->photos = $toJson($restaurantData['photos'] ?? null, []);
             $restaurant->phonenumber = $restaurantData['phonenumber'] ?? '';
             $restaurant->countryCode = $restaurantData['countryCode'] ?? '';
+            $restaurant->vType = $restaurantData['vType'] ?? 'restaurant';
             $restaurant->zoneId = $restaurantData['zoneId'] ?? '';
             $restaurant->author = $restaurantData['author'] ?? '';
             $restaurant->authorName = $restaurantData['authorName'] ?? '';

@@ -31,6 +31,7 @@ class Vendor extends Model
         'location',
         'isOpen',
         'author',
+        'vType',
         'adminCommission'
     ];
 

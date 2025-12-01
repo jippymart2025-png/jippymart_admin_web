@@ -211,12 +211,25 @@ class DriverController extends Controller
             // Build response data
             $data = [];
             foreach ($drivers as $driver) {
-                // Parse createdAt date
+//                // Parse createdAt date
+//                $createdAtFormatted = '';
+//                if ($driver->createdAt) {
+//                    try {
+//                        $dateStr = trim($driver->createdAt, '"');
+//                        $date = new \DateTime($dateStr);
+//                        $createdAtFormatted = $date->format('M d, Y h:i A');
+//                    } catch (\Exception $e) {
+//                        $createdAtFormatted = $driver->createdAt;
+//                    }
                 $createdAtFormatted = '';
                 if ($driver->createdAt) {
                     try {
                         $dateStr = trim($driver->createdAt, '"');
                         $date = new \DateTime($dateStr);
+
+                        // Convert to Asia/Kolkata timezone
+                        $date->setTimezone(new \DateTimeZone('Asia/Kolkata'));
+
                         $createdAtFormatted = $date->format('M d, Y h:i A');
                     } catch (\Exception $e) {
                         $createdAtFormatted = $driver->createdAt;
