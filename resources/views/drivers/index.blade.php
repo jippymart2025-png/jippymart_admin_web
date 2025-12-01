@@ -388,54 +388,26 @@
             },300));
         });
         $(document).on("click","input[name='isOnline']",async function(e) {
-            var ischeck=$(this).is(':checked');
-            var id=this.id;
-            var switchElement=$(this);
+            var ischeck = $(this).is(':checked');
+            var id = this.id;
 
-            if(ischeck) {
-                // Check if driver exists and is verified via SQL
-                $.ajax({
-                    url: '/drivers/' + id + '/data',
-                    type: 'GET',
-                    success: function(response) {
-                        if(response.success && response.data) {
-                            if(!response.data.isDocumentVerify) {
-                                switchElement.prop('checked',false);
-                                alert('{{trans("lang.document_verification_is_pending")}}');
-                                return false;
-                            } else {
-                                // Update isActive via SQL
-                                $.ajax({
-                                    url: '/drivers/' + id,
-                                    type: 'PUT',
-                                    data: {
-                                        isActive: true,
-                                        _token: '{{csrf_token()}}'
-                                    },
-                                    success: function(response) {
-                                        console.log('Driver set to online');
-                                    }
-                                });
-                            }
-                        }
-                    }
-                });
-            } else {
-                // Update isActive to false via SQL
-                $.ajax({
-                    url: '/drivers/' + id,
-                    type: 'PUT',
-                    data: {
-                        isActive: false,
-                        _token: '{{csrf_token()}}'
-                    },
-                    success: function(response) {
-                        console.log('Driver set to offline');
-                    }
-                });
-            }
+            // Directly toggle online / offline without blocking on document verification
+            $.ajax({
+                url: '/drivers/' + id,
+                type: 'PUT',
+                data: {
+                    isDocumentVerify: ischeck,
+                    _token: '{{csrf_token()}}'
+                },
+                success: function(response) {
+                    console.log('Driver online status updated:', ischeck);
+                },
+                error: function(xhr) {
+                    console.error('Error updating driver online status', xhr);
+                }
+            });
         });
-        $(document).on("click","input[name='isActive']",async function(e) {
+        $(document).on("click","input[name='isDocumentVerify']",async function(e) {
             jQuery("#data-table_processing").show();
             var ischeck=$(this).is(':checked');
             var id=this.id;

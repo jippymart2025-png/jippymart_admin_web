@@ -77,7 +77,7 @@ class DriverControllerLogin extends Controller
 
         // Auto-approve settings
         $autoApprove = true;
-        $isDocumentVerify = false;
+//        $isDocumentVerify = false;
 
         // EMAIL SIGNUP
         if ($request->type == "email") {
@@ -99,8 +99,8 @@ class DriverControllerLogin extends Controller
                 "password" => Hash::make($request->password),
                 "role" => "driver",
                 "fcmToken" => $request->fcm_token,
-                "isActive" => $autoApprove ? 1 : 0,
-                "isDocumentVerify" => $isDocumentVerify ? 0 : 1,
+                "active" => $autoApprove ? 1 : 0,
+                "isDocumentVerify" =>  0,
                 "zoneId" => $request->zone_id,
                 "provider" => "email",
                 "appIdentifier" => $request->app_identifier,
@@ -139,8 +139,8 @@ class DriverControllerLogin extends Controller
                 "password" => Hash::make($request->password),
                 "role" => "driver",
                 "fcmToken" => $request->fcm_token,
-                "isActive" => $autoApprove ? 1 : 0,
-                "isDocumentVerify" => $isDocumentVerify ? 0 : 1,
+                "active" => $autoApprove ? 1 : 0,
+                "isDocumentVerify" => 0,
                 "zoneId" => $request->zone_id,
                 "provider" => "email",
                 "appIdentifier" => $request->app_identifier,
