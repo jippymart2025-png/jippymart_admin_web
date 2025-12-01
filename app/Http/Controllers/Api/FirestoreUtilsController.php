@@ -256,11 +256,24 @@ class FirestoreUtilsController extends Controller
 
             $input = $request->all();
 
-            // Get actual DB columns
+            // Fetch columns from DB
             $columns = DB::getSchemaBuilder()->getColumnListing('restaurant_orders');
 
-            // Keep only valid columns
+            // Accept only real table columns
             $data = array_intersect_key($input, array_flip($columns));
+
+            // List of fields that need JSON encoding
+            $jsonFields = [
+                'address', 'products', 'vendor', 'author', 'specialDiscount',
+                'rejectedByDrivers', 'calculatedCharges', 'scheduleTime',
+                'triggerDelivery', 'createdAt'
+            ];
+
+            foreach ($jsonFields as $field) {
+                if (isset($data[$field]) && !is_string($data[$field])) {
+                    $data[$field] = json_encode($data[$field]);
+                }
+            }
 
             DB::table('restaurant_orders')->updateOrInsert(
                 ['id' => $data['id']],
@@ -276,7 +289,7 @@ class FirestoreUtilsController extends Controller
             Log::error('setOrder error: '.$e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage() // show real error
+                'message' => $e->getMessage()
             ], 500);
         }
     }

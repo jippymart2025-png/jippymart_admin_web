@@ -4,15 +4,19 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\FirestoreUtilsController;
 use App\Mail\SetEmailData;
+use App\Models\Driver;
 use App\Models\DriverPayout;
 use App\Models\documents_verify;
 use App\Models\OnBoarding;
+use App\Models\Order_Billing;
+use App\Models\restaurant_orders;
 use App\Models\Setting;
 use App\Models\User;
 use App\Models\Vendor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -1140,5 +1144,210 @@ class DriverSqlBridgeController extends FirestoreUtilsController
 
         return round($driverAmount, 2);
     }
+
+    public function getCurrentOrder(Request $request)
+    {
+        $driverId = $request->driver_id;
+
+        $driver = user::where('firebase_id', $driverId)->first();
+        if (!$driver) {
+            return response()->json(["success" => false, "message" => "Driver not found"], 404);
+        }
+
+        $inProgress   = json_decode($driver->inProgressOrderID ?? "[]");
+        $orderRequest = json_decode($driver->orderRequestData ?? "[]");
+
+        /** ───────────────────────────────
+         * CASE 1: Driver already has an order
+         * ───────────────────────────────*/
+        if (!empty($inProgress)) {
+
+            $orderId = $inProgress[0];
+
+            $order = restaurant_orders::where('id', $orderId)
+                ->whereNotIn('status', ['orderCancelled', 'driverRejected', 'orderCompleted'])
+                ->first();
+
+            if ($order) {
+                return response()->json([
+                    "success" => true,
+                    "type" => "inProgress",
+                    "order" => $order
+                ]);
+            }
+
+            /** Order finished → Remove from driver */
+            $inProgress = array_filter($inProgress, fn($id) => $id != $orderId);
+            $driver->inProgressOrderID = json_encode(array_values($inProgress));
+            $driver->save();
+
+            return response()->json([
+                "success" => false,
+                "message" => "Order completed, removed from driver"
+            ]);
+        }
+
+        /** ───────────────────────────────
+         * CASE 2: Requested Orders Pending
+         * ───────────────────────────────*/
+        if (!empty($orderRequest)) {
+
+            $orderId = $orderRequest[0];
+
+            $order = restaurant_orders::where('id', $orderId)
+                ->whereNotIn('status', ['orderCancelled','driverRejected'])
+                ->first();
+
+            if ($order) {
+                return response()->json([
+                    "success" => true,
+                    "type" => "request",
+                    "order" => $order
+                ]);
+            }
+
+            /** Remove old request if not found */
+            $orderRequest = array_filter($orderRequest, fn($id) => $id != $orderId);
+            $driver->orderRequestData = json_encode(array_values($orderRequest));
+            $driver->save();
+
+            return response()->json([
+                "success" => false,
+                "message" => "Order not found, removed request"
+            ]);
+        }
+
+        /** ───────────────────────────────
+         * CASE 3: No Current Orders
+         * ───────────────────────────────*/
+        return response()->json([
+            "success" => false,
+            "message" => "No orders available"
+        ]);
+    }
+
+
+
+    public function getDriver($id)
+    {
+        $driver = User::where('firebase_id', $id)->first();
+
+        if (!$driver) {
+            return response()->json([
+                'success' => false,
+                'message' => "Driver not found",
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data'    => $driver
+        ]);
+    }
+
+
+    public function todayCompletedOrders($driverId)
+    {
+            $todayStart = now()->startOfDay()->toIso8601String(); // e.g. 2025-12-01T00:00:00Z
+        $todayEnd   = now()->endOfDay()->toIso8601String();   // e.g. 2025-12-01T23:59:59Z
+
+        $count = Restaurant_Orders::where('driverID', $driverId)
+            ->whereIn('status', ['completed', 'shipped'])
+            ->where('createdAt', '>=', $todayStart)
+            ->where('createdAt', '<=', $todayEnd)
+            ->count();
+
+        return response()->json([
+            'success' => true,
+            'count'   => $count,
+        ]);
+    }
+
+
+
+//    public function completeOrder(Request $request, $orderId)
+//    {
+//        DB::beginTransaction();
+//        try {
+//            // Fetch order
+//            $order = Restaurant_Orders::where('id', $orderId)->first();
+//            if (!$order) {
+//                return response()->json([
+//                    'success' => false,
+//                    'message' => 'Order not found'
+//                ], 404);
+//            }
+//
+//            // Ensure required fields
+//            if (!$order->driverID) {
+//                $order->driverID = $request->driver_id ?? null;
+//            }
+//
+//            if (!$order->driverID || !$order->paymentMethod || !$order->deliveryCharge || !$order->tipAmount) {
+//                return response()->json([
+//                    'success' => false,
+//                    'message' => 'Order data incomplete. Cannot complete order.'
+//                ], 400);
+//            }
+//
+//            // Fetch ToPay from billing
+//            $billing = Order_Billing::where('order_id', $order->id)->first();
+//            if (!$billing || !$billing->ToPay) {
+//                return response()->json([
+//                    'success' => false,
+//                    'message' => 'Order billing info missing. Cannot complete order.'
+//                ], 400);
+//            }
+//
+//            $order->toPay = $billing->ToPay;
+//            $order->status = 'completed'; // or 'shipped' depending on your logic
+//            $order->save();
+//
+//            // Update driver wallet
+//            DriverWallet::updateOrCreate(
+//                ['driver_id' => $order->driverID],
+//                ['amount' => DB::raw("amount + {$order->toPay}")]
+//            );
+//
+//            // Remove order from other drivers (if you have a table storing assigned drivers)
+//            DB::table('driver_orders')
+//                ->where('order_id', $order->id)
+//                ->where('driver_id', '!=', $order->driverID)
+//                ->delete();
+//
+//            // Optional: Update user's inProgressOrderID/orderRequestData if needed
+//            $user = User::find($order->driverID);
+//            if ($user) {
+//                // Remove order from user's lists if stored
+//            }
+//
+//            // Optional: Update referral amount for first order
+//            // Your logic here...
+//
+//            // Send notification (pseudo-code)
+//            if ($order->author_fcm_token) {
+//                SendNotification::sendFcmMessage(
+//                    'Order Completed',
+//                    $order->author_fcm_token,
+//                    []
+//                );
+//            }
+//
+//            DB::commit();
+//
+//            return response()->json([
+//                'success' => true,
+//                'message' => 'Order completed successfully'
+//            ]);
+//
+//        } catch (\Exception $e) {
+//            DB::rollBack();
+//            return response()->json([
+//                'success' => false,
+//                'message' => 'Failed to complete order: ' . $e->getMessage()
+//            ], 500);
+//        }
+//    }
+
 }
 

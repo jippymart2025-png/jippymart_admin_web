@@ -622,3 +622,14 @@ Route::post('/driver/wallet/transaction', [WalletApiController::class, 'setWalle
 Route::get('/driver/wallet/withdraw-method', [WalletApiController::class, 'getWithdrawMethod']);
 Route::post('/driver/wallet/withdraw-method', [WalletApiController::class, 'setWithdrawMethod']);
 Route::post('/driver/wallet/driver/record', [WalletApiController::class, 'setDriverWalletRecord']);
+
+Route::post('/driver/get-current-order', [DriverSqlBridgeController::class, 'getCurrentOrder']);
+// routes/api.php
+Route::get('/driver/{id}', [DriverSqlBridgeController::class, 'getDriver']);
+Route::get('/order/{id}', [DriverSqlBridgeController::class, 'refreshCurrentOrder']);
+// routes/api.php
+Route::get('/orders/completed/today/{driverId}', [DriverSqlBridgeController::class, 'todayCompletedOrders']);
+
+// routes/api.php
+Route::post('/order/complete/{orderId}', [DriverSqlBridgeController::class, 'completeOrder']);
+
