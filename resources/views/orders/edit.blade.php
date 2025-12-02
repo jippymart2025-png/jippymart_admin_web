@@ -766,15 +766,21 @@
                 }
                 $('#payment_method').html(payment_method);
                 if (order.hasOwnProperty('takeAway') && order.takeAway) {
-                    $('#driver_pending').hide();
-                    $('#driver_rejected').hide();
-                    $('#order_shipped').hide();
-                    $('#in_transit').hide();
+                    // $('#driver_pending').hide();
+                    // $('#driver_rejected').hide();
+                    // Keep Order Shipped and In Transit visible for all orders
+                    // $('#order_shipped').hide();
+                    // $('#in_transit').hide();
                     $('#order_type').text('{{ trans('lang.order_takeaway') }}');
                     orderTakeAwayOption = true;
                 } else {
                     $('#order_type').text('{{ trans('lang.order_delivery') }}');
                 }
+                // Ensure Order Shipped and In Transit are always visible
+                $('#order_shipped').show();
+                $('#in_transit').show();
+                $('#driver_pending').show();
+                    $('#driver_rejected').show();
                 if ((order.driver != '' && order.driver != undefined) && (order.takeAway == false)) {
                     $('#driver_carName').text(order.driver.carName);
                     $('#driver_carNumber').text(order.driver.carNumber);
@@ -973,7 +979,54 @@
                 if (order.hasOwnProperty('payment_method')) {
                     orderPaymentMethod = order.payment_method;
                 }
-                $("#order_status option[value='" + order.status + "']").attr("selected", "selected");
+                
+                // Set selected status with case-insensitive matching and status normalization
+                var currentStatus = order.status || '';
+                var statusNormalized = currentStatus.toLowerCase().trim();
+                
+                // Map database status values to dropdown values
+                var statusMap = {
+                    'order shipped': 'Order Shipped',
+                    'restaurantorders shipped': 'Order Shipped',
+                    'orders shipped': 'Order Shipped',
+                    'in transit': 'In Transit',
+                    'order in transit': 'In Transit',
+                    'order placed': 'Order Placed',
+                    'restaurantorders placed': 'Order Placed',
+                    'orders placed': 'Order Placed',
+                    'order accepted': 'Order Accepted',
+                    'restaurantorders accepted': 'Order Accepted',
+                    'orders accepted': 'Order Accepted',
+                    'order rejected': 'Order Rejected',
+                    'restaurantorders rejected': 'Order Rejected',
+                    'orders rejected': 'Order Rejected',
+                    'driver pending': 'Driver Pending',
+                    'driver rejected': 'Driver Rejected',
+                    'order completed': 'Order Completed',
+                    'restaurantorders completed': 'Order Completed',
+                    'orders completed': 'Order Completed'
+                };
+                
+                // Try exact match first
+                var matchedValue = currentStatus;
+                if (statusMap[statusNormalized]) {
+                    matchedValue = statusMap[statusNormalized];
+                }
+                
+                // Set selected option
+                $("#order_status option[value='" + matchedValue + "']").attr("selected", "selected");
+                
+                // If no match found, try to find by partial match
+                if (!$("#order_status option[value='" + matchedValue + "']").length) {
+                    $("#order_status option").each(function() {
+                        var optionValue = $(this).val().toLowerCase();
+                        if (optionValue === statusNormalized || optionValue.indexOf(statusNormalized) !== -1 || statusNormalized.indexOf(optionValue) !== -1) {
+                            $(this).attr("selected", "selected");
+                            return false; // break loop
+                        }
+                    });
+                }
+                
                 if (order.status == "restaurantorders Rejected" || order.status == "Driver Rejected") {
                     $("#order_status").prop("disabled", true);
                 }

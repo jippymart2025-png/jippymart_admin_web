@@ -97,6 +97,16 @@
                                         </div>
                                     </div>
                                     <div class="form-group row width-50">
+                                        <label class="col-3 control-label">Vendor Type <span class="required-field"></span></label>
+                                        <div class="col-7">
+                                            <select id="vendor_type" class="form-control" required>
+                                                <option value="">Select Vendor Type</option>
+                                                <option value="restaurant">Restaurant</option>
+                                                <option value="mart">Mart</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group row width-50">
                                         <label class="col-3 control-label">{{trans('lang.restaurant_address')}}</label>
                                         <div class="col-7">
                                             <input type="text" class="form-control restaurant_address">
@@ -723,7 +733,6 @@
                                         </div>
                                     </div>
 
-
                                     <div class="form-group row">
                                         <div>
                                             <input type="file" id="file" onChange="handleStoryThumbnailFileSelect(event)">
@@ -1032,8 +1041,14 @@
             });
         }
 
+        // Store vType globally to preserve it during save
+        let currentVType = 'restaurant';
+
         function populateForm(restaurant) {
             $('.restaurant_name').val(restaurant.title || '');
+
+            // Store vType from loaded data
+            currentVType = restaurant.vType || 'restaurant';
 
             if (restaurant.vendorCuisineID) {
                 $('#restaurant_vendor_cuisines').val(restaurant.vendorCuisineID).trigger('change');
@@ -1049,7 +1064,7 @@
             if (restaurant.countryCode) {
                 $('#country_selector1').val(restaurant.countryCode.replace('+', '')).trigger('change');
             }
-
+            $('#vendor_type').val(restaurant.vType ?? 'restaurant').trigger('change');
             $('.restaurant_phone').val(shortEditNumber(restaurant.phonenumber || ''));
             $('.restaurant_address').val(restaurant.location || '');
             $('#zone').val(restaurant.zoneId || '').trigger('change');
@@ -1061,6 +1076,8 @@
                 $('#commission_type').val(restaurant.adminCommission.commissionType || 'Percent');
                 $('.commission_fix').val(restaurant.adminCommission.fix_commission ?? 0);
             }
+
+
 
             $('#is_open').prop('checked', !!restaurant.isOpen);
 
@@ -1102,6 +1119,16 @@
             $('#specialDiscountEnable').prop('checked', !!restaurant.specialDiscountEnable);
             populateSpecialDiscount(restaurant.specialDiscount || []);
             populateWorkingHours(restaurant.workingHours || []);
+
+
+            // ⭐ Set Vendor Profile Route based on vendor_db_id
+            if (restaurant.vendor_db_id) {
+                let route1 = '{{ route("vendor.edit", ":id") }}';
+                route1 = route1.replace(':id', restaurant.vendor_db_id);
+                $('.profileRoute').attr('href', route1);
+            } else {
+                $('.profileRoute').removeAttr('href');
+            }
         }
 
         function populateFilters(filters) {
@@ -1332,6 +1359,7 @@
                 return $(this).val() ? $(this).text() : null;
             }).get().filter(Boolean);
             const address = $('.restaurant_address').val().trim();
+            const vendorType = $('#vendor_type').val();
             const latitude = parseFloat($('.restaurant_latitude').val());
             const longitude = parseFloat($('.restaurant_longitude').val());
             const description = $('.restaurant_description').val().trim();
@@ -1382,6 +1410,9 @@
             }
             if (!description) {
                 errors.push("{{ trans('lang.restaurant_description_error') }}");
+            }
+            if (!vendorType) {
+                errors.push("Please select vendor type.");
             }
 
             if (errors.length) {
@@ -1444,7 +1475,8 @@
                     adminCommission,
                     photo: galleryUrls.length ? galleryUrls[0] : null,
                     photos: galleryUrls,
-                    restaurantMenuPhotos: menuUrls
+                    restaurantMenuPhotos: menuUrls,
+                    vType: vendorType,
                 };
 
                 await $.ajax({

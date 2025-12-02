@@ -106,8 +106,6 @@ foreach ($countries as $keycountry => $valuecountry) {
                                             </option>
                                             <?php } ?>
                                         </select>
-
-
                                         <input type="text" class="form-control restaurant_phone"
                                             onkeypress="return chkAlphabets2(event,'error2')">
                                         <div id="error2" class="err"></div>
@@ -117,7 +115,16 @@ foreach ($countries as $keycountry => $valuecountry) {
                                     {{ trans("lang.restaurant_phone_help") }}
                                 </div>
                             </div>
-
+                            <div class="form-group row width-50">
+                                <label class="col-3 control-label">Vendor Type <span class="required-field"></span></label>
+                                <div class="col-7">
+                                    <select id="vendor_type" class="form-control" required>
+                                        <option value="">Select Vendor Type</option>
+                                        <option type="restaurant">restaurant</option>
+                                        <option type="mart">mart</option>
+                                    </select>
+                                </div>
+                            </div>
                             <div class="form-group row width-50">
                                 <label class="col-3 control-label">{{trans('lang.restaurant_address')}}</label>
                                 <div class="col-7">
@@ -1275,6 +1282,7 @@ foreach ($countries as $keycountry => $valuecountry) {
         var phonenumber=$(".restaurant_phone").val();
         var commissionType=$("#commission_type").val();
         var fixCommission=$(".commission_fix").val();
+        var vType=$("#vendor_type").val();
         var zoneId=$('#zone option:selected').val();
         var zoneArea=$('#zone option:selected').data('area');
         var isInZone=false;
@@ -1539,6 +1547,11 @@ foreach ($countries as $keycountry => $valuecountry) {
             $(".error_top").html("");
             $(".error_top").append("<p>{{trans('lang.restaurant_address_error')}}</p>");
             window.scrollTo(0,0);
+        } else if(vType=='') {
+            $(".error_top").show();
+            $(".error_top").html("");
+            $(".error_top").append("<p>select vendor type</p>");
+            window.scrollTo(0,0);
         } else if(zoneId=='') {
             $(".error_top").show();
             $(".error_top").html("");
@@ -1631,6 +1644,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                     'vendorCuisineID': vendorCuisine,
                     'countryCode': rescountry_code,
                     'phonenumber': phonenumber,
+                    'vType': vType,
                     'id': restaurant_id,
                     'filters': filters_new,
                     'photos': GalleryIMG,
