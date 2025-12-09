@@ -1,3 +1,13 @@
+# Disable LiteSpeed WAF (Web Application Firewall) for API requests
+<IfModule LiteSpeed>
+    php_value modsecurity.enabled Off
+</IfModule>
+
+# Disable ModSecurity for LiteSpeed
+<IfModule mod_security.c>
+    SecRuleEngine Off
+</IfModule>
+
 <IfModule mod_headers.c>
      # Enable CORS for all domains (or change "*" to a specific domain)
      Header always set Access-Control-Allow-Origin "*"
@@ -12,6 +22,17 @@
      </IfModule>
 
      RewriteEngine On
+     
+     # Disable LiteSpeed WAF via environment variable
+     SetEnvIf Request_URI ".*" MODSEC_ENABLE=Off
+
+     # Force HTTPS header detection for proxied requests
+     RewriteCond %{HTTP:X-Forwarded-Proto} =https
+     RewriteRule .* - [E=HTTPS:on]
+
+     # Handle Authorization Header
+     RewriteCond %{HTTP:Authorization} .
+     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
      # Allow preflight OPTIONS requests to return OK
      RewriteCond %{REQUEST_METHOD} OPTIONS

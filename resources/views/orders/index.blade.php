@@ -60,6 +60,7 @@
                                             <option value="last_week">📅 Last Week</option>
                                             <option value="last_month">📆 Last Month</option>
                                             <option value="custom">🗓️ Custom Range</option>
+                                            <option value="all_orders">📋 All Orders</option>
                                         </select>
                                     </div>
                                     <div class="select-box pl-3" id="custom_daterange_container" style="display:none;">
@@ -476,6 +477,22 @@
                     return;
                 }
 
+                if (selectedRange === 'all_orders') {
+                    // Show all orders - clear date filter
+                    console.log('📅 Showing all orders (no date filter)');
+                    // Clear daterangepicker values
+                    var picker = $('#daterange').data('daterangepicker');
+                    if (picker) {
+                        picker.setStartDate(moment());
+                        picker.setEndDate(moment());
+                    }
+                    // Reload table without date filter
+                    if ($.fn.DataTable.isDataTable('#orderTable')) {
+                        $('#orderTable').DataTable().ajax.reload();
+                    }
+                    return;
+                }
+
                 // Set predefined ranges
                 var startDate, endDate;
                 var now = moment();
@@ -591,11 +608,21 @@
                         console.log('📅 AJAX data - Selected range:', selectedRange);
                         console.log('📅 AJAX data - Daterangepicker exists:', !!daterangepicker);
 
-                        // Always try to get date from daterangepicker if it has valid dates
-                        if (daterangepicker && $('#daterange span').html() != '{{trans("lang.select_range")}}') {
+                        // Send date_range parameter for preset handling
+                        if (selectedRange) {
+                            d.date_range = selectedRange;
+                        }
+
+                        // Handle "all_orders" - don't send date filters
+                        if (selectedRange === 'all_orders') {
+                            console.log('📅 AJAX data - All orders selected, skipping date filter');
+                            // Don't set date_from/date_to - this will show all orders
+                        } else if (daterangepicker && $('#daterange span').html() != '{{trans("lang.select_range")}}') {
+                            // Always try to get date from daterangepicker if it has valid dates
                             try {
-                                d.date_from = daterangepicker.startDate.format('YYYY-MM-DD');
-                                d.date_to = daterangepicker.endDate.format('YYYY-MM-DD');
+                                // Send full timestamp so last_24_hours / last_week works correctly
+                                d.date_from = daterangepicker.startDate.format('YYYY-MM-DD HH:mm:ss');
+                                d.date_to   = daterangepicker.endDate.format('YYYY-MM-DD HH:mm:ss');
                                 console.log('📅 AJAX data - Sending dates:', d.date_from, 'to', d.date_to);
                             } catch (e) {
                                 console.error('❌ Error getting daterangepicker values:', e);

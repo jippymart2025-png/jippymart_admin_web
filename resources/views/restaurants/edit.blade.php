@@ -753,7 +753,7 @@
                                             <input type="file" id="video_file" onChange="handleStoryFileSelect(event)">
                                             <div id="uploding_story_video"></div>
                                         </div>
-                                    </div>handleStoryThumbnailFileSelect
+                                    </div>
                                 </fieldset>
                             </div>
                         </div>
@@ -802,6 +802,12 @@
         let availableCategories = [];
         let availableCuisines = [];
         let availableZones = [];
+
+        // Story variables
+        let story_vedios = [];
+        let story_thumbnail = '';
+        let story_thumbnail_filename = '';
+        let storevideoDuration = 0;
 
         let timeslotSunday = [];
         let timeslotMonday = [];
@@ -1114,6 +1120,20 @@
             restaurant_menu_photos = Array.isArray(restaurant.restaurantMenuPhotos) ? restaurant.restaurantMenuPhotos.slice() : [];
             renderMenuGallery();
 
+            // Load story data
+            if (restaurant.story) {
+                if (restaurant.story.videoUrl && Array.isArray(restaurant.story.videoUrl)) {
+                    story_vedios = restaurant.story.videoUrl.slice();
+                    renderStoryVideos();
+                }
+                if (restaurant.story.videoThumbnail) {
+                    story_thumbnail = restaurant.story.videoThumbnail;
+                    renderStoryThumbnail();
+                }
+            }
+
+
+
             populateFilters(restaurant.filters || {});
 
             $('#specialDiscountEnable').prop('checked', !!restaurant.specialDiscountEnable);
@@ -1122,9 +1142,10 @@
 
 
             // ⭐ Set Vendor Profile Route based on vendor_db_id
-            if (restaurant.vendor_db_id) {
+            // ⭐ Set Vendor Profile Route based on vendor_db_id
+            if (restaurant.author) {
                 let route1 = '{{ route("vendor.edit", ":id") }}';
-                route1 = route1.replace(':id', restaurant.vendor_db_id);
+                route1 = route1.replace(':id', restaurant.author);
                 $('.profileRoute').attr('href', route1);
             } else {
                 $('.profileRoute').removeAttr('href');
@@ -1449,6 +1470,9 @@
                 const galleryUrls = await storeGalleryImageData();
                 const menuUrls = await storeMenuImageData();
 
+                // Store story data
+                const storyData = await storeStoryImageData();
+
                 const payload = {
                     title: restaurantname,
                     description,
@@ -1477,6 +1501,10 @@
                     photos: galleryUrls,
                     restaurantMenuPhotos: menuUrls,
                     vType: vendorType,
+                    storyData: {
+                        thumbnail: storyData.storyThumbnailImage || '',
+                        videos: story_vedios || []
+                    }
                 };
 
                 await $.ajax({
@@ -1847,5 +1875,213 @@
         window.handleFileSelectMenuCard = function (evt) {
             handleFileSelect(evt, 'menu');
         };
+
+        // Story video upload functions
+        async function handleStoryFileSelect(evt) {
+            const f = evt.target.files[0];
+            if (!f) return false;
+
+            const fileInput = document.getElementById('video_file');
+            const filePath = fileInput.value;
+            const allowedExtensions = /(\.mp4)$/i;
+
+            if (!allowedExtensions.exec(filePath)) {
+                showError('Error: Invalid video type. Only MP4 files are allowed.');
+                fileInput.value = '';
+                return false;
+            }
+
+            // Check video duration if needed
+            const video = document.createElement('video');
+            video.preload = 'metadata';
+            video.onloadedmetadata = async function () {
+                window.URL.revokeObjectURL(video.src);
+
+                // Optional: Check duration limit (30 seconds default)
+                if (storevideoDuration > 0 && video.duration > storevideoDuration) {
+                    showError('Error: Story video duration maximum allowed is ' + storevideoDuration + ' seconds');
+                    evt.target.value = '';
+                    return false;
+                }
+
+                // Read file as base64
+                const reader = new FileReader();
+                reader.onload = async function (e) {
+                    const filePayload = e.target.result;
+                    const val = f.name;
+                    const ext = val.split('.').pop();
+                    let filename = (f.name).replace(/C:\\fakepath\\/i, '');
+                    const timestamp = Number(new Date());
+                    filename = filename.split('.')[0] + "_" + timestamp + '.' + ext;
+
+                    try {
+                        jQuery("#uploding_story_video").text("Video is uploading...");
+
+                        // Upload video via Laravel API
+                        const response = await $.ajax({
+                            url: routes.uploadImage,
+                            method: 'POST',
+                            data: {
+                                image: filePayload,
+                                folder: 'restaurants/story',
+                                filename: filename
+                            }
+                        });
+
+                        jQuery("#uploding_story_video").text("Upload completed");
+                        setTimeout(function () {
+                            jQuery("#uploding_story_video").empty();
+                        }, 3000);
+
+                        const nextCount = $("#story_vedios").children().length;
+                        const uploadedVideoUrl = response.url;
+
+                        const html = `
+<div class="col-md-3" id="story_div_${nextCount}">
+    <div class="video-inner">
+        <video width="320" height="240" controls autoplay muted>
+            <source src="${uploadedVideoUrl}" type="video/mp4">
+        </video>
+        <span class="remove-story-video" data-id="${nextCount}" data-img="${uploadedVideoUrl}">
+            <i class="fa fa-remove"></i>
+        </span>
+    </div>
+</div>`;
+
+                        jQuery("#story_vedios").append(html);
+                        story_vedios.push(uploadedVideoUrl);
+                        $("#video_file").val('');
+                    } catch (error) {
+                        console.error('Error uploading story video:', error);
+                        jQuery("#uploding_story_video").text("Upload failed");
+                        showError('Error uploading video: ' + (error.responseJSON?.message || error.message));
+                    }
+                };
+                reader.readAsDataURL(f);
+            };
+            video.src = URL.createObjectURL(f);
+        }
+
+        function handleStoryThumbnailFileSelect(evt) {
+            const f = evt.target.files[0];
+            if (!f) return;
+
+            const reader = new FileReader();
+            const fileInput = document.getElementById('file');
+            const filePath = fileInput.value;
+
+            // Allowing file type
+            const allowedExtensions = /(\.jpg|\.jpeg|\.png|\.gif)$/i;
+
+            if (!allowedExtensions.exec(filePath)) {
+                showError('Error: Invalid File type');
+                fileInput.value = '';
+                return false;
+            }
+
+            reader.onload = function (e) {
+                const filePayload = e.target.result;
+                const val = f.name;
+                const ext = val.split('.').pop();
+                let filename = (f.name).replace(/C:\\fakepath\\/i, '');
+                const timestamp = Number(new Date());
+                filename = filename.split('.')[0] + "_" + timestamp + '.' + ext;
+
+                story_thumbnail = filePayload;
+                story_thumbnail_filename = filename;
+
+                const html = `<div class="col-md-3"><div class="thumbnail-inner"><span class="remove-story-thumbnail" data-img="${story_thumbnail}"><i class="fa fa-remove"></i></span><img id="story_thumbnail_image" src="${story_thumbnail}" width="150px" height="150px;"></div></div>`;
+                jQuery("#story_thumbnail").html(html);
+            };
+            reader.readAsDataURL(f);
+        }
+
+        async function storeStoryImageData() {
+            const newPhoto = [];
+            try {
+                if (story_thumbnail && story_thumbnail !== '' && story_thumbnail.startsWith('data:')) {
+                    // Only upload if it's a new base64 image, not an existing URL
+                    const response = await $.ajax({
+                        url: routes.uploadImage,
+                        method: 'POST',
+                        data: {
+                            image: story_thumbnail,
+                            folder: 'restaurants/story',
+                            filename: story_thumbnail_filename || 'story_thumbnail_' + Date.now() + '.jpg'
+                        }
+                    });
+                    newPhoto['storyThumbnailImage'] = response.url;
+                } else if (story_thumbnail && story_thumbnail !== '') {
+                    // Already a URL, use it directly
+                    newPhoto['storyThumbnailImage'] = story_thumbnail;
+                } else {
+                    newPhoto['storyThumbnailImage'] = '';
+                }
+                return newPhoto;
+            } catch (error) {
+                console.error('Error storing story thumbnail:', error);
+                newPhoto['storyThumbnailImage'] = story_thumbnail || '';
+                return newPhoto;
+            }
+        }
+
+        function renderStoryVideos() {
+            if (!story_vedios.length) {
+                jQuery("#story_vedios").html('');
+                return;
+            }
+            let html = '';
+            story_vedios.forEach((videoUrl, index) => {
+                html += `
+<div class="col-md-3" id="story_div_${index}">
+    <div class="video-inner">
+        <video width="320" height="240" controls autoplay muted>
+            <source src="${videoUrl}" type="video/mp4">
+        </video>
+        <span class="remove-story-video" data-id="${index}" data-img="${videoUrl}">
+            <i class="fa fa-remove"></i>
+        </span>
+    </div>
+</div>`;
+            });
+            jQuery("#story_vedios").html(html);
+        }
+
+        function renderStoryThumbnail() {
+            if (!story_thumbnail) {
+                jQuery("#story_thumbnail").html('');
+                return;
+            }
+            const html = `<div class="col-md-3"><div class="thumbnail-inner"><span class="remove-story-thumbnail" data-img="${story_thumbnail}"><i class="fa fa-remove"></i></span><img id="story_thumbnail_image" src="${story_thumbnail}" width="150px" height="150px;"></div></div>`;
+            jQuery("#story_thumbnail").html(html);
+        }
+
+        // Bind story event handlers
+        $(document).on("click", ".remove-story-video", function () {
+            const id = $(this).attr('data-id');
+            const photo_remove = $(this).attr('data-img');
+
+            $("#story_div_" + id).remove();
+            const index = story_vedios.indexOf(photo_remove);
+            $("#video_file").val('');
+            if (index > -1) {
+                story_vedios.splice(index, 1);
+            }
+
+            renderStoryVideos();
+        });
+
+        $(document).on("click", ".remove-story-thumbnail", function () {
+            const photo_remove = $(this).attr('data-img');
+
+            $("#story_thumbnail").empty();
+            $('#file').val('');
+            story_thumbnail = '';
+            story_thumbnail_filename = '';
+        });
+
+        // Make functions globally available for inline handlers
+        window.handleStoryFileSelect = handleStoryFileSelect;
+        window.handleStoryThumbnailFileSelect = handleStoryThumbnailFileSelect;
     </script>
 @endsection

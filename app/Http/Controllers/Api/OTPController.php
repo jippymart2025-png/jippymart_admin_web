@@ -137,10 +137,19 @@ class OTPController extends Controller
         $otpRecord->verified = true;
         $otpRecord->save();
 
-        // Find or create user
+// Find or create user
         $user = User::where('phoneNumber', $phone)->first();
 
-        if (!$user) {
+        if ($user) {
+            // Allow login only if role = customer
+            if ($user->role !== 'customer') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only customers can log in using this app.'
+                ], 403);
+            }
+        } else {
+            // Create new customer
             $firebaseId = 'user_' . Str::uuid();
 
             $user = User::create([
@@ -152,7 +161,7 @@ class OTPController extends Controller
                 'password'      => bcrypt(Str::random(16)),
                 'active'        => 1,
                 'isActive'      => true,
-                'role'          => 'customer',
+                'role'          => 'customer', // force default role
                 'wallet_amount' => 0,
                 'orderCompleted'=> 0,
                 '_created_at'   => Carbon::now()->format('Y-m-d H:i:s'),

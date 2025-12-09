@@ -294,7 +294,30 @@ class OrderController extends Controller
                 'length' => (int) ($request->input('length', 10)),
             ];
 
+            // 🔥 Date preset buttons (Last 24h, Last Week, Last Month, All Orders)
+            if ($request->input('date_range') == 'last_24_hours') {
+                $filters['date_from'] = now()->subDay()->toDateTimeString();
+                $filters['date_to']   = now()->toDateTimeString();
+            }
+
+            if ($request->input('date_range') == 'last_week') {
+                $filters['date_from'] = now()->subWeek()->startOfDay()->toDateTimeString();
+                $filters['date_to']   = now()->endOfDay()->toDateTimeString();
+            }
+
+            if ($request->input('date_range') == 'last_month') {
+                $filters['date_from'] = now()->subMonth()->startOfDay()->toDateTimeString();
+                $filters['date_to']   = now()->endOfDay()->toDateTimeString();
+            }
+
+            // All Orders - use special flag to skip date filtering
+            if ($request->input('date_range') == 'all_orders') {
+                $filters['date_from'] = 'all_orders';
+                $filters['date_to'] = 'all_orders';
+            }
+
             $result = \App\Models\restaurant_orders::fetchForDatatable($filters);
+
             $rows = $result['rows'];
             $recordsFiltered = $result['recordsFiltered'];
 

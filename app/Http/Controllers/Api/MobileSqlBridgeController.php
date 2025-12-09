@@ -678,6 +678,7 @@ class MobileSqlBridgeController extends Controller
             'profilePictureURL' => $user->profilePictureURL ?? null,
             'role' => $user->role,
             'active' => (bool) $user->active,
+            'fcmToken' => $user->fcmToken,
             'isDocumentVerify' => (bool) ($user->isDocumentVerify ?? false),
             'isActive' => (bool) ($user->isActive ?? false),
             'appIdentifier' => $user->appIdentifier,

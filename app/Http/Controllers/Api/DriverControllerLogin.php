@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
+use Carbon\Carbon;
 
 class DriverControllerLogin extends Controller
 {
@@ -102,6 +103,7 @@ class DriverControllerLogin extends Controller
                 "active" => $autoApprove ? 1 : 0,
                 "isDocumentVerify" =>  0,
                 "zoneId" => $request->zone_id,
+                "createdAt" => Carbon::now(),
                 "provider" => "email",
                 "appIdentifier" => $request->app_identifier,
             ]);

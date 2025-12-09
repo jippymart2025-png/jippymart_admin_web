@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AppUser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Carbon\Carbon;
 
 class AdminUserController extends Controller
 {
@@ -130,14 +131,35 @@ class AdminUserController extends Controller
             $query->where('role', $role);
         }
 
-        // Date range filter (expects Y-m-d or full datetime strings)
+        // Date range filter (supports presets: last_24_hours, last_week, last_month, custom, all_orders)
+        $dateRange = $request->query('date_range');
         $from = $request->query('from');
         $to = $request->query('to');
-        if (!empty($from)) {
-            $query->where('createdAt', '>=', $from);
-        }
-        if (!empty($to)) {
-            $query->where('createdAt', '<=', $to);
+        
+        // Handle date range presets
+        if ($dateRange === 'last_24_hours') {
+            $query->where('createdAt', '>=', now()->subDay()->toDateTimeString());
+            $query->where('createdAt', '<=', now()->toDateTimeString());
+        } elseif ($dateRange === 'last_week') {
+            $query->where('createdAt', '>=', now()->subWeek()->startOfDay()->toDateTimeString());
+            $query->where('createdAt', '<=', now()->endOfDay()->toDateTimeString());
+        } elseif ($dateRange === 'last_month') {
+            $query->where('createdAt', '>=', now()->subMonth()->startOfDay()->toDateTimeString());
+            $query->where('createdAt', '<=', now()->endOfDay()->toDateTimeString());
+        } elseif ($dateRange === 'all_orders') {
+            // Show all users - skip date filtering entirely
+            // Do nothing - no date filter applied
+        } elseif (!empty($from) || !empty($to)) {
+            // Custom range or direct from/to parameters
+            if (!empty($from)) {
+                $query->where('createdAt', '>=', $from);
+            }
+            if (!empty($to)) {
+                $query->where('createdAt', '<=', $to);
+            }
+        } else {
+            // No date range selected - default to today only
+            $query->whereDate('createdAt', Carbon::today());
         }
 
         if ($active !== null && $active !== '') {

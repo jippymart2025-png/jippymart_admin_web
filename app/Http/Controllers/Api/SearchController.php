@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
 
 class SearchController extends Controller
 {
@@ -150,41 +152,92 @@ class SearchController extends Controller
                 'limit' => 'nullable|integer|min:1|max:100'
             ]);
 
-            $page = $request->get('page', 1);
-            $limit = $request->get('limit', 20);
+            $page   = $request->get('page', 1);
+            $limit  = $request->get('limit', 20);
             $offset = ($page - 1) * $limit;
+
+            $filters = $request->only([
+                'search','category','subcategory','vendor',
+                'min_price','max_price','veg','isAvailable',
+                'isBestSeller','isFeature'
+            ]);
 
             $query = DB::table('mart_items');
 
-            $filters = $request->only([
-                'search','category','subcategory','vendor','min_price','max_price',
-                'veg','isAvailable','isBestSeller','isFeature'
-            ]);
-
+            // --------------------------------------------------
+            // SEARCH (FIXED → removed keywords column)
+            // --------------------------------------------------
             if (!empty($filters['search'])) {
-                $query->where('name', 'LIKE', "%".$filters['search']."%");
+                $search = $filters['search'];
+
+                $query->where(function($q) use ($search) {
+                    $q->where('name', 'LIKE', "%{$search}%")
+                        ->orWhere('description', 'LIKE', "%{$search}%");
+
+                    // only search keywords IF column exists
+                    if (Schema::hasColumn('mart_items', 'keywords')) {
+                        $q->orWhere('keywords', 'LIKE', "%{$search}%");
+                    }
+                });
             }
+
+            // Category filters
             if (!empty($filters['category'])) {
-                $query->where('categoryTitle', 'LIKE', "%".$filters['category']."%");
+                $query->where('categoryTitle', 'LIKE', "%{$filters['category']}%");
             }
+
             if (!empty($filters['subcategory'])) {
-                $query->where('subcategoryTitle', 'LIKE', "%".$filters['subcategory']."%");
+                $query->where('subcategoryTitle', 'LIKE', "%{$filters['subcategory']}%");
             }
+
             if (!empty($filters['vendor'])) {
-                $query->where('vendorTitle', 'LIKE', "%".$filters['vendor']."%");
+                $query->where('vendorTitle', 'LIKE', "%{$filters['vendor']}%");
             }
+
+            // Price filters
             if (isset($filters['min_price'])) {
                 $query->where('price', '>=', $filters['min_price']);
             }
+
             if (isset($filters['max_price'])) {
                 $query->where('price', '<=', $filters['max_price']);
             }
+
+            // Boolean flags
             foreach (['veg','isAvailable','isBestSeller','isFeature'] as $flag) {
                 if (isset($filters[$flag])) {
                     $query->where($flag, $filters[$flag]);
                 }
             }
 
+            // --------------------------------------------------
+            // ORDERING (SAFE)
+            // --------------------------------------------------
+            if (!empty($filters['search'])) {
+                $search = $filters['search'];
+
+                $query->orderByRaw("
+                CASE
+                    WHEN name = ? THEN 1
+                    WHEN name LIKE ? THEN 2
+                    WHEN name LIKE ? THEN 3
+                    ELSE 4
+                END
+            ", [
+                    $search,
+                    "{$search}%",
+                    "%{$search}%"
+                ]);
+            }
+
+            // Secondary ordering
+            $query->orderByDesc('isBestSeller')
+                ->orderByDesc('isFeature')
+                ->orderBy('name');
+
+            // --------------------------------------------------
+            // PAGINATION
+            // --------------------------------------------------
             $total = $query->count();
 
             $data = $query->offset($offset)
@@ -206,14 +259,14 @@ class SearchController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-            \Log::error('Mart SQL search error: '.$e->getMessage());
+            \Log::error("Mart search SQL error: " . $e->getMessage());
 
             return response()->json([
-                'success' => true,
-                'message' => 'Fallback items returned',
-                'data' => $this->getFallbackMartItemsResponse($request),
-                'fallback' => true
-            ], 200);
+                'success' => false,
+                'error'  => $e->getMessage(),
+                'line'   => $e->getLine(),
+                'file'   => $e->getFile()
+            ], 500);
         }
     }
 

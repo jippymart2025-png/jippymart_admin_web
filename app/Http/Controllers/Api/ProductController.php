@@ -99,9 +99,190 @@ class ProductController extends Controller
     /**
      * Comprehensive product feed for restaurant detail screen
      */
-    public function getRestaurantProductFeed(Request $request, string $vendorId, ?string $extra = null)
+    // public function getRestaurantProductFeed(Request $request, string $vendorId, ?string $extra = null)
+    // {
+    //     try {
+    //         if ($extra && $request->query->count() === 0) {
+    //             $extraQuery = ltrim($extra, '?&');
+    //             if ($extraQuery !== '') {
+    //                 parse_str($extraQuery, $extraParams);
+    //                 foreach ($extraParams as $key => $value) {
+    //                     $request->query->set($key, $value);
+    //                 }
+    //             }
+    //         }
+
+    //         $filters = $this->parseFilters($request);
+
+    //         $vendorId = trim((string) $vendorId);
+
+    //         $query = VendorProduct::query()
+    //             ->where('vendorID', $vendorId)
+    //             ->where(function ($q) {
+    //                 $q->whereNull('publish')
+    //                     ->orWhereIn('publish', [1, '1', true, 'true', 'TRUE', 'yes', 'YES']);
+    //             });
+
+    //         if ($filters['search'] !== null) {
+    //             $searchTerm = $filters['search'];
+    //             $query->where(function ($q) use ($searchTerm) {
+    //                 $q->where('name', 'LIKE', "%{$searchTerm}%")
+    //                     ->orWhere('description', 'LIKE', "%{$searchTerm}%");
+    //             });
+    //         }
+
+    //         $isVeg = $filters['is_veg'];
+    //         $isNonVeg = $filters['is_nonveg'];
+
+    //         if ($isVeg === true && $isNonVeg === true) {
+    //             // Include both veg and non-veg -> no filter
+    //         } elseif ($isVeg === true) {
+    //             $query->where(function ($q) {
+    //                 $q->where('veg', 1)
+    //                     ->orWhere('veg', true)
+    //                     ->orWhereNull('veg');
+    //             })->where(function ($q) {
+    //                 $q->whereNull('nonveg')
+    //                     ->orWhere('nonveg', 0)
+    //                     ->orWhere('nonveg', false);
+    //             });
+    //         } elseif ($isNonVeg === true) {
+    //             $query->where(function ($q) {
+    //                 $q->where('nonveg', 1)
+    //                     ->orWhere('nonveg', true);
+    //             });
+    //         }
+
+    //         if ($isVeg === false) {
+    //             $query->where(function ($q) {
+    //                 $q->whereNull('veg')
+    //                     ->orWhere('veg', 0)
+    //                     ->orWhere('veg', false);
+    //             });
+    //         }
+
+    //         if ($isNonVeg === false) {
+    //             $query->where(function ($q) {
+    //                 $q->whereNull('nonveg')
+    //                     ->orWhere('nonveg', 0)
+    //                     ->orWhere('nonveg', false);
+    //             });
+    //         }
+
+    //         $products = $query->orderBy('name')->get();
+
+    //         $vendor = Vendor::find($vendorId);
+    //         if (!$vendor) {
+    //             Log::warning('Vendor not found for product feed', ['vendor_id' => $vendorId]);
+    //         }
+
+    //         $now = Carbon::now();
+    //         $promotions = Promotion::query()
+    //             ->when($vendor, function ($q) use ($vendor) {
+    //                 $q->whereIn('restaurant_id', [$vendor->id, $vendor->title]);
+    //             }, function ($q) use ($vendorId) {
+    //                 $q->where('restaurant_id', $vendorId);
+    //             })
+    //             ->where('isAvailable', true)
+    //             ->where(function ($q) use ($now) {
+    //                 $q->whereNull('start_time')
+    //                     ->orWhere('start_time', '<=', $now);
+    //             })
+    //             ->where(function ($q) use ($now) {
+    //                 $q->whereNull('end_time')
+    //                     ->orWhere('end_time', '>=', $now);
+    //             })
+    //             ->get()
+    //             ->groupBy('product_id');
+
+    //         $categoryIds = $products->pluck('categoryID')
+    //             ->filter()
+    //             ->unique()
+    //             ->values();
+
+    //         $restaurantKeys = array_values(array_filter([$vendor?->title, $vendorId, $vendor?->id]));
+
+    //         $categoriesQuery = VendorCategory::query()
+    //             ->whereIn('id', $categoryIds);
+
+    //         if (!empty($restaurantKeys)) {
+    //             $categoriesQuery->whereIn('restaurant_id', $restaurantKeys);
+    //         }
+
+    //         $categories = $categoriesQuery->get()->keyBy('id');
+
+    //         if ($categories->isEmpty() && $categoryIds->isNotEmpty()) {
+    //             $categories = VendorCategory::query()
+    //                 ->whereIn('id', $categoryIds)
+    //                 ->get()
+    //                 ->keyBy('id');
+    //         }
+
+    //         $transformedProducts = $products
+    //             ->map(function (VendorProduct $product) use ($promotions, $categories, $vendorId) {
+
+    //                 $category = $categories->get($product->categoryID);
+
+    //                 $data = $this->transformProduct($product, $promotions, $category);
+
+    //                 // ⭐ Add vendorID here
+    //                 $data['vendorID'] = $vendorId;
+
+    //                 return $data;
+    //             });
+
+    //         if ($filters['offer_only'] === true) {
+    //             $transformedProducts = $transformedProducts
+    //                 ->filter(function (array $product) {
+    //                     if ($product['has_active_promotion']) {
+    //                         return true;
+    //                     }
+
+    //                     $discountPrice = $product['discount_price'];
+    //                     $originalPrice = $product['original_price'];
+
+    //                     return $discountPrice !== null
+    //                         && $originalPrice !== null
+    //                         && (float) $discountPrice > 0
+    //                         && (float) $discountPrice < (float) $originalPrice;
+    //                 })
+    //                 ->values();
+    //         }
+
+    //         $categorySummaries = $this->buildCategorySummaries($transformedProducts, $categories);
+
+    //         return response()->json([
+    //             'success' => true,
+    //             'data' => [
+    //                 'filters' => $filters,
+    //                 'meta' => [
+    //                     'total_products' => $transformedProducts->count(),
+    //                     'offer_products' => $transformedProducts
+    //                         ->where('has_active_promotion', true)
+    //                         ->count(),
+    //                     'categories' => $categorySummaries->count(),
+    //                 ],
+    //                 'categories' => $categorySummaries->values(),
+    //                 'products' => $transformedProducts->values(),
+    //             ],
+    //         ]);
+    //     } catch (\Throwable $e) {
+    //         Log::error('Error building restaurant product feed: ' . $e->getMessage(), [
+    //             'vendor_id' => $vendorId,
+    //             'trace' => $e->getTraceAsString(),
+    //         ]);
+
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Unable to load restaurant products at the moment.',
+    //         ], 500);
+    //     }
+    // }
+    
+        public function getRestaurantProductFeed(Request $request, string $vendorId, ?string $extra = null)
     {
         try {
+            /** Extra Query Handling */
             if ($extra && $request->query->count() === 0) {
                 $extraQuery = ltrim($extra, '?&');
                 if ($extraQuery !== '') {
@@ -113,69 +294,63 @@ class ProductController extends Controller
             }
 
             $filters = $this->parseFilters($request);
+            $vendorId = trim($vendorId);
 
-            $vendorId = trim((string) $vendorId);
-
+            /**
+             * ---------------------------------------
+             * PRODUCT QUERY (Optimized)
+             * + New condition: isAvailable = 1
+             * ---------------------------------------
+             */
             $query = VendorProduct::query()
                 ->where('vendorID', $vendorId)
+                ->where('isAvailable', 1) // ⭐ ADDED CONDITION
                 ->where(function ($q) {
                     $q->whereNull('publish')
-                        ->orWhereIn('publish', [1, '1', true, 'true', 'TRUE', 'yes', 'YES']);
+                        ->orWhere('publish', 1)
+                        ->orWhere('publish', true)
+                        ->orWhere('publish', '1')
+                        ->orWhere('publish', 'true')
+                        ->orWhere('publish', 'TRUE')
+                        ->orWhere('publish', 'yes')
+                        ->orWhere('publish', 'YES');
                 });
 
+            /** Search */
             if ($filters['search'] !== null) {
-                $searchTerm = $filters['search'];
-                $query->where(function ($q) use ($searchTerm) {
-                    $q->where('name', 'LIKE', "%{$searchTerm}%")
-                        ->orWhere('description', 'LIKE', "%{$searchTerm}%");
+                $search = '%' . $filters['search'] . '%';
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'LIKE', $search)
+                        ->orWhere('description', 'LIKE', $search);
                 });
             }
 
+            /** Veg / Non-veg filter */
             $isVeg = $filters['is_veg'];
             $isNonVeg = $filters['is_nonveg'];
 
-            if ($isVeg === true && $isNonVeg === true) {
-                // Include both veg and non-veg -> no filter
-            } elseif ($isVeg === true) {
-                $query->where(function ($q) {
-                    $q->where('veg', 1)
-                        ->orWhere('veg', true)
-                        ->orWhereNull('veg');
-                })->where(function ($q) {
-                    $q->whereNull('nonveg')
-                        ->orWhere('nonveg', 0)
-                        ->orWhere('nonveg', false);
-                });
-            } elseif ($isNonVeg === true) {
-                $query->where(function ($q) {
-                    $q->where('nonveg', 1)
-                        ->orWhere('nonveg', true);
-                });
+            // both true → no filter
+
+            if ($isVeg === true && $isNonVeg !== true) {
+                $query->where('veg', 1);
+            } elseif ($isNonVeg === true && $isVeg !== true) {
+                $query->where('nonveg', 1);
             }
 
             if ($isVeg === false) {
-                $query->where(function ($q) {
-                    $q->whereNull('veg')
-                        ->orWhere('veg', 0)
-                        ->orWhere('veg', false);
-                });
+                $query->where('veg', 0);
             }
-
             if ($isNonVeg === false) {
-                $query->where(function ($q) {
-                    $q->whereNull('nonveg')
-                        ->orWhere('nonveg', 0)
-                        ->orWhere('nonveg', false);
-                });
+                $query->where('nonveg', 0);
             }
 
+            /** Fetch products */
             $products = $query->orderBy('name')->get();
 
+            /** Vendor */
             $vendor = Vendor::find($vendorId);
-            if (!$vendor) {
-                Log::warning('Vendor not found for product feed', ['vendor_id' => $vendorId]);
-            }
 
+            /** Promotions */
             $now = Carbon::now();
             $promotions = Promotion::query()
                 ->when($vendor, function ($q) use ($vendor) {
@@ -185,31 +360,28 @@ class ProductController extends Controller
                 })
                 ->where('isAvailable', true)
                 ->where(function ($q) use ($now) {
-                    $q->whereNull('start_time')
-                        ->orWhere('start_time', '<=', $now);
+                    $q->whereNull('start_time')->orWhere('start_time', '<=', $now);
                 })
                 ->where(function ($q) use ($now) {
-                    $q->whereNull('end_time')
-                        ->orWhere('end_time', '>=', $now);
+                    $q->whereNull('end_time')->orWhere('end_time', '>=', $now);
                 })
                 ->get()
                 ->groupBy('product_id');
 
-            $categoryIds = $products->pluck('categoryID')
-                ->filter()
-                ->unique()
-                ->values();
+            /** Categories */
+            $categoryIds = $products->pluck('categoryID')->filter()->unique()->values();
 
-            $restaurantKeys = array_values(array_filter([$vendor?->title, $vendorId, $vendor?->id]));
+            $restaurantKeys = array_values(array_filter([
+                $vendor?->title,
+                $vendorId,
+                $vendor?->id
+            ]));
 
-            $categoriesQuery = VendorCategory::query()
-                ->whereIn('id', $categoryIds);
-
-            if (!empty($restaurantKeys)) {
-                $categoriesQuery->whereIn('restaurant_id', $restaurantKeys);
-            }
-
-            $categories = $categoriesQuery->get()->keyBy('id');
+            $categories = VendorCategory::query()
+                ->whereIn('id', $categoryIds)
+                ->whereIn('restaurant_id', $restaurantKeys)
+                ->get()
+                ->keyBy('id');
 
             if ($categories->isEmpty() && $categoryIds->isNotEmpty()) {
                 $categories = VendorCategory::query()
@@ -218,49 +390,55 @@ class ProductController extends Controller
                     ->keyBy('id');
             }
 
-            $transformedProducts = $products
-                ->map(function (VendorProduct $product) use ($promotions, $categories) {
-                    $category = $categories->get($product->categoryID);
-                    return $this->transformProduct($product, $promotions, $category);
-                });
+            /** Transform */
+            $transformedProducts = $products->map(function (VendorProduct $product) use (
+                $promotions,
+                $categories,
+                $vendorId
+            ) {
+                $category = $categories->get($product->categoryID);
 
+                $data = $this->transformProduct($product, $promotions, $category);
+                $data['vendorID'] = $vendorId; // keep existing response
+
+                return $data;
+            });
+
+            /** Offer-only filter */
             if ($filters['offer_only'] === true) {
                 $transformedProducts = $transformedProducts
-                    ->filter(function (array $product) {
-                        if ($product['has_active_promotion']) {
-                            return true;
-                        }
+                    ->filter(function ($p) {
+                        if ($p['has_active_promotion']) return true;
 
-                        $discountPrice = $product['discount_price'];
-                        $originalPrice = $product['original_price'];
-
-                        return $discountPrice !== null
-                            && $originalPrice !== null
-                            && (float) $discountPrice > 0
-                            && (float) $discountPrice < (float) $originalPrice;
+                        return $p['discount_price'] &&
+                            $p['original_price'] &&
+                            floatval($p['discount_price']) > 0 &&
+                            floatval($p['discount_price']) < floatval($p['original_price']);
                     })
                     ->values();
             }
 
+            /** Category summaries */
             $categorySummaries = $this->buildCategorySummaries($transformedProducts, $categories);
 
+            /** Response (no change) */
             return response()->json([
                 'success' => true,
                 'data' => [
                     'filters' => $filters,
                     'meta' => [
                         'total_products' => $transformedProducts->count(),
-                        'offer_products' => $transformedProducts
-                            ->where('has_active_promotion', true)
-                            ->count(),
+                        'offer_products' => $transformedProducts->where('has_active_promotion', true)->count(),
                         'categories' => $categorySummaries->count(),
                     ],
                     'categories' => $categorySummaries->values(),
                     'products' => $transformedProducts->values(),
                 ],
             ]);
+
         } catch (\Throwable $e) {
-            Log::error('Error building restaurant product feed: ' . $e->getMessage(), [
+
+            Log::error('Error building restaurant product feed: '.$e->getMessage(), [
                 'vendor_id' => $vendorId,
                 'trace' => $e->getTraceAsString(),
             ]);
@@ -271,6 +449,7 @@ class ProductController extends Controller
             ], 500);
         }
     }
+
 
     /**
      * Fetch single product details by product ID.

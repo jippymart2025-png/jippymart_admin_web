@@ -606,7 +606,7 @@ class MartItemController extends Controller
                 ], 422);
             }
 
-            $limit = $this->normalizeLimit($request, 100, 200);
+            $limit = $this->normalizeLimit($request, 300, 500);
             $search = Str::lower((string) $request->get('search', ''));
 
             $query = MartItem::query();

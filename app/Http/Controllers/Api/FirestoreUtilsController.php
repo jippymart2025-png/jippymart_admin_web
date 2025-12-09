@@ -1025,7 +1025,7 @@ class FirestoreUtilsController extends Controller
         try {
             $request->validate([
                 'title' => 'required|string|unique:vendors,title',
-                'author' => 'required|string',
+                'author' => 'required|string',   // This is the USER ID of the creator
             ]);
 
             $data = $request->all();
@@ -1033,12 +1033,12 @@ class FirestoreUtilsController extends Controller
             // Auto-generate Firebase-style unique ID
             $data['id'] = $this->generateFirebaseId();
 
-            // Check again if id already exists (rare but safe)
+            // Check rare collision
             while (DB::table('vendors')->where('id', $data['id'])->exists()) {
                 $data['id'] = $this->generateFirebaseId();
             }
 
-            // Fields that require JSON encoding
+            // JSON fields
             $jsonFields = [
                 'photos', 'workingHours', 'categoryID', 'categoryTitle',
                 'restaurantMenuPhotos', 'coordinates', 'g', 'filters',
@@ -1060,11 +1060,23 @@ class FirestoreUtilsController extends Controller
             $data['publish'] = $data['publish'] ?? 1;
             $data['reststatus'] = $data['reststatus'] ?? 1;
 
-            // Insert only valid columns
+            // Insert valid columns only
             $allowedColumns = DB::getSchemaBuilder()->getColumnListing('vendors');
             $data = array_intersect_key($data, array_flip($allowedColumns));
 
+            // INSERT VENDOR
             DB::table('vendors')->insert($data);
+
+            // ---------------------------------------------------------
+            // ✅ UPDATE USER WITH VENDOR ID
+            // author = user_id (make sure this is correct)
+            // ---------------------------------------------------------
+            DB::table('users')
+                ->where('id', $request->author)
+                ->update([
+                    'vendorID' => $data['id'],
+                    '_updated_at' => now()
+                ]);
 
             return response()->json([
                 'success' => true,
@@ -1083,7 +1095,7 @@ class FirestoreUtilsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error creating vendor',
-                'error' => $e->getMessage() // Keep this for Postman testing; remove in production
+                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -2163,7 +2175,7 @@ class FirestoreUtilsController extends Controller
         try {
             $vendorId = $request->input('vendorID') ?? $request->user()->vendorID ?? null;
 
-            if (!$vendorId) {
+            if ($vendorId) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Vendor ID is required'
@@ -2171,16 +2183,25 @@ class FirestoreUtilsController extends Controller
             }
 
             $drivers = DB::table('users')
-                ->where('vendorID', $vendorId)
                 ->where('role', 'driver')
                 ->where('active', true)
                 ->where('isActive', true)
                 ->get();
 
+            // Decode JSON fields
+            $drivers = $drivers->map(function ($driver) {
+                $driver->userBankDetails = $driver->userBankDetails ? json_decode($driver->userBankDetails) : null;
+                $driver->inProgressOrderID = $driver->inProgressOrderID ? json_decode($driver->inProgressOrderID) : [];
+                $driver->orderRequestData = $driver->orderRequestData ? json_decode($driver->orderRequestData) : [];
+                $driver->location = $driver->location ? json_decode($driver->location) : null;
+                return $driver;
+            });
+
             return response()->json([
                 'success' => true,
                 'data' => $drivers
             ]);
+
         } catch (\Exception $e) {
             Log::error('getAvalibleDrivers error: ' . $e->getMessage());
             return response()->json([

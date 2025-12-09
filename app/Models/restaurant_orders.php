@@ -11,6 +11,7 @@ class restaurant_orders extends Model
 {
     use HasFactory;
     public $timestamps = false;
+    public $incrementing = false; // very important for non-auto-incrementing IDs
     protected $table = 'restaurant_orders';
     protected $guarded = [];
 
@@ -83,27 +84,32 @@ class restaurant_orders extends Model
             });
         }
 
-        // ✅ Date Filter
-        if ($dateFrom !== '' && $dateTo !== '') {
+        // 📌 Date Filter (supports Today, Last 24h, Last Week, Last Month, Custom, All Orders)
+        // Check for "all_orders" flag first
+        if ($dateFrom === 'all_orders' && $dateTo === 'all_orders') {
+            // Show all orders - skip date filtering entirely
+            // Do nothing - no date filter applied
+        } elseif ($dateFrom !== '' && $dateTo !== '') {
+            // Date range provided - apply filter
             try {
-                $from = \Carbon\Carbon::parse($dateFrom)->startOfDay();
-                $to = \Carbon\Carbon::parse($dateTo)->endOfDay();
-
-                $patterns = [];
-                $current = $from->copy();
-                while ($current->lte($to)) {
-                    $patterns[] = $current->format('Y-m-d');
-                    $current->addDay();
-                }
-
-                $query->where(function ($q) use ($patterns) {
-                    foreach ($patterns as $pattern) {
-                        $q->orWhere('ro.createdAt', 'LIKE', "%$pattern%");
-                    }
-                });
+                // Parse the dates - they come as "YYYY-MM-DD HH:mm:ss" from controller
+                $from = Carbon::parse($dateFrom);
+                $to = Carbon::parse($dateTo);
+                
+                // Use whereBetween with exact timestamps (controller already sets correct boundaries)
+                $query->whereBetween('ro.createdAt', [$from, $to]);
             } catch (\Throwable $e) {
-                \Log::error('❌ Date parsing failed', ['error' => $e->getMessage()]);
+                \Log::error('❌ Date parsing failed', [
+                    'date_from' => $dateFrom,
+                    'date_to' => $dateTo,
+                    'error' => $e->getMessage()
+                ]);
+                // Fallback to today if parsing fails
+                $query->whereDate('ro.createdAt', Carbon::today());
             }
+        } else {
+            // No date range selected - default to today only
+            $query->whereDate('ro.createdAt', Carbon::today());
         }
 
         // ✅ Universal Search

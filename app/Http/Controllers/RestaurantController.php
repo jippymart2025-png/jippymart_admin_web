@@ -41,7 +41,7 @@ class RestaurantController extends Controller
         $this->middleware('auth');
     }
 
-	  public function index()
+    public function index()
     {
 
         return view("restaurants.index");
@@ -55,17 +55,17 @@ class RestaurantController extends Controller
 
     public function edit($id)
     {
-    	    return view('restaurants.edit')->with('id',$id);
+        return view('restaurants.edit')->with('id',$id);
     }
 
     public function vendorEdit($id)
     {
-    	    return view('vendors.edit')->with('id',$id);
+        return view('vendors.edit')->with('id',$id);
     }
 
     public function vendorSubscriptionPlanHistory($id='')
     {
-    	    return view('subscription_plans.history')->with('id',$id);
+        return view('subscription_plans.history')->with('id',$id);
     }
 
     public function subscriptionHistoryData(Request $request, $id = '')
@@ -85,8 +85,8 @@ class RestaurantController extends Controller
         if ($search !== '') {
             $q->where(function($query) use ($search) {
                 $query->whereRaw("LOWER(subscription_plan) LIKE ?", ['%'.$search.'%'])
-                      ->orWhere('user_id', 'like', '%'.$search.'%')
-                      ->orWhere('payment_type', 'like', '%'.$search.'%');
+                    ->orWhere('user_id', 'like', '%'.$search.'%')
+                    ->orWhere('payment_type', 'like', '%'.$search.'%');
             });
         }
 
@@ -458,7 +458,7 @@ class RestaurantController extends Controller
 
 //        $requiredHeaders = ['title', 'description', 'latitude', 'longitude', 'location', 'phonenumber', 'countrycode'];
 //        $missingHeaders = array_diff(array_map('strtolower', $requiredHeaders), $headersLower);
-         // Make header validation fully case-insensitive and trim-safe
+        // Make header validation fully case-insensitive and trim-safe
         $requiredHeaders = ['title', 'description', 'latitude', 'longitude', 'location', 'phonenumber', 'countrycode'];
 
         $headersLower = array_map(fn($h) => strtolower(trim($h)), $headersLower);
@@ -1548,12 +1548,12 @@ class RestaurantController extends Controller
             if (!empty($searchValue)) {
                 $query->where(function($q) use ($searchValue) {
                     $q->where('users.firstName', 'like', "%{$searchValue}%")
-                      ->orWhere('users.lastName', 'like', "%{$searchValue}%")
-                      ->orWhere('users.email', 'like', "%{$searchValue}%")
-                      ->orWhere('users.phoneNumber', 'like', "%{$searchValue}%")
-                      ->orWhere('users.vType', 'like', "%{$searchValue}%")
-                      ->orWhere('zone.name', 'like', "%{$searchValue}%")
-                      ->orWhere(DB::raw("CONCAT(users.firstName, ' ', users.lastName)"), 'like', "%{$searchValue}%");
+                        ->orWhere('users.lastName', 'like', "%{$searchValue}%")
+                        ->orWhere('users.email', 'like', "%{$searchValue}%")
+                        ->orWhere('users.phoneNumber', 'like', "%{$searchValue}%")
+                        ->orWhere('users.vType', 'like', "%{$searchValue}%")
+                        ->orWhere('zone.name', 'like', "%{$searchValue}%")
+                        ->orWhere(DB::raw("CONCAT(users.firstName, ' ', users.lastName)"), 'like', "%{$searchValue}%");
                 });
             }
 
@@ -1564,17 +1564,17 @@ class RestaurantController extends Controller
             if (!empty($zoneSort)) {
                 // Sort by zone name (zone table already joined above)
                 $vendors = $query->orderBy('zone.name', $zoneSort)
-                               ->orderByRaw("REPLACE(REPLACE(users.createdAt, '\"', ''), 'T', ' ') DESC")
-                               ->skip($start)
-                               ->take($length)
-                               ->get();
+                    ->orderByRaw("REPLACE(REPLACE(users.createdAt, '\"', ''), 'T', ' ') DESC")
+                    ->skip($start)
+                    ->take($length)
+                    ->get();
             } else {
                 // Get paginated records - order by parsed createdAt in descending order
                 // Remove quotes and convert to proper datetime for sorting
                 $vendors = $query->orderByRaw("REPLACE(REPLACE(users.createdAt, '\"', ''), 'T', ' ') DESC")
                     ->skip($start)
-                               ->take($length)
-                               ->get();
+                    ->take($length)
+                    ->get();
             }
 
             // Build response data
@@ -1587,6 +1587,7 @@ class RestaurantController extends Controller
                         // Remove quotes and parse the ISO date
                         $dateStr = trim($vendor->createdAt, '"');
                         $date = new \DateTime($dateStr);
+                        $date->setTimezone(new \DateTimeZone('Asia/Kolkata'));
                         $createdAtFormatted = $date->format('M d, Y h:i A');
                     } catch (\Exception $e) {
                         $createdAtFormatted = $vendor->createdAt;
@@ -1661,15 +1662,15 @@ class RestaurantController extends Controller
             // Try to find vendor by multiple ID fields
             $vendor = AppUser::where(function($query) use ($id) {
                 $query->where('firebase_id', $id)
-                      ->orWhere('_id', $id);
+                    ->orWhere('_id', $id);
 
                 // Also try numeric ID if the input is numeric
                 if (is_numeric($id)) {
                     $query->orWhere('id', $id);
                 }
             })
-            ->where('role', 'vendor')
-            ->first();
+                ->where('role', 'vendor')
+                ->first();
 
 
             if (!$vendor) {
@@ -1771,15 +1772,15 @@ class RestaurantController extends Controller
             // Try to find vendor by multiple ID fields
             $vendor = AppUser::where(function($query) use ($id) {
                 $query->where('firebase_id', $id)
-                      ->orWhere('_id', $id);
+                    ->orWhere('_id', $id);
 
                 // Also try numeric ID if the input is numeric
                 if (is_numeric($id)) {
                     $query->orWhere('id', $id);
                 }
             })
-            ->where('role', 'vendor')
-            ->first();
+                ->where('role', 'vendor')
+                ->first();
 
 
             if (!$vendor) {
@@ -1856,15 +1857,15 @@ class RestaurantController extends Controller
             // Try to find vendor by multiple ID fields
             $vendor = AppUser::where(function($query) use ($id) {
                 $query->where('firebase_id', $id)
-                      ->orWhere('_id', $id);
+                    ->orWhere('_id', $id);
 
                 // Also try numeric ID if the input is numeric
                 if (is_numeric($id)) {
                     $query->orWhere('id', $id);
                 }
             })
-            ->where('role', 'vendor')
-            ->first();
+                ->where('role', 'vendor')
+                ->first();
 
             if (!$vendor) {
                 return response()->json([
@@ -1899,15 +1900,15 @@ class RestaurantController extends Controller
             // Try to find vendor by multiple ID fields
             $vendor = AppUser::where(function($query) use ($id) {
                 $query->where('firebase_id', $id)
-                      ->orWhere('_id', $id);
+                    ->orWhere('_id', $id);
 
                 // Also try numeric ID if the input is numeric
                 if (is_numeric($id)) {
                     $query->orWhere('id', $id);
                 }
             })
-            ->where('role', 'vendor')
-            ->first();
+                ->where('role', 'vendor')
+                ->first();
 
             if (!$vendor) {
                 return response()->json([
@@ -1953,9 +1954,9 @@ class RestaurantController extends Controller
     {
         try {
             $plans = DB::table('subscription_plans')
-                      ->where('isEnable', 1)
-                      ->orderBy('name', 'asc')
-                      ->get();
+                ->where('isEnable', 1)
+                ->orderBy('name', 'asc')
+                ->get();
 
             return response()->json([
                 'success' => true,
@@ -2049,8 +2050,8 @@ class RestaurantController extends Controller
         try {
             // Settings table structure: id (auto-increment), document_name (unique), fields (JSON)
             $placeholder = DB::table('settings')
-                            ->where('document_name', 'placeHolderImage')
-                            ->first();
+                ->where('document_name', 'placeHolderImage')
+                ->first();
 
             if ($placeholder && !empty($placeholder->fields)) {
                 $fieldsData = json_decode($placeholder->fields, true);
@@ -2148,15 +2149,43 @@ class RestaurantController extends Controller
             // Update user vendorID if requested
             if ($request->updateUserVendorID && $user_id && $user_id !== 'admin_created') {
                 $user = AppUser::where('firebase_id', $user_id)
-                             ->orWhere('_id', $user_id)
-                             ->where('role', 'vendor')
-                             ->first();
+                    ->orWhere('_id', $user_id)
+                    ->where('role', 'vendor')
+                    ->first();
 
                 if ($user) {
                     $user->vendorID = $restaurant_id;
                     $user->save();
                 }
             }
+
+            // Save story data if provided
+            if ($request->has('storyData') && !empty($request->storyData)) {
+                $storyData = $request->storyData;
+                $videoThumbnail = $storyData['thumbnail'] ?? '';
+                $videoUrls = $storyData['videos'] ?? [];
+
+                if (!empty($videoThumbnail) || !empty($videoUrls)) {
+
+                    // convert array to comma separated string instead of JSON
+                    $videoUrlJson = !empty($videoUrls) ? implode(',', $videoUrls) : null;
+
+                    $firestoreId = 'story_' . Str::uuid()->toString();
+
+                    DB::table('story')->updateOrInsert(
+                        ['vendor_id' => $restaurant_id],
+                        [
+                            'firestore_id' => $firestoreId,
+                            'vendor_id' => $restaurant_id,
+                            'video_thumbnail' => $videoThumbnail,
+                            'video_url' => $videoUrlJson,
+                            'created_at' => now('Asia/Kolkata'),
+                            'updated_at' => now('Asia/Kolkata')
+                        ]
+                    );
+                }
+            }
+
 
             return response()->json([
                 'success' => true,
@@ -2219,9 +2248,9 @@ class RestaurantController extends Controller
             if (!empty($searchValue)) {
                 $query->where(function($q) use ($searchValue) {
                     $q->where('title', 'like', "%{$searchValue}%")
-                      ->orWhere('location', 'like', "%{$searchValue}%")
-                      ->orWhere('phonenumber', 'like', "%{$searchValue}%")
-                      ->orWhere('description', 'like', "%{$searchValue}%");
+                        ->orWhere('location', 'like', "%{$searchValue}%")
+                        ->orWhere('phonenumber', 'like', "%{$searchValue}%")
+                        ->orWhere('description', 'like', "%{$searchValue}%");
                 });
             }
 
@@ -2263,9 +2292,9 @@ class RestaurantController extends Controller
 
             // Apply ordering - descending by createdAt
             $restaurants = $query->orderByRaw("REPLACE(REPLACE(createdAt, '\"', ''), 'T', ' ') DESC")
-                               ->skip($start)
-                               ->take($length)
-                               ->get();
+                ->skip($start)
+                ->take($length)
+                ->get();
 
             // Build response data
             $data = [];
@@ -2474,6 +2503,26 @@ class RestaurantController extends Controller
                 'closetime' => $restaurant->closetime ?? ''
             ];
 
+            // Load story data if exists
+            $story = DB::table('story')->where('vendor_id', $restaurant->id)->first();
+            if ($story) {
+                // Parse video_url from comma-separated string to array
+                $videoUrls = [];
+                if (!empty($story->video_url)) {
+                    $videoUrls = explode(',', $story->video_url);
+                    $videoUrls = array_filter(array_map('trim', $videoUrls));
+                }
+                $restaurantData['story'] = [
+                    'videoThumbnail' => $story->video_thumbnail ?? '',
+                    'videoUrl' => $videoUrls
+                ];
+            } else {
+                $restaurantData['story'] = [
+                    'videoThumbnail' => '',
+                    'videoUrl' => []
+                ];
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => $restaurantData
@@ -2555,6 +2604,35 @@ class RestaurantController extends Controller
             if ($request->has('closeDineTime')) $restaurant->closeDineTime = $request->closeDineTime;
 
             $restaurant->save();
+
+            // Save story data if provided
+            if ($request->has('storyData') && !empty($request->storyData)) {
+                $storyData = $request->storyData;
+                $videoThumbnail = $storyData['thumbnail'] ?? '';
+                $videoUrls = $storyData['videos'] ?? [];
+
+                if (!empty($videoThumbnail) || !empty($videoUrls)) {
+                    // Convert array to comma-separated string
+                    $videoUrlString = !empty($videoUrls) ? implode(',', $videoUrls) : null;
+
+                    $firestoreId = 'story_' . Str::uuid()->toString();
+
+                    DB::table('story')->updateOrInsert(
+                        ['vendor_id' => $restaurant->id],
+                        [
+                            'firestore_id' => $firestoreId,
+                            'vendor_id' => $restaurant->id,
+                            'video_thumbnail' => $videoThumbnail,
+                            'video_url' => $videoUrlString,
+                            'created_at' => now(),
+                            'updated_at' => now()
+                        ]
+                    );
+                } else {
+                    // Delete story if both thumbnail and videos are empty
+                    DB::table('story')->where('vendor_id', $restaurant->id)->delete();
+                }
+            }
 
             return response()->json([
                 'success' => true,
@@ -3094,9 +3172,9 @@ class RestaurantController extends Controller
     {
         try {
             $categories = DB::table('vendor_categories')
-                          ->orderBy('title', 'asc')
-                          ->select('id', 'title', 'photo')
-                          ->get();
+                ->orderBy('title', 'asc')
+                ->select('id', 'title', 'photo')
+                ->get();
 
             return response()->json([
                 'success' => true,
@@ -3117,9 +3195,9 @@ class RestaurantController extends Controller
     {
         try {
             $cuisines = DB::table('vendor_cuisines')
-                        ->orderBy('title', 'asc')
-                        ->select('id', 'title', 'photo')
-                        ->get();
+                ->orderBy('title', 'asc')
+                ->select('id', 'title', 'photo')
+                ->get();
 
             return response()->json([
                 'success' => true,
@@ -3766,19 +3844,36 @@ class RestaurantController extends Controller
     }
 
     /**
-     * Upload base64 image to storage
+     * Upload base64 image or video to storage
      */
     private function uploadBase64Image($base64Data, $folder = 'vendor_documents', $filename = null)
     {
         try {
-            // Remove data URL prefix if present
-            $base64Data = preg_replace('/^data:image\/[a-z]+;base64,/', '', $base64Data);
+            // Detect if it's a video or image based on data URL prefix
+            $isVideo = false;
+            $fileExtension = null;
+            
+            // Check for video data URL prefix (e.g., data:video/mp4;base64,)
+            if (preg_match('/^data:video\/([a-z0-9]+);base64,/', $base64Data, $matches)) {
+                $isVideo = true;
+                $fileExtension = $matches[1]; // Extract video format (mp4, webm, etc.)
+                $base64Data = preg_replace('/^data:video\/[a-z0-9]+;base64,/', '', $base64Data);
+            }
+            // Check for image data URL prefix (e.g., data:image/jpeg;base64,)
+            elseif (preg_match('/^data:image\/([a-z]+);base64,/', $base64Data, $matches)) {
+                $fileExtension = $matches[1]; // Extract image format (jpeg, png, gif, etc.)
+                $base64Data = preg_replace('/^data:image\/[a-z]+;base64,/', '', $base64Data);
+            }
+            // Fallback: try to remove any data URL prefix
+            else {
+                $base64Data = preg_replace('/^data:[^;]+;base64,/', '', $base64Data);
+            }
 
             // Decode base64
-            $imageData = base64_decode($base64Data);
+            $fileData = base64_decode($base64Data);
 
-            if (!$imageData) {
-                throw new \Exception('Invalid base64 image data');
+            if (!$fileData) {
+                throw new \Exception('Invalid base64 data');
             }
 
             // Generate filename if not provided
@@ -3786,25 +3881,33 @@ class RestaurantController extends Controller
                 $filename = uniqid() . '_' . time();
             }
 
-            // Add extension if not present
-            if (!preg_match('/\.(jpg|jpeg|png|gif)$/i', $filename)) {
-                $filename .= '.jpg';
+            // Preserve existing extension if present, otherwise add appropriate extension
+            if (!preg_match('/\.(jpg|jpeg|png|gif|mp4|webm|mov|avi)$/i', $filename)) {
+                if ($isVideo && $fileExtension) {
+                    $filename .= '.' . $fileExtension;
+                } elseif ($fileExtension) {
+                    // For images, use the detected extension or default to jpg
+                    $filename .= '.' . ($fileExtension === 'jpeg' ? 'jpg' : $fileExtension);
+                } else {
+                    // Default to jpg for images if no extension detected
+                    $filename .= '.jpg';
+                }
             }
 
             // Save file using Storage
             $path = $folder . '/' . $filename;
-            Storage::disk('public')->put($path, $imageData);
+            Storage::disk('public')->put($path, $fileData);
 
-            // Return public URL
-            return Storage::disk('public')->url($path);
+            // Return public URL using asset() to ensure proper domain
+            return asset('storage/' . $path);
         } catch (\Exception $e) {
-            \Log::error('Error uploading base64 image: ' . $e->getMessage());
+            \Log::error('Error uploading base64 file: ' . $e->getMessage());
             throw $e;
         }
     }
 
     /**
-     * Generic image upload API endpoint
+     * Generic image/video upload API endpoint (handles base64 encoded files)
      */
     public function uploadImage(Request $request)
     {
@@ -3926,5 +4029,17 @@ class RestaurantController extends Controller
                 'message' => 'Error deleting story'
             ], 500);
         }
+    }
+    public function uploadVideo(Request $request)
+    {
+        $file = $request->file('file');
+        $folder = $request->folder ?? 'restaurants/stories/videos';
+
+        $filename = time() . '_' . $file->getClientOriginalName();
+        $path = $file->storeAs($folder, $filename, 'public');
+
+        return response()->json([
+            'url' => asset('storage/' . $path)
+        ]);
     }
 }

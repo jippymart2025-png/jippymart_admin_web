@@ -119,6 +119,8 @@ class restaurantControllerLogin extends Controller
                 "zoneId" => $request->zone_id,
                 "provider" => "email",
                 "appIdentifier" => $request->app_identifier,
+                "createdAt" => Carbon::now(),
+
             ]);
 
             return response()->json([

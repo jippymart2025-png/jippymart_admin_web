@@ -979,43 +979,43 @@
                 if (order.hasOwnProperty('payment_method')) {
                     orderPaymentMethod = order.payment_method;
                 }
-                
+
                 // Set selected status with case-insensitive matching and status normalization
                 var currentStatus = order.status || '';
                 var statusNormalized = currentStatus.toLowerCase().trim();
-                
+
                 // Map database status values to dropdown values
                 var statusMap = {
                     'order shipped': 'Order Shipped',
-                    'restaurantorders shipped': 'Order Shipped',
-                    'orders shipped': 'Order Shipped',
+                    // 'restaurantorders shipped': 'Order Shipped',
+                    // 'orders shipped': 'Order Shipped',
                     'in transit': 'In Transit',
-                    'order in transit': 'In Transit',
+                    // 'order in transit': 'In Transit',
                     'order placed': 'Order Placed',
-                    'restaurantorders placed': 'Order Placed',
-                    'orders placed': 'Order Placed',
+                    // 'restaurantorders placed': 'Order Placed',
+                    // 'orders placed': 'Order Placed',
                     'order accepted': 'Order Accepted',
-                    'restaurantorders accepted': 'Order Accepted',
+                    // 'restaurantorders accepted': 'Order Accepted',
                     'orders accepted': 'Order Accepted',
                     'order rejected': 'Order Rejected',
-                    'restaurantorders rejected': 'Order Rejected',
-                    'orders rejected': 'Order Rejected',
+                    // 'restaurantorders rejected': 'Order Rejected',
+                    // 'orders rejected': 'Order Rejected',
                     'driver pending': 'Driver Pending',
                     'driver rejected': 'Driver Rejected',
                     'order completed': 'Order Completed',
-                    'restaurantorders completed': 'Order Completed',
+                    // 'restaurantorders completed': 'Order Completed',
                     'orders completed': 'Order Completed'
                 };
-                
+
                 // Try exact match first
                 var matchedValue = currentStatus;
                 if (statusMap[statusNormalized]) {
                     matchedValue = statusMap[statusNormalized];
                 }
-                
+
                 // Set selected option
                 $("#order_status option[value='" + matchedValue + "']").attr("selected", "selected");
-                
+
                 // If no match found, try to find by partial match
                 if (!$("#order_status option[value='" + matchedValue + "']").length) {
                     $("#order_status option").each(function() {
@@ -1026,7 +1026,7 @@
                         }
                     });
                 }
-                
+
                 if (order.status == "restaurantorders Rejected" || order.status == "Driver Rejected") {
                     $("#order_status").prop("disabled", true);
                 }
@@ -1037,7 +1037,7 @@
                 // Firebase vendor fetch removed; vendor details already filled from MySQL above
                 tip_amount = order.tip_amount;
                 jQuery("#data-table_processing").hide();
-                
+
                 // Load reviews for this order (MySQL-based)
                 initializeReviews();
             })
@@ -2225,7 +2225,7 @@
 
         // MySQL-based Reviews System
         var reviewAttributes = {}; // Will store review attributes from database
-        
+
         // Load review attributes from MySQL
         function loadReviewAttributes() {
             $.ajax({
@@ -2244,7 +2244,7 @@
                 }
             });
         }
-        
+
         // Load and display order reviews from MySQL
         function loadOrderReviews(orderId, orderProducts) {
             $.ajax({
@@ -2253,7 +2253,7 @@
                 success: function(response) {
                     console.log('📥 Reviews response:', response);
                     var reviews = response.data || [];
-                    
+
                     if (reviews.length > 0) {
                         var reviewHTML = buildRatingsAndReviewsHTML(reviews, orderProducts);
                         jQuery("#customers_rating_and_review").html(reviewHTML);
@@ -2267,7 +2267,7 @@
                 }
             });
         }
-        
+
         // Initialize reviews when order data is loaded
         function initializeReviews() {
             if (orderData && orderData.id) {
@@ -2283,13 +2283,13 @@
         // MySQL-based: Build reviews HTML from reviews array and products
         function buildRatingsAndReviewsHTML(reviews, orderProducts) {
             var reviewhtml = '<div class="user-ratings">';
-            
+
             if (!reviews || reviews.length === 0) {
                 reviewhtml += '<h4>No Reviews Found</h4>';
                 reviewhtml += '</div>';
                 return reviewhtml;
             }
-            
+
             // Create a map of products for quick lookup
             var productsMap = {};
             if (orderProducts && Array.isArray(orderProducts)) {
@@ -2297,17 +2297,17 @@
                     productsMap[product.id] = product;
                 });
             }
-            
+
             // Build review HTML for each review
             reviews.forEach(function(review) {
                 var product = productsMap[review.productId] || null;
-                
+
                 // Skip if product not found in order
                 if (!product) {
                     console.warn('Product not found for review:', review.productId);
                     return;
                 }
-                
+
                 var rating = review.rating || 0;
                 var productName = product.name || 'Unknown Product';
                 var productPhoto = product.photo || '';
@@ -2316,17 +2316,17 @@
                 var reviewAttributesData = review.reviewAttributes || {};
                 // Use formatted date: "Nov 29, 2025" (matching screenshot format)
                 var reviewDate = review.createdAtFormatted || '';
-                
+
                 reviewhtml += '<div class="reviews-members py-3 border mb-3">';
                 reviewhtml += '<div class="media">';
-                
+
                 // Product image
                 if (productPhoto) {
                     reviewhtml += '<a href="javascript:void(0);"><img onerror="this.onerror=null;this.src=\'' + place_image + '\'" alt="#" src="' + productPhoto + '" class="img-circle img-size-32 mr-2" style="width:60px;height:60px"></a>';
                 } else {
                     reviewhtml += '<a href="javascript:void(0);"><img alt="#" src="' + place_image + '" class="img-circle img-size-32 mr-2" style="width:60px;height:60px"></a>';
                 }
-                
+
                 // Product name and rating
                 reviewhtml += '<div class="media-body d-flex">';
                 reviewhtml += '<div class="reviews-members-header">';
@@ -2340,7 +2340,7 @@
                 reviewhtml += '</div></div>';
                 reviewhtml += '</div>';
                 reviewhtml += '</div>';
-                
+
                 // Review date
                 reviewhtml += '<div class="review-date ml-auto">';
                 if (reviewDate) {
@@ -2348,13 +2348,13 @@
                 }
                 reviewhtml += '</div>';
                 reviewhtml += '</div>';
-                
+
                 // Review body (comment and photos)
                 reviewhtml += '<div class="reviews-members-body w-100">';
                 if (comment) {
                     reviewhtml += '<p class="mb-2">' + comment + '</p>';
                 }
-                
+
                 // Photos
                 if (photos && Array.isArray(photos) && photos.length > 0) {
                     reviewhtml += '<div class="photos"><ul>';
@@ -2366,14 +2366,14 @@
                     reviewhtml += '</ul></div>';
                 }
                 reviewhtml += '</div>';
-                
+
                 // Review attributes (feature ratings)
                 if (reviewAttributesData && Object.keys(reviewAttributesData).length > 0) {
                     reviewhtml += '<div class="attribute-ratings feature-rating mb-2">';
                     var label_feature = "{{ trans('lang.byfeature') }}";
                     reviewhtml += '<h3 class="mb-2">' + label_feature + '</h3>';
                     reviewhtml += '<div class="media-body">';
-                    
+
                     $.each(reviewAttributesData, function(attributeId, attributeValue) {
                         var attributeTitle = reviewAttributes[attributeId] || attributeId;
                         reviewhtml += '<div class="feature-reviews-members-header d-flex mb-3">';
@@ -2391,13 +2391,13 @@
                         reviewhtml += '</div>';
                         reviewhtml += '</div></div>';
                     });
-                    
+
                     reviewhtml += '</div></div>';
                 }
-                
+
                 reviewhtml += '</div>';
             });
-            
+
             reviewhtml += '</div>';
             return reviewhtml;
         }

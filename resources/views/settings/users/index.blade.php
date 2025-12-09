@@ -39,6 +39,17 @@
                                     </select>
                                 </div>
                                 <div class="select-box pl-3">
+                                    <select class="form-control date_range_selector filteredRecords"
+                                            id="date_range_selector">
+                                        <option value="" selected>{{trans("lang.select_range")}}</option>
+                                        <option value="last_24_hours">⏰ Last 24 Hours</option>
+                                        <option value="last_week">📅 Last Week</option>
+                                        <option value="last_month">📆 Last Month</option>
+                                        <option value="custom">🗓️ Custom Range</option>
+                                        <option value="all_orders">📋 All Users</option>
+                                    </select>
+                                </div>
+                                <div class="select-box pl-3" id="custom_daterange_container" style="display:none;">
                                     <div id="daterange"><i class="fa fa-calendar"></i>&nbsp;
                                         <span></span>&nbsp; <i class="fa fa-caret-down"></i>
                                     </div>
@@ -160,7 +171,50 @@
         </div>
     </div>
 @endsection
+@section('style')
+    <style>
+        /* Date range preset selector styling */
+        #date_range_selector {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: 2px solid #5a67d8;
+            border-radius: 12px;
+            padding: 8px 12px;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            min-width: 180px;
+        }
+
+        #date_range_selector:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        #date_range_selector option {
+            background: white;
+            color: #2d3748;
+        }
+
+        /* Custom date range container animation */
+        #custom_daterange_container {
+            animation: slideIn 0.3s ease-in-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+    </style>
+@endsection
 @section('scripts')
+    <script src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
     <script type="text/javascript">
         // SQL mode: fetch via API instead of Firebase
         var apiBase = '{{ url('/api') }}';
@@ -239,6 +293,12 @@
             minimumResultsForSearch: Infinity,
             allowClear: true
         });
+        // Initialize Select2 for date range selector
+        $('#date_range_selector').select2({
+            placeholder: '{{trans("lang.select_range")}}',
+            minimumResultsForSearch: Infinity,
+            allowClear: true
+        });
 
         // Handle select2 unselecting
         $('select').on("select2:unselecting", function (e) {
@@ -270,25 +330,130 @@
             $('#userTable').DataTable().ajax.reload();
         });
 
-        function setDate() {
+        // Initialize custom date range picker
+        function initCustomDateRange() {
+            console.log('📅 Initializing custom date range picker...');
             $('#daterange span').html('{{trans("lang.select_range")}}');
             $('#daterange').daterangepicker({
                 autoUpdateInput: false,
+                opens: 'left',
+                locale: {
+                    format: 'MMMM D, YYYY'
+                }
             }, function (start, end) {
+                console.log('📅 Custom range selected:', start.format('YYYY-MM-DD'), 'to', end.format('YYYY-MM-DD'));
                 $('#daterange span').html(start.format('MMMM D, YYYY') + ' - ' + end.format('MMMM D, YYYY'));
-                $('select').trigger('change');
+                // Only reload if DataTable is initialized
+                if ($.fn.DataTable.isDataTable('#userTable')) {
+                    $('#userTable').DataTable().ajax.reload();
+                }
             });
             $('#daterange').on('apply.daterangepicker', function (ev, picker) {
+                console.log('📅 Custom range applied:', picker.startDate.format('YYYY-MM-DD'), 'to', picker.endDate.format('YYYY-MM-DD'));
                 $('#daterange span').html(picker.startDate.format('MMMM D, YYYY') + ' - ' + picker.endDate.format('MMMM D, YYYY'));
-                $('select').trigger('change');
+                if ($.fn.DataTable.isDataTable('#userTable')) {
+                    $('#userTable').DataTable().ajax.reload();
+                }
             });
             $('#daterange').on('cancel.daterangepicker', function (ev, picker) {
+                console.log('📅 Custom range cancelled');
                 $('#daterange span').html('{{trans("lang.select_range")}}');
-                $('select').trigger('change');
+                if ($.fn.DataTable.isDataTable('#userTable')) {
+                    $('#userTable').DataTable().ajax.reload();
+                }
             });
+            console.log('✅ Custom date range picker initialized');
         }
 
-        setDate();
+        // Initialize custom date range picker
+        initCustomDateRange();
+
+        // Handle date range preset selector
+        $('#date_range_selector').on('change', function () {
+            var selectedRange = $(this).val();
+            console.log('📅 Date range preset changed to:', selectedRange);
+
+            if (selectedRange === 'custom') {
+                // Show custom date range picker
+                console.log('📅 Showing custom date picker');
+                $('#custom_daterange_container').slideDown(300);
+            } else {
+                // Hide custom date range picker
+                $('#custom_daterange_container').slideUp(300);
+                $('#daterange span').html('{{trans("lang.select_range")}}');
+
+                if (selectedRange === '') {
+                    // Clear date filter
+                    console.log('📅 Date filter cleared');
+                    // Clear daterangepicker values
+                    var picker = $('#daterange').data('daterangepicker');
+                    if (picker) {
+                        picker.setStartDate(moment());
+                        picker.setEndDate(moment());
+                    }
+                    // Reload table
+                    if ($.fn.DataTable.isDataTable('#userTable')) {
+                        $('#userTable').DataTable().ajax.reload();
+                    }
+                    return;
+                }
+
+                if (selectedRange === 'all_orders') {
+                    // Show all users - clear date filter
+                    console.log('📅 Showing all users (no date filter)');
+                    // Clear daterangepicker values
+                    var picker = $('#daterange').data('daterangepicker');
+                    if (picker) {
+                        picker.setStartDate(moment());
+                        picker.setEndDate(moment());
+                    }
+                    // Reload table without date filter
+                    if ($.fn.DataTable.isDataTable('#userTable')) {
+                        $('#userTable').DataTable().ajax.reload();
+                    }
+                    return;
+                }
+
+                // Set predefined ranges
+                var startDate, endDate;
+                var now = moment();
+
+                if (selectedRange === 'last_24_hours') {
+                    startDate = moment().subtract(24, 'hours');
+                    endDate = now;
+                    console.log('📅 Setting Last 24 hours:', startDate.format('YYYY-MM-DD HH:mm'), 'to', endDate.format('YYYY-MM-DD HH:mm'));
+                } else if (selectedRange === 'last_week') {
+                    startDate = moment().subtract(7, 'days').startOf('day');
+                    endDate = now;
+                    console.log('📅 Setting Last week:', startDate.format('YYYY-MM-DD'), 'to', endDate.format('YYYY-MM-DD'));
+                } else if (selectedRange === 'last_month') {
+                    startDate = moment().subtract(30, 'days').startOf('day');
+                    endDate = now;
+                    console.log('📅 Setting Last month:', startDate.format('YYYY-MM-DD'), 'to', endDate.format('YYYY-MM-DD'));
+                }
+
+                // Set the date range picker values (for the hidden custom picker)
+                if (startDate && endDate) {
+                    var picker = $('#daterange').data('daterangepicker');
+                    if (picker) {
+                        picker.setStartDate(startDate);
+                        picker.setEndDate(endDate);
+                        $('#daterange span').html(startDate.format('MMMM D, YYYY') + ' - ' + endDate.format('MMMM D, YYYY'));
+                        console.log('✅ Date range set in picker:', startDate.format('YYYY-MM-DD'), 'to', endDate.format('YYYY-MM-DD'));
+                    } else {
+                        console.error('❌ Daterangepicker not initialized!');
+                    }
+
+                    // Reload table with new date range
+                    if ($.fn.DataTable.isDataTable('#userTable')) {
+                        console.log('📅 Reloading table with date filter...');
+                        $('#userTable').DataTable().ajax.reload();
+                    } else {
+                        console.warn('⚠️ DataTable not initialized yet');
+                    }
+                }
+            }
+        });
         $(document).ready(function () {
             $(document.body).on('click', '.redirecttopage', function () {
                 var url = $(this).attr('data-url');
@@ -338,10 +503,34 @@
                         const zoneValue = $('.zone_selector').val();
                         const daterangepicker = $('#daterange').data('daterangepicker');
                         let from = '', to = '';
-                        if ($('#daterange span').html() != '{{trans("lang.select_range")}}' && daterangepicker) {
-                            from = daterangepicker.startDate.format('YYYY-MM-DD HH:mm:ss');
-                            to = daterangepicker.endDate.format('YYYY-MM-DD HH:mm:ss');
+                        
+                        // Date range - check both preset and custom
+                        var selectedRange = $('#date_range_selector').val();
+                        
+                        // Send date_range parameter for preset handling
+                        var dateRangeParam = '';
+                        if (selectedRange) {
+                            dateRangeParam = selectedRange;
                         }
+                        
+                        // Handle "all_orders" - don't send date filters
+                        if (selectedRange === 'all_orders') {
+                            console.log('📅 AJAX data - All users selected, skipping date filter');
+                            // Don't set from/to - this will show all users
+                        } else if (daterangepicker && $('#daterange span').html() != '{{trans("lang.select_range")}}') {
+                            // Always try to get date from daterangepicker if it has valid dates
+                            try {
+                                // Send full timestamp so last_24_hours / last_week works correctly
+                                from = daterangepicker.startDate.format('YYYY-MM-DD HH:mm:ss');
+                                to = daterangepicker.endDate.format('YYYY-MM-DD HH:mm:ss');
+                                console.log('📅 AJAX data - Sending dates:', from, 'to', to);
+                            } catch (e) {
+                                console.error('❌ Error getting daterangepicker values:', e);
+                            }
+                        } else {
+                            console.log('📅 AJAX data - No date range set');
+                        }
+                        
                         $('#data-table_processing').show();
                         $.ajax({
                             url: apiBase + '/app-users',
@@ -355,6 +544,7 @@
                                 zoneId: zoneValue,
                                 from: from,
                                 to: to,
+                                date_range: dateRangeParam,
                                 role: 'customer'
                             }
                         }).done(function (resp) {
