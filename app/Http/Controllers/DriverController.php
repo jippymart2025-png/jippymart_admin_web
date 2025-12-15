@@ -15,16 +15,16 @@ class DriverController extends Controller
         $this->middleware('auth');
     }
 
-	  public function index()
+    public function index()
     {
         return view("drivers.index");
     }
 
     public function edit($id)
     {
-    	return view('drivers.edit')->with('id', $id);
+        return view('drivers.edit')->with('id', $id);
     }
-     public function create()
+    public function create()
     {
         return view('drivers.create');
     }
@@ -86,8 +86,14 @@ class DriverController extends Controller
     {
         try {
             $drivers = AppUser::query()
+                ->leftJoin('zone', 'users.zoneId', '=', 'zone.id')
                 ->where('role', 'driver')
+                ->select(
+                    'users.*',
+                    'zone.name as zone'
+                )
                 ->get();
+
 
             if ($drivers->isEmpty()) {
                 return response()->json([
@@ -148,11 +154,17 @@ class DriverController extends Controller
             $startDate = $request->input('startDate');
             $endDate = $request->input('endDate');
 
-            // Query from users table where role = 'driver'
-            $query = AppUser::where('role', 'driver');
+            // 🔥 ADD JOIN HERE
+            $query = DB::table('users')
+                ->leftJoin('zone', 'users.zoneId', '=', 'zone.id')
+                ->where('users.role', 'driver')
+                ->select(
+                    'users.*',
+                    'zone.name as zone_name'
+                );
 
-            // Use subquery to get unique drivers by firebase_id
-            $query->whereIn('id', function($subQuery) {
+            // Unique by firebase_id
+            $query->whereIn('users.id', function($subQuery) {
                 $subQuery->select(DB::raw('MAX(id)'))
                     ->from('users')
                     ->where('role', 'driver')
@@ -162,122 +174,85 @@ class DriverController extends Controller
 
             // Apply filters
             if (!empty($zone)) {
-                $query->where('zoneId', $zone);
+                $query->where('users.zoneId', $zone);
             }
 
             if ($isActive !== null && $isActive !== '') {
-                $query->where('active', $isActive == '1' ? '1' : '0');
+                $query->where('users.active', $isActive == '1' ? '1' : '0');
             }
 
             if ($isDocumentVerify !== null && $isDocumentVerify !== '') {
-                $query->where('isDocumentVerify', $isDocumentVerify == '1' ? '1' : '0');
+                $query->where('users.isDocumentVerify', $isDocumentVerify == '1' ? '1' : '0');
             }
 
             if (!empty($startDate) && !empty($endDate)) {
-                $query->whereRaw("DATE(REPLACE(REPLACE(createdAt, '\"', ''), 'T', ' ')) BETWEEN ? AND ?",
-                    [$startDate, $endDate]);
+                $query->whereRaw(
+                    "DATE(REPLACE(REPLACE(users.createdAt, '\"', ''), 'T', ' ')) BETWEEN ? AND ?",
+                    [$startDate, $endDate]
+                );
             }
 
             $totalRecords = $query->count();
 
-            // Apply search filter
+            // Search filter
             if (!empty($searchValue)) {
                 $query->where(function($q) use ($searchValue) {
-                    $q->where('firstName', 'like', "%{$searchValue}%")
-                      ->orWhere('lastName', 'like', "%{$searchValue}%")
-                      ->orWhere('email', 'like', "%{$searchValue}%")
-                      ->orWhere('phoneNumber', 'like', "%{$searchValue}%");
+                    $q->where('users.firstName', 'like', "%{$searchValue}%")
+                        ->orWhere('users.lastName', 'like', "%{$searchValue}%")
+                        ->orWhere('users.email', 'like', "%{$searchValue}%")
+                        ->orWhere('users.phoneNumber', 'like', "%{$searchValue}%")
+                        ->orWhere('zone.name', 'like', "%{$searchValue}%");
                 });
             }
 
             $filteredRecords = $query->count();
+// Build stats (respect current filters/search)
+            $statsQuery = clone $query;
+            $stats = [
+                'total' => $filteredRecords,
+                'active' => (clone $statsQuery)->where('users.active', '1')->count(),
+                'inactive' => (clone $statsQuery)->where('users.active', '0')->count(),
+            ];
+            // Apply ordering and pagination
+            $drivers = $query
+                ->orderBy('users.createdAt', 'DESC')
+                ->skip($start)
+                ->take($length)
+                ->get();
 
-//            // Get counts for statistics
-//            $totalDrivers = AppUser::where('role', 'driver')->count();
-//            $activeDrivers = AppUser::where('role', 'driver')->where('active', '1')->count();
-//            $inactiveDrivers = AppUser::where('role', 'driver')->where('active', '0')->count();
-
-            // Now compute filtered stats
-            $totalDrivers   = $query->count();
-            $activeDrivers  = $query->clone()->where('active', 1)->count();
-            $inactiveDrivers = $query->clone()->where('active', 0)->count();
-
-            // Apply ordering - descending by createdAt
-            $drivers = $query->orderByRaw("REPLACE(REPLACE(createdAt, '\"', ''), 'T', ' ') DESC")
-                           ->skip($start)
-                           ->take($length)
-                           ->get();
-
-            // Build response data
+            // Prepare final JSON response
             $data = [];
             foreach ($drivers as $driver) {
-//                // Parse createdAt date
-//                $createdAtFormatted = '';
-//                if ($driver->createdAt) {
-//                    try {
-//                        $dateStr = trim($driver->createdAt, '"');
-//                        $date = new \DateTime($dateStr);
-//                        $createdAtFormatted = $date->format('M d, Y h:i A');
-//                    } catch (\Exception $e) {
-//                        $createdAtFormatted = $driver->createdAt;
-//                    }
+
+                // Format createdAt
                 $createdAtFormatted = '';
                 if ($driver->createdAt) {
                     try {
                         $dateStr = trim($driver->createdAt, '"');
                         $date = new \DateTime($dateStr);
-
-                        // Convert to Asia/Kolkata timezone
                         $date->setTimezone(new \DateTimeZone('Asia/Kolkata'));
-
                         $createdAtFormatted = $date->format('M d, Y h:i A');
                     } catch (\Exception $e) {
                         $createdAtFormatted = $driver->createdAt;
                     }
                 }
 
-                // Parse location if it's JSON
-                $latitude = 0;
-                $longitude = 0;
-                if ($driver->location) {
-                    if (is_string($driver->location)) {
-                        try {
-                            $location = json_decode($driver->location, true);
-                            $latitude = $location['latitude'] ?? 0;
-                            $longitude = $location['longitude'] ?? 0;
-                        } catch (\Exception $e) {
-                            // Keep defaults
-                        }
-                    }
-                }
-
-                $driverData = [
-                    'id' => $driver->id ?? '',
-                    'firebase_id' => $driver->firebase_id ?? $driver->id,
-                    '_id' => $driver->_id ?? '',
-                    'firstName' => $driver->firstName ?? '',
-                    'lastName' => $driver->lastName ?? '',
-                    'email' => $driver->email ?? '',
-                    'phoneNumber' => $driver->phoneNumber ?? '',
-                    'countryCode' => $driver->countryCode ?? '',
-                    'profilePictureURL' => $driver->profilePictureURL ?? '',
-                    'carName' => $driver->carName ?? '',
-                    'carNumber' => $driver->carNumber ?? '',
-                    'carPictureURL' => $driver->carPictureURL ?? '',
-                    'zoneId' => $driver->zoneId ?? '',
-                    'active' => $driver->active == '1' || $driver->active === 'true' || $driver->active === true,
-                    'isActive' => $driver->isActive == '1' || $driver->isActive === 'true' || $driver->isActive === true,
-                    'isDocumentVerify' => $driver->isDocumentVerify == '1' || $driver->isDocumentVerify === 'true' || $driver->isDocumentVerify === true,
+                $data[] = [
+                    'id' => $driver->id,
+                    'firebase_id' => $driver->firebase_id,
+                    'firstName' => $driver->firstName,
+                    'lastName' => $driver->lastName,
+                    'email' => $driver->email,
+                    'phoneNumber' => $driver->phoneNumber,
+                    'profilePictureURL' => $driver->profilePictureURL,
+                    'zoneId' => $driver->zoneId,
+                    'zone_name' => $driver->zone_name ?? '---',  // 🔥 RETURN ZONE NAME
+                    'active' => $driver->active,
+                    'isActive' => $driver->isActive,
+                    'isDocumentVerify' => $driver->isDocumentVerify,
                     'wallet_amount' => $driver->wallet_amount ?? 0,
-                    'location' => [
-                        'latitude' => $latitude,
-                        'longitude' => $longitude
-                    ],
                     'createdAt' => $createdAtFormatted,
-                    'createdAtRaw' => $driver->createdAt ?? '',
                 ];
-
-                $data[] = $driverData;
             }
 
             return response()->json([
@@ -285,15 +260,10 @@ class DriverController extends Controller
                 'recordsTotal' => $totalRecords,
                 'recordsFiltered' => $filteredRecords,
                 'data' => $data,
-                'stats' => [
-                    'total' => $totalDrivers,
-                    'active' => $activeDrivers,
-                    'inactive' => $inactiveDrivers
-                ]
+                'stats' => $stats,
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Error fetching drivers data: ' . $e->getMessage());
             return response()->json([
                 'draw' => $request->input('draw'),
                 'recordsTotal' => 0,
@@ -303,6 +273,7 @@ class DriverController extends Controller
             ]);
         }
     }
+
 
     /**
      * Get single driver data by ID (SQL)
@@ -314,22 +285,22 @@ class DriverController extends Controller
 
             // Try to find by string ID column first (Firebase-style ID), then by numeric primary key
             $driver = AppUser::where('firebase_id', $id)
-                          ->where('role', 'driver')
-                          ->first();
+                ->where('role', 'driver')
+                ->first();
 
             \Log::info('Search by firebase_id: ' . ($driver ? 'FOUND' : 'NOT FOUND'));
 
             if (!$driver) {
                 $driver = AppUser::where('_id', $id)
-                              ->where('role', 'driver')
-                              ->first();
+                    ->where('role', 'driver')
+                    ->first();
                 \Log::info('Search by _id: ' . ($driver ? 'FOUND' : 'NOT FOUND'));
             }
 
             if (!$driver && is_numeric($id)) {
                 $driver = AppUser::where('id', $id)
-                              ->where('role', 'driver')
-                              ->first();
+                    ->where('role', 'driver')
+                    ->first();
                 \Log::info('Search by numeric id: ' . ($driver ? 'FOUND' : 'NOT FOUND'));
             }
 
@@ -337,11 +308,11 @@ class DriverController extends Controller
                 // Try one more search with partial match
                 \Log::warning('Driver not found with exact match. Trying LIKE search...');
                 $driver = AppUser::where('role', 'driver')
-                              ->where(function($q) use ($id) {
-                                  $q->where('firebase_id', 'like', "%{$id}%")
-                                    ->orWhere('_id', 'like', "%{$id}%");
-                              })
-                              ->first();
+                    ->where(function($q) use ($id) {
+                        $q->where('firebase_id', 'like', "%{$id}%")
+                            ->orWhere('_id', 'like', "%{$id}%");
+                    })
+                    ->first();
                 \Log::info('Search by LIKE: ' . ($driver ? 'FOUND' : 'NOT FOUND'));
             }
 
@@ -350,8 +321,8 @@ class DriverController extends Controller
 
                 // Get sample drivers for debugging
                 $sampleDrivers = AppUser::where('role', 'driver')
-                                      ->limit(5)
-                                      ->get(['id', 'firebase_id', '_id', 'firstName', 'lastName']);
+                    ->limit(5)
+                    ->get(['id', 'firebase_id', '_id', 'firstName', 'lastName']);
                 \Log::info('Sample drivers in database: ' . json_encode($sampleDrivers));
 
                 return response()->json([
@@ -502,19 +473,19 @@ class DriverController extends Controller
         try {
             // Try to find driver by multiple ID fields
             $driver = AppUser::where('firebase_id', $id)
-                          ->where('role', 'driver')
-                          ->first();
+                ->where('role', 'driver')
+                ->first();
 
             if (!$driver) {
                 $driver = AppUser::where('_id', $id)
-                              ->where('role', 'driver')
-                              ->first();
+                    ->where('role', 'driver')
+                    ->first();
             }
 
             if (!$driver && is_numeric($id)) {
                 $driver = AppUser::where('id', $id)
-                              ->where('role', 'driver')
-                              ->first();
+                    ->where('role', 'driver')
+                    ->first();
             }
 
             \Log::info('Updating driver with ID: ' . $id);
@@ -583,13 +554,13 @@ class DriverController extends Controller
     {
         try {
             $driver = AppUser::where('firebase_id', $id)
-                          ->where('role', 'driver')
-                          ->first();
+                ->where('role', 'driver')
+                ->first();
 
             if (!$driver) {
                 $driver = AppUser::where('_id', $id)
-                              ->where('role', 'driver')
-                              ->first();
+                    ->where('role', 'driver')
+                    ->first();
             }
 
             if (!$driver) {
@@ -622,13 +593,13 @@ class DriverController extends Controller
     {
         try {
             $driver = AppUser::where('firebase_id', $id)
-                          ->where('role', 'driver')
-                          ->first();
+                ->where('role', 'driver')
+                ->first();
 
             if (!$driver) {
                 $driver = AppUser::where('_id', $id)
-                              ->where('role', 'driver')
-                              ->first();
+                    ->where('role', 'driver')
+                    ->first();
             }
 
             if (!$driver) {
@@ -732,13 +703,13 @@ class DriverController extends Controller
 
             // Get wallet balance
             $driver = AppUser::where('firebase_id', $id)
-                          ->where('role', 'driver')
-                          ->first();
+                ->where('role', 'driver')
+                ->first();
 
             if (!$driver) {
                 $driver = AppUser::where('_id', $id)
-                              ->where('role', 'driver')
-                              ->first();
+                    ->where('role', 'driver')
+                    ->first();
             }
 
             $walletBalance = $driver ? floatval($driver->wallet_amount ?? 0) : 0;
@@ -767,13 +738,13 @@ class DriverController extends Controller
     {
         try {
             $driver = AppUser::where('firebase_id', $id)
-                          ->where('role', 'driver')
-                          ->first();
+                ->where('role', 'driver')
+                ->first();
 
             if (!$driver) {
                 $driver = AppUser::where('_id', $id)
-                              ->where('role', 'driver')
-                              ->first();
+                    ->where('role', 'driver')
+                    ->first();
             }
 
             if (!$driver) {
@@ -853,17 +824,17 @@ class DriverController extends Controller
         try {
             // Get all zones first, then filter for publish = 1
             $allZones = DB::table('zone')
-                      ->orderBy('name', 'asc')
-                      ->get();
+                ->orderBy('name', 'asc')
+                ->get();
 
             \Log::info('Total zones found: ' . $allZones->count());
 
             // Filter for published zones (handle different data types)
             $zones = $allZones->filter(function($zone) {
                 return $zone->publish == 1 ||
-                       $zone->publish === '1' ||
-                       $zone->publish === true ||
-                       $zone->publish === 'true';
+                    $zone->publish === '1' ||
+                    $zone->publish === true ||
+                    $zone->publish === 'true';
             })->values();
 
             \Log::info('Published zones: ' . $zones->count());

@@ -471,19 +471,19 @@
 
         // Load available drivers for manual assignment (from PHP)
         function loadAvailableDrivers() {
-                    $('#driver_selector').empty();
-                    $('#driver_selector').append('<option value="">{{ trans("lang.select_driver") }}</option>');
+            $('#driver_selector').empty();
+            $('#driver_selector').append('<option value="">{{ trans("lang.select_driver") }}</option>');
 
             if (availableDrivers && availableDrivers.length > 0) {
                 availableDrivers.forEach(function(driverData) {
-                        var driverName = (driverData.firstName || '') + ' ' + (driverData.lastName || '');
-                        var driverPhone = driverData.phoneNumber || '';
-                        var displayText = driverName + ' (' + driverPhone + ')';
+                    var driverName = (driverData.firstName || '') + ' ' + (driverData.lastName || '');
+                    var driverPhone = driverData.phoneNumber || '';
+                    var displayText = driverName + ' (' + driverPhone + ')';
 
-                        $('#driver_selector').append($("<option></option>")
-                            .attr("value", driverData.id)
-                            .text(displayText));
-                    });
+                    $('#driver_selector').append($("<option></option>")
+                        .attr("value", driverData.id)
+                        .text(displayText));
+                });
             }
         }
 
@@ -514,9 +514,11 @@
 
         // Assign driver to order using Laravel route
         function assignDriverToOrder(driverId) {
-                $('#assign_driver_btn').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Assigning...');
+            // Disable button and show loading state
+            var $btn = $('#assign_driver_btn');
+            $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Assigning...');
 
-            console.log('🚗 Assigning driver to order:', { orderId: id, driverId: selectedDriverId });
+            console.log('🚗 Assigning driver to order:', { orderId: id, driverId: driverId });
 
             $.ajax({
                 url: '{{ route("orders.assign.driver", ":id") }}'.replace(':id', id),
@@ -527,32 +529,44 @@
                 },
                 success: function(response) {
                     if (response.success) {
-                        console.log('✅ Driver assigned successfully:', response);
+                        console.log('✅ Order request sent to driver:', response);
 
-                        // Log activity
+                        // Log activity - note: this is a request, not an assignment
                         if (typeof logActivity === 'function') {
-                            logActivity('orders', 'driver_assigned', 'Assigned driver ' + (response.driver_name || driverId) + ' to order #' + id);
+                            logActivity('orders', 'driver_request_sent', 'Order request sent to driver ' + (response.driver_name || driverId) + ' for order #' + id + ' (pending acceptance)');
                         }
 
-                        alert('{{ trans("lang.driver_assigned_successfully") }}');
+                        // Show success message from server (indicates it's a request, not direct assignment)
+                        var successMsg = response.message || 'Order request sent to driver. Driver will receive a notification to accept or reject.';
+                        alert(successMsg);
+
+                        // Reload to show updated state (order will still show no driver until driver accepts)
                         window.location.reload();
                     } else {
-                        alert('Error: ' + (response.message || 'Failed to assign driver'));
+                        // Reset button on failure
+                        $btn.prop('disabled', false).html('<i class="fa fa-user-plus"></i> {{ trans("lang.assign_driver") }}');
+                        alert('Error: ' + (response.message || 'Failed to send order request to driver'));
                     }
                 },
                 error: function(xhr) {
                     console.error('❌ Error assigning driver:', xhr);
-                    alert('{{ trans("lang.error_assigning_driver") }}');
-                },
-                complete: function() {
-                    $('#assign_driver_btn').prop('disabled', false).html('<i class="fa fa-user-plus"></i> {{ trans("lang.assign_driver") }}');
+                    // Reset button on error
+                    $btn.prop('disabled', false).html('<i class="fa fa-user-plus"></i> {{ trans("lang.assign_driver") }}');
+
+                    var errorMsg = '{{ trans("lang.error_assigning_driver") }}';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMsg = xhr.responseJSON.message;
+                    }
+                    alert(errorMsg);
                 }
             });
         }
 
         // Remove driver from order using Laravel route
         function removeDriverFromOrder() {
-                $('#remove_driver_btn').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Removing...');
+            // Disable button and show loading state
+            var $btn = $('#remove_driver_btn');
+            $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Removing...');
 
             console.log('🚗 Removing driver from order:', { orderId: id });
 
@@ -571,21 +585,28 @@
                             logActivity('orders', 'driver_removed', 'Removed driver ' + (response.old_driver_name || response.old_driver_id) + ' from order #' + id);
                         }
 
+                        // Show success message and reload
                         alert('{{ trans("lang.driver_removed_successfully") }}');
                         window.location.reload();
                     } else {
+                        // Reset button on failure
+                        $btn.prop('disabled', false).html('<i class="fa fa-user-times"></i> {{ trans("lang.remove_driver") }}');
                         alert('Error: ' + (response.message || 'Failed to remove driver'));
                     }
                 },
                 error: function(xhr) {
                     console.error('❌ Error removing driver:', xhr);
-                    alert('{{ trans("lang.error_removing_driver") }}');
-                },
-                complete: function() {
-                    $('#remove_driver_btn').prop('disabled', false).html('<i class="fa fa-user-times"></i> {{ trans("lang.remove_driver") }}');
+                    // Reset button on error
+                    $btn.prop('disabled', false).html('<i class="fa fa-user-times"></i> {{ trans("lang.remove_driver") }}');
+
+                    var errorMsg = '{{ trans("lang.error_removing_driver") }}';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMsg = xhr.responseJSON.message;
+                    }
+                    alert(errorMsg);
                 }
             });
-            }
+        }
 
         $(document).ready(async function () {
             // Initialize driver assignment
@@ -615,15 +636,15 @@
             var productsSafe = Array.isArray(order.products) ? order.products : [];
 
             // Populate order details
-                append_procucts_list = document.getElementById('order_products');
-                append_procucts_list.innerHTML = '';
-                append_procucts_total = document.getElementById('order_products_total');
-                append_procucts_total.innerHTML = '';
+            append_procucts_list = document.getElementById('order_products');
+            append_procucts_list.innerHTML = '';
+            append_procucts_total = document.getElementById('order_products_total');
+            append_procucts_total.innerHTML = '';
 
             // Billing name
             if (order.address && order.address.name) {
-                    $("#billing_name").text(order.address.name);
-                } else {
+                $("#billing_name").text(order.address.name);
+            } else {
                 var billingName = (order.user_first_name || '') + ' ' + (order.user_last_name || '');
                 if (!billingName.trim() && order.author && order.author.firstName) {
                     billingName = (order.author.firstName || '') + ' ' + (order.author.lastName || '');
@@ -631,20 +652,20 @@
                 $("#billing_name").text(billingName.trim() || 'N/A');
             }
 
-                $("#trackng_number").text(id);
+            $("#trackng_number").text(id);
 
             // Billing address
-                var billingAddressstring = '';
+            var billingAddressstring = '';
             if (order.address && order.address.address) {
-                    $("#billing_line1").text(order.address.address);
-                }
+                $("#billing_line1").text(order.address.address);
+            }
             if (order.address && order.address.locality) {
                 billingAddressstring = order.address.locality;
-                }
+            }
             if (order.address && order.address.landmark) {
-                    billingAddressstring = billingAddressstring + " " + order.address.landmark;
-                }
-                $("#billing_line2").text(billingAddressstring);
+                billingAddressstring = billingAddressstring + " " + order.address.landmark;
+            }
+            $("#billing_line2").text(billingAddressstring);
 
             // Billing phone and email
             var userPhone = order.user_phone || (order.author && order.author.phoneNumber) || '';
@@ -653,9 +674,9 @@
             var userEmail = order.user_email || (order.author && order.author.email) || '';
             if (userEmail) {
                 $("#billing_email").html('<a href="mailto:' + userEmail + '">' + shortEmail(userEmail) + '</a>');
-                } else {
-                    $("#billing_email").html("");
-                }
+            } else {
+                $("#billing_email").html("");
+            }
 
             // Created date - robust parsing for MySQL (YYYY-MM-DD HH:mm:ss), ISO, or timestamp
             // Format date like "Oct 1, 2025 11:27 PM"
@@ -694,397 +715,397 @@
                 $('#createdAt').text(formatDateTime(order.createdAt));
                 console.log('📅 Formatted order date:', formatDateTime(order.createdAt));
             }
-                var payment_method = '';
-                if (order.payment_method) {
-                    if (order.payment_method == "stripe") {
-                        image = '{{ asset('images/stripe.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%">';
-                    } else if (order.payment_method == "cod") {
-                        image = '{{ asset('images/cashondelivery.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%">';
-                    } else if (order.payment_method == "razorpay") {
-                        image = '{{ asset('images/razorepay.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%">';
-                    } else if (order.payment_method == "paypal") {
-                        image = '{{ asset('images/paypal.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%">';
-                    } else if (order.payment_method == "payfast") {
-                        image = '{{ asset('images/payfast.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '" width="30%" height="30%">';
-                    } else if (order.payment_method == "paystack") {
-                        image = '{{ asset('images/paystack.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%">';
-                    } else if (order.payment_method == "flutterwave") {
-                        image = '{{ asset('images/flutter_wave.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%">';
-                    } else if (order.payment_method == "mercado pago") {
-                        image = '{{ asset('images/marcado_pago.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%">';
-                    } else if (order.payment_method == "wallet") {
-                        image = '{{ asset('images/foodie_wallet.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%" >';
-                    } else if (order.payment_method == "paytm") {
-                        image = '{{ asset('images/paytm.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%">';
-                    } else if (order.payment_method == "cancelled order payment") {
-                        image = '{{ asset('images/cancel_order.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%">';
-                    } else if (order.payment_method == "refund amount") {
-                        image = '{{ asset('images/refund_amount.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%">';
-                    } else if (order.payment_method == "referral amount") {
-                        image = '{{ asset('images/reffral_amount.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%">';
-                    } else if (order.payment_method == "midtrans") {
-                        image = '{{ asset('images/midtrans.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%">';
-                    } else if (order.payment_method == "xendit") {
-                        image = '{{ asset('images/xendit.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%">';
-                    } else if (order.payment_method == "orangepay") {
-                        image = '{{ asset('images/orangeMoney.png') }}';
-                        payment_method = '<img alt="image" src="' + image +
-                            '"  width="30%" height="30%">';
-                    } else {
-                        payment_method = order.payment_method;
-                    }
-                }
-                $('#payment_method').html(payment_method);
-                if (order.hasOwnProperty('takeAway') && order.takeAway) {
-                    // $('#driver_pending').hide();
-                    // $('#driver_rejected').hide();
-                    // Keep Order Shipped and In Transit visible for all orders
-                    // $('#order_shipped').hide();
-                    // $('#in_transit').hide();
-                    $('#order_type').text('{{ trans('lang.order_takeaway') }}');
-                    orderTakeAwayOption = true;
+            var payment_method = '';
+            if (order.payment_method) {
+                if (order.payment_method == "stripe") {
+                    image = '{{ asset('images/stripe.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%">';
+                } else if (order.payment_method == "cod") {
+                    image = '{{ asset('images/cashondelivery.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%">';
+                } else if (order.payment_method == "razorpay") {
+                    image = '{{ asset('images/razorepay.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%">';
+                } else if (order.payment_method == "paypal") {
+                    image = '{{ asset('images/paypal.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%">';
+                } else if (order.payment_method == "payfast") {
+                    image = '{{ asset('images/payfast.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '" width="30%" height="30%">';
+                } else if (order.payment_method == "paystack") {
+                    image = '{{ asset('images/paystack.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%">';
+                } else if (order.payment_method == "flutterwave") {
+                    image = '{{ asset('images/flutter_wave.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%">';
+                } else if (order.payment_method == "mercado pago") {
+                    image = '{{ asset('images/marcado_pago.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%">';
+                } else if (order.payment_method == "wallet") {
+                    image = '{{ asset('images/foodie_wallet.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%" >';
+                } else if (order.payment_method == "paytm") {
+                    image = '{{ asset('images/paytm.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%">';
+                } else if (order.payment_method == "cancelled order payment") {
+                    image = '{{ asset('images/cancel_order.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%">';
+                } else if (order.payment_method == "refund amount") {
+                    image = '{{ asset('images/refund_amount.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%">';
+                } else if (order.payment_method == "referral amount") {
+                    image = '{{ asset('images/reffral_amount.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%">';
+                } else if (order.payment_method == "midtrans") {
+                    image = '{{ asset('images/midtrans.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%">';
+                } else if (order.payment_method == "xendit") {
+                    image = '{{ asset('images/xendit.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%">';
+                } else if (order.payment_method == "orangepay") {
+                    image = '{{ asset('images/orangeMoney.png') }}';
+                    payment_method = '<img alt="image" src="' + image +
+                        '"  width="30%" height="30%">';
                 } else {
-                    $('#order_type').text('{{ trans('lang.order_delivery') }}');
+                    payment_method = order.payment_method;
                 }
-                // Ensure Order Shipped and In Transit are always visible
-                $('#order_shipped').show();
-                $('#in_transit').show();
-                $('#driver_pending').show();
-                    $('#driver_rejected').show();
-                if ((order.driver != '' && order.driver != undefined) && (order.takeAway == false)) {
-                    $('#driver_carName').text(order.driver.carName);
-                    $('#driver_carNumber').text(order.driver.carNumber);
-                    $('#driver_email').html('<a href="mailto:' + order.driver.email + '">' + shortEmail(
-                        order.driver.email) + '</a>');
-                    $('#driver_firstName').text(order.driver.firstName);
-                    $('#driver_lastName').text(order.driver.lastName);
-                    $('#driver_phone').text(shortEditNumber(order.driver.phoneNumber));
-                    // MySQL-based: use zone name joined in controller
-                    var zoneName = order.zone_name || (order.driver && order.driver.zone) || '';
-                    $("#zone_name").text(zoneName);
+            }
+            $('#payment_method').html(payment_method);
+            if (order.hasOwnProperty('takeAway') && order.takeAway) {
+                // $('#driver_pending').hide();
+                // $('#driver_rejected').hide();
+                // Keep Order Shipped and In Transit visible for all orders
+                // $('#order_shipped').hide();
+                // $('#in_transit').hide();
+                $('#order_type').text('{{ trans('lang.order_takeaway') }}');
+                orderTakeAwayOption = true;
+            } else {
+                $('#order_type').text('{{ trans('lang.order_delivery') }}');
+            }
+            // Ensure Order Shipped and In Transit are always visible
+            $('#order_shipped').show();
+            $('#in_transit').show();
+            $('#driver_pending').show();
+            $('#driver_rejected').show();
+            if ((order.driver != '' && order.driver != undefined) && (order.takeAway == false)) {
+                $('#driver_carName').text(order.driver.carName);
+                $('#driver_carNumber').text(order.driver.carNumber);
+                $('#driver_email').html('<a href="mailto:' + order.driver.email + '">' + shortEmail(
+                    order.driver.email) + '</a>');
+                $('#driver_firstName').text(order.driver.firstName);
+                $('#driver_lastName').text(order.driver.lastName);
+                $('#driver_phone').text(shortEditNumber(order.driver.phoneNumber));
+                // MySQL-based: use zone name joined in controller
+                var zoneName = order.zone_name || (order.driver && order.driver.zone) || '';
+                $("#zone_name").text(zoneName);
 
-                    // Hide manual assignment section when driver is already assigned
-                    $('#manual_driver_assignment_section').hide();
-                    $('#assign_driver_button_section').hide();
-                } else {
-                    // MySQL-based: populate vendor and product sections even when no driver is assigned
-                    $('.order_edit-genrl').removeClass('col-md-7').addClass('col-md-7');
-                    $('.order_addre-edit').removeClass('col-md-5').addClass('col-md-5');
-                    $('.driver_details_hide').empty();
+                // Hide manual assignment section when driver is already assigned
+                $('#manual_driver_assignment_section').hide();
+                $('#assign_driver_button_section').hide();
+            } else {
+                // MySQL-based: populate vendor and product sections even when no driver is assigned
+                $('.order_edit-genrl').removeClass('col-md-7').addClass('col-md-7');
+                $('.order_addre-edit').removeClass('col-md-5').addClass('col-md-5');
+                $('.driver_details_hide').empty();
 
-                    // Show manual assignment section when no driver is assigned
-                    $('#manual_driver_assignment_section').show();
-                    $('#assign_driver_button_section').show();
-                    $('#assign_driver_btn').show();
-                    $('#remove_driver_btn').hide();
-                }
-
-                // --- MySQL-based: Vendor details fill ---
-                try {
-                    var vendorIdVal = order.vendorID || order.vendor_db_id || order.vendor_id;
-                    var route_view = '';
-                    if ((order.vendor_type || '').toLowerCase() === 'mart') {
-                        route_view = '{{ route('marts.view', ':id') }}'.replace(':id', vendorIdVal || '');
-                    } else {
-                        route_view = '{{ route('restaurants.view', ':id') }}'.replace(':id', vendorIdVal || '');
-                    }
-                    if (vendorIdVal) {
-                        $('#resturant-view').attr('data-url', route_view);
-                    }
-                    if (order.vendor_photo) {
-                        $('.resturant-img').attr('src', order.vendor_photo);
-                    } else {
-                        $('.resturant-img').attr('src', place_image);
-                    }
-                    if (order.vendor_title) {
-                        $('.vendor-title').html(order.vendor_title);
-                    }
-                    if (order.vendor_phone) {
-                        $('#vendor_phone').text(shortEditNumber(order.vendor_phone));
-                    } else {
-                        $('#vendor_phone').text("");
-                    }
-                    if (order.vendor_location) {
-                        $('#vendor_address').text(order.vendor_location);
-                    }
-                } catch (e) {}
-
-                // --- MySQL-based: Build products list and totals (fallback if promotional builder not used) ---
-                try {
-                    var products = productsSafe;
-                    var html = '';
-                    var total_price_local = 0;
-                    products.forEach(function (product) {
-                        var name = product.name || '';
-                        var qty = parseInt(product.quantity || 1);
-                        var unit = product.discountPrice && parseFloat(product.discountPrice) > 0 ? parseFloat(product.discountPrice) : parseFloat(product.price || 0);
-                        var extras_price = parseFloat(product.extras_price || 0) * qty;
-                        var row_total = (unit * qty) + (isNaN(extras_price) ? 0 : extras_price);
-                        total_price_local += row_total;
-
-                        var price_val = currencyAtRight ? (unit.toFixed(decimal_degits) + currentCurrency) : (currentCurrency + unit.toFixed(decimal_degits));
-                        var extras_val = currencyAtRight ? ((isNaN(extras_price)?0:extras_price).toFixed(decimal_degits) + currentCurrency) : (currentCurrency + (isNaN(extras_price)?0:extras_price).toFixed(decimal_degits));
-                        var row_total_val = currencyAtRight ? (row_total.toFixed(decimal_degits) + currentCurrency) : (currentCurrency + row_total.toFixed(decimal_degits));
-
-                        html += '<tr>';
-                        html += '<td class="order-product"><div class="order-product-box"><div class="orders-tracking"><h6>' + name + '</h6></div></div></td>';
-                        html += '<td class="text-green text-center"><span class="item-price">' + price_val + '</span></td>';
-                        html += '<td> × ' + qty + '</td>';
-                        html += '<td class="text-green"> + ' + extras_val + '</td>';
-                        html += '<td class="text-green"> ' + row_total_val + '</td>';
-                        html += '</tr>';
-                    });
-                    if (html) {
-                        document.getElementById('order_products').innerHTML = html;
-                    }
-                } catch (e) {}
-
-                if (order.driverID != '' && order.driverID != undefined) {
-                    driverId = order.driverID;
-                }
-                if (order.vendor && order.vendor.author != '' && order.vendor.author != undefined) {
-                    vendorAuthor = order.vendor.author;
-                }
-                var scheduleTime = '';
-                if (order.hasOwnProperty('scheduleTime') && order.scheduleTime != null && order.scheduleTime != '') {
-                    scheduleTime = order.scheduleTime;
-                    var scheduleDateTime = formatDateTime(scheduleTime);
-                    $('.schedule_date').append(
-                        '<label class="col-12 control-label"><strong>{{ trans('lang.schedule_date_time') }}:</strong><span id=""> ' + scheduleDateTime + '</span></label>');
-                    console.log('📅 Formatted schedule time:', scheduleDateTime);
-                }
-                if (order.hasOwnProperty('estimatedTimeToPrepare') && order.estimatedTimeToPrepare !=
-                    null && order.estimatedTimeToPrepare != '') {
-                    prepareTime = order.estimatedTimeToPrepare;
-                    var [h, m] = prepareTime.split(":");
-                    var hour = h;
-                    if (h.charAt(0) == "0") {
-                        hour = h.charAt(1);
-                    }
-                    time = (h == "00") ? m + " minutes" : hour + " hours" + m + " minutes";
-                    $('.prepare_time').append(
-                        '<label class="col-12 control-label "><strong>{{ trans('lang.prepare_time') }}:</strong><span id=""> ' +
-                        time + '</span></label>')
-                }
-                fcmToken = order.author.fcmToken;
-                vendorname = order.vendor.title;
-                fcmTokenVendor = order.vendor.fcmToken;
-                customername = order.author.firstName;
-                vendorId = order.vendor.id;
-                old_order_status = order.status;
-                if (order.payment_shared != undefined) {
-                    payment_shared = order.payment_shared;
-                }
-
-                let promotionalTotals = null;
-                try {
-                    promotionalTotals = await calculatePromotionalTotals(productsSafe, vendorIDSafe);
-                    console.log('💰 Promotional totals calculated:', promotionalTotals);
-                } catch (error) {
-                    console.error('❌ Error calculating promotional totals:', error);
-                    console.log('🔄 Continuing without promotional totals...');
-                    promotionalTotals = null;
-                }
-
-                // Store promotional totals globally for use in buildHTMLProductstotal
-                window.promotionalTotals = promotionalTotals;
-
-                console.log('🎯 ===== PROMOTIONAL PRICING SYSTEM STATUS =====');
-                console.log('🎯 Functions available:', {
-                    testPromotionalPricing: typeof testPromotionalPricing,
-                    getPromotionalPrice: typeof getPromotionalPrice,
-                    buildHTMLProductsListWithPromotions: typeof buildHTMLProductsListWithPromotions,
-                    calculatePromotionalTotals: typeof calculatePromotionalTotals
-                });
-
-                // Test promotional pricing with specific data first
-                console.log('🧪 ===== RUNNING PROMOTIONAL PRICING TEST =====');
-                try {
-                    await testPromotionalPricing();
-                } catch (error) {
-                    console.error('❌ Test failed:', error);
-                }
-
-                if (productsSafe && productsSafe.length > 0) {
-                    const testProduct = productsSafe[0];
-                    console.log('🎯 TEST PRODUCT DETAILS:', {
-                        id: testProduct.id,
-                        name: testProduct.name,
-                        price: testProduct.price,
-                        discountPrice: testProduct.discountPrice,
-                        vendorID: order.vendorID
-                    });
-
-                    try {
-                        const testPriceInfo = await getPromotionalPrice(testProduct, order.vendorID);
-                    } catch (error) {
-                        console.error('❌ Test price info failed:', error);
-                    }
-                }
-
-                console.log('🎯 About to call buildHTMLProductsListWithPromotions...');
-                var productsListHTML = '';
-                try {
-                    productsListHTML = await buildHTMLProductsListWithPromotions(productsSafe, vendorIDSafe);
-                    console.log('🎯 buildHTMLProductsListWithPromotions completed successfully');
-                } catch (error) {
-                    console.error('❌ buildHTMLProductsListWithPromotions failed:', error);
-                    console.log('🔄 Falling back to original buildHTMLProductsList');
-                    productsListHTML = buildHTMLProductsList(order.products || []);
-                }
-
-                // Build totals with hard fallback
-                var productstotalHTML = '';
-                try {
-                    productstotalHTML = await buildHTMLProductstotal(order);
-                } catch (e) {
-                    console.error('❌ buildHTMLProductstotal failed, using fallback:', e);
-                    productstotalHTML = simpleBuildTotals(order);
-                }
-
-                append_procucts_list.innerHTML = productsListHTML || '';
-                append_procucts_total.innerHTML = (productstotalHTML && productstotalHTML.trim().length>0) ? productstotalHTML : simpleBuildTotals(order);
-                console.log('✅ Totals rendered');
-                orderPreviousStatus = order.status;
-                if (order.hasOwnProperty('payment_method')) {
-                    orderPaymentMethod = order.payment_method;
-                }
-
-                // Set selected status with case-insensitive matching and status normalization
-                var currentStatus = order.status || '';
-                var statusNormalized = currentStatus.toLowerCase().trim();
-
-                // Map database status values to dropdown values
-                var statusMap = {
-                    'order shipped': 'Order Shipped',
-                    // 'restaurantorders shipped': 'Order Shipped',
-                    // 'orders shipped': 'Order Shipped',
-                    'in transit': 'In Transit',
-                    // 'order in transit': 'In Transit',
-                    'order placed': 'Order Placed',
-                    // 'restaurantorders placed': 'Order Placed',
-                    // 'orders placed': 'Order Placed',
-                    'order accepted': 'Order Accepted',
-                    // 'restaurantorders accepted': 'Order Accepted',
-                    'orders accepted': 'Order Accepted',
-                    'order rejected': 'Order Rejected',
-                    // 'restaurantorders rejected': 'Order Rejected',
-                    // 'orders rejected': 'Order Rejected',
-                    'driver pending': 'Driver Pending',
-                    'driver rejected': 'Driver Rejected',
-                    'order completed': 'Order Completed',
-                    // 'restaurantorders completed': 'Order Completed',
-                    'orders completed': 'Order Completed'
-                };
-
-                // Try exact match first
-                var matchedValue = currentStatus;
-                if (statusMap[statusNormalized]) {
-                    matchedValue = statusMap[statusNormalized];
-                }
-
-                // Set selected option
-                $("#order_status option[value='" + matchedValue + "']").attr("selected", "selected");
-
-                // If no match found, try to find by partial match
-                if (!$("#order_status option[value='" + matchedValue + "']").length) {
-                    $("#order_status option").each(function() {
-                        var optionValue = $(this).val().toLowerCase();
-                        if (optionValue === statusNormalized || optionValue.indexOf(statusNormalized) !== -1 || statusNormalized.indexOf(optionValue) !== -1) {
-                            $(this).attr("selected", "selected");
-                            return false; // break loop
-                        }
-                    });
-                }
-
-                if (order.status == "restaurantorders Rejected" || order.status == "Driver Rejected") {
-                    $("#order_status").prop("disabled", true);
-                }
-                var price = 0;
-                if (order.authorID) {
-                    orderCustomerId = order.authorID;
-                }
-                // Firebase vendor fetch removed; vendor details already filled from MySQL above
-                tip_amount = order.tip_amount;
-                jQuery("#data-table_processing").hide();
-
-                // Load reviews for this order (MySQL-based)
-                initializeReviews();
-            })
-
-            function getTwentyFourFormat(h, timeslot) {
-                if (h < 10 && timeslot == "PM") {
-                    h = parseInt(h) + 12;
-                } else if (h < 10 && timeslot == "AM") {
-                    h = '0' + h;
-                }
-                return h;
+                // Show manual assignment section when no driver is assigned
+                $('#manual_driver_assignment_section').show();
+                $('#assign_driver_button_section').show();
+                $('#assign_driver_btn').show();
+                $('#remove_driver_btn').hide();
             }
 
-            $('#add-prepare-time-btn').click(function () {
-                var preparationTime = $('#prepare_time').val();
-                if (preparationTime == '') {
-                    $('#add_prepare_time_error').text('{{ trans('lang.add_prepare_time_error') }}');
-                    return false;
+            // --- MySQL-based: Vendor details fill ---
+            try {
+                var vendorIdVal = order.vendorID || order.vendor_db_id || order.vendor_id;
+                var route_view = '';
+                if ((order.vendor_type || '').toLowerCase() === 'mart') {
+                    route_view = '{{ route('marts.view', ':id') }}'.replace(':id', vendorIdVal || '');
+                } else {
+                    route_view = '{{ route('restaurants.view', ':id') }}'.replace(':id', vendorIdVal || '');
                 }
-                alert('Preparation time update is not available in this build.');
-                $('#addPreparationTimeModal').modal('hide');
+                if (vendorIdVal) {
+                    $('#resturant-view').attr('data-url', route_view);
+                }
+                if (order.vendor_photo) {
+                    $('.resturant-img').attr('src', order.vendor_photo);
+                } else {
+                    $('.resturant-img').attr('src', place_image);
+                }
+                if (order.vendor_title) {
+                    $('.vendor-title').html(order.vendor_title);
+                }
+                if (order.vendor_phone) {
+                    $('#vendor_phone').text(shortEditNumber(order.vendor_phone));
+                } else {
+                    $('#vendor_phone').text("");
+                }
+                if (order.vendor_location) {
+                    $('#vendor_address').text(order.vendor_location);
+                }
+            } catch (e) {}
+
+            // --- MySQL-based: Build products list and totals (fallback if promotional builder not used) ---
+            try {
+                var products = productsSafe;
+                var html = '';
+                var total_price_local = 0;
+                products.forEach(function (product) {
+                    var name = product.name || '';
+                    var qty = parseInt(product.quantity || 1);
+                    var unit = product.discountPrice && parseFloat(product.discountPrice) > 0 ? parseFloat(product.discountPrice) : parseFloat(product.price || 0);
+                    var extras_price = parseFloat(product.extras_price || 0) * qty;
+                    var row_total = (unit * qty) + (isNaN(extras_price) ? 0 : extras_price);
+                    total_price_local += row_total;
+
+                    var price_val = currencyAtRight ? (unit.toFixed(decimal_degits) + currentCurrency) : (currentCurrency + unit.toFixed(decimal_degits));
+                    var extras_val = currencyAtRight ? ((isNaN(extras_price)?0:extras_price).toFixed(decimal_degits) + currentCurrency) : (currentCurrency + (isNaN(extras_price)?0:extras_price).toFixed(decimal_degits));
+                    var row_total_val = currencyAtRight ? (row_total.toFixed(decimal_degits) + currentCurrency) : (currentCurrency + row_total.toFixed(decimal_degits));
+
+                    html += '<tr>';
+                    html += '<td class="order-product"><div class="order-product-box"><div class="orders-tracking"><h6>' + name + '</h6></div></div></td>';
+                    html += '<td class="text-green text-center"><span class="item-price">' + price_val + '</span></td>';
+                    html += '<td> × ' + qty + '</td>';
+                    html += '<td class="text-green"> + ' + extras_val + '</td>';
+                    html += '<td class="text-green"> ' + row_total_val + '</td>';
+                    html += '</tr>';
+                });
+                if (html) {
+                    document.getElementById('order_products').innerHTML = html;
+                }
+            } catch (e) {}
+
+            if (order.driverID != '' && order.driverID != undefined) {
+                driverId = order.driverID;
+            }
+            if (order.vendor && order.vendor.author != '' && order.vendor.author != undefined) {
+                vendorAuthor = order.vendor.author;
+            }
+            var scheduleTime = '';
+            if (order.hasOwnProperty('scheduleTime') && order.scheduleTime != null && order.scheduleTime != '') {
+                scheduleTime = order.scheduleTime;
+                var scheduleDateTime = formatDateTime(scheduleTime);
+                $('.schedule_date').append(
+                    '<label class="col-12 control-label"><strong>{{ trans('lang.schedule_date_time') }}:</strong><span id=""> ' + scheduleDateTime + '</span></label>');
+                console.log('📅 Formatted schedule time:', scheduleDateTime);
+            }
+            if (order.hasOwnProperty('estimatedTimeToPrepare') && order.estimatedTimeToPrepare !=
+                null && order.estimatedTimeToPrepare != '') {
+                prepareTime = order.estimatedTimeToPrepare;
+                var [h, m] = prepareTime.split(":");
+                var hour = h;
+                if (h.charAt(0) == "0") {
+                    hour = h.charAt(1);
+                }
+                time = (h == "00") ? m + " minutes" : hour + " hours" + m + " minutes";
+                $('.prepare_time').append(
+                    '<label class="col-12 control-label "><strong>{{ trans('lang.prepare_time') }}:</strong><span id=""> ' +
+                    time + '</span></label>')
+            }
+            fcmToken = order.author.fcmToken;
+            vendorname = order.vendor.title;
+            fcmTokenVendor = order.vendor.fcmToken;
+            customername = order.author.firstName;
+            vendorId = order.vendor.id;
+            old_order_status = order.status;
+            if (order.payment_shared != undefined) {
+                payment_shared = order.payment_shared;
+            }
+
+            let promotionalTotals = null;
+            try {
+                promotionalTotals = await calculatePromotionalTotals(productsSafe, vendorIDSafe);
+                console.log('💰 Promotional totals calculated:', promotionalTotals);
+            } catch (error) {
+                console.error('❌ Error calculating promotional totals:', error);
+                console.log('🔄 Continuing without promotional totals...');
+                promotionalTotals = null;
+            }
+
+            // Store promotional totals globally for use in buildHTMLProductstotal
+            window.promotionalTotals = promotionalTotals;
+
+            console.log('🎯 ===== PROMOTIONAL PRICING SYSTEM STATUS =====');
+            console.log('🎯 Functions available:', {
+                testPromotionalPricing: typeof testPromotionalPricing,
+                getPromotionalPrice: typeof getPromotionalPrice,
+                buildHTMLProductsListWithPromotions: typeof buildHTMLProductsListWithPromotions,
+                calculatePromotionalTotals: typeof calculatePromotionalTotals
             });
 
-            async function callAjax() {
-                await $.ajax({
-                    type: 'POST',
-                    url: "<?php echo route('order-status-notification'); ?>",
-                    data: {
-                        _token: '<?php echo csrf_token(); ?>',
-                        'fcm': manfcmTokenVendor,
-                        'vendorname': manname,
-                        'orderStatus': "restaurantorders Accepted",
-                        'subject': orderAcceptedSubject,
-                        'message': orderAcceptedMsg
-                    },
-                    success: function (data) {
-                        window.location.href = '{{ route('orders') }}';
+            // Test promotional pricing with specific data first
+            console.log('🧪 ===== RUNNING PROMOTIONAL PRICING TEST =====');
+            try {
+                await testPromotionalPricing();
+            } catch (error) {
+                console.error('❌ Test failed:', error);
+            }
+
+            if (productsSafe && productsSafe.length > 0) {
+                const testProduct = productsSafe[0];
+                console.log('🎯 TEST PRODUCT DETAILS:', {
+                    id: testProduct.id,
+                    name: testProduct.name,
+                    price: testProduct.price,
+                    discountPrice: testProduct.discountPrice,
+                    vendorID: order.vendorID
+                });
+
+                try {
+                    const testPriceInfo = await getPromotionalPrice(testProduct, order.vendorID);
+                } catch (error) {
+                    console.error('❌ Test price info failed:', error);
+                }
+            }
+
+            console.log('🎯 About to call buildHTMLProductsListWithPromotions...');
+            var productsListHTML = '';
+            try {
+                productsListHTML = await buildHTMLProductsListWithPromotions(productsSafe, vendorIDSafe);
+                console.log('🎯 buildHTMLProductsListWithPromotions completed successfully');
+            } catch (error) {
+                console.error('❌ buildHTMLProductsListWithPromotions failed:', error);
+                console.log('🔄 Falling back to original buildHTMLProductsList');
+                productsListHTML = buildHTMLProductsList(order.products || []);
+            }
+
+            // Build totals with hard fallback
+            var productstotalHTML = '';
+            try {
+                productstotalHTML = await buildHTMLProductstotal(order);
+            } catch (e) {
+                console.error('❌ buildHTMLProductstotal failed, using fallback:', e);
+                productstotalHTML = simpleBuildTotals(order);
+            }
+
+            append_procucts_list.innerHTML = productsListHTML || '';
+            append_procucts_total.innerHTML = (productstotalHTML && productstotalHTML.trim().length>0) ? productstotalHTML : simpleBuildTotals(order);
+            console.log('✅ Totals rendered');
+            orderPreviousStatus = order.status;
+            if (order.hasOwnProperty('payment_method')) {
+                orderPaymentMethod = order.payment_method;
+            }
+
+            // Set selected status with case-insensitive matching and status normalization
+            var currentStatus = order.status || '';
+            var statusNormalized = currentStatus.toLowerCase().trim();
+
+            // Map database status values to dropdown values
+            var statusMap = {
+                'order shipped': 'Order Shipped',
+                // 'restaurantorders shipped': 'Order Shipped',
+                // 'orders shipped': 'Order Shipped',
+                'in transit': 'In Transit',
+                // 'order in transit': 'In Transit',
+                'order placed': 'Order Placed',
+                // 'restaurantorders placed': 'Order Placed',
+                // 'orders placed': 'Order Placed',
+                'order accepted': 'Order Accepted',
+                // 'restaurantorders accepted': 'Order Accepted',
+                'orders accepted': 'Order Accepted',
+                'order rejected': 'Order Rejected',
+                // 'restaurantorders rejected': 'Order Rejected',
+                // 'orders rejected': 'Order Rejected',
+                'driver pending': 'Driver Pending',
+                'driver rejected': 'Driver Rejected',
+                'order completed': 'Order Completed',
+                // 'restaurantorders completed': 'Order Completed',
+                'orders completed': 'Order Completed'
+            };
+
+            // Try exact match first
+            var matchedValue = currentStatus;
+            if (statusMap[statusNormalized]) {
+                matchedValue = statusMap[statusNormalized];
+            }
+
+            // Set selected option
+            $("#order_status option[value='" + matchedValue + "']").attr("selected", "selected");
+
+            // If no match found, try to find by partial match
+            if (!$("#order_status option[value='" + matchedValue + "']").length) {
+                $("#order_status option").each(function() {
+                    var optionValue = $(this).val().toLowerCase();
+                    if (optionValue === statusNormalized || optionValue.indexOf(statusNormalized) !== -1 || statusNormalized.indexOf(optionValue) !== -1) {
+                        $(this).attr("selected", "selected");
+                        return false; // break loop
                     }
                 });
             }
 
-            $(".edit-form-btn").click(function () {
-                var clientName = $(".client_name").val();
-                var orderStatus = $("#order_status").val();
+            if (order.status == "restaurantorders Rejected" || order.status == "Driver Rejected") {
+                $("#order_status").prop("disabled", true);
+            }
+            var price = 0;
+            if (order.authorID) {
+                orderCustomerId = order.authorID;
+            }
+            // Firebase vendor fetch removed; vendor details already filled from MySQL above
+            tip_amount = order.tip_amount;
+            jQuery("#data-table_processing").hide();
 
-                if (old_order_status != orderStatus) {
-                    // Update order status via Laravel route
+            // Load reviews for this order (MySQL-based)
+            initializeReviews();
+        })
+
+        function getTwentyFourFormat(h, timeslot) {
+            if (h < 10 && timeslot == "PM") {
+                h = parseInt(h) + 12;
+            } else if (h < 10 && timeslot == "AM") {
+                h = '0' + h;
+            }
+            return h;
+        }
+
+        $('#add-prepare-time-btn').click(function () {
+            var preparationTime = $('#prepare_time').val();
+            if (preparationTime == '') {
+                $('#add_prepare_time_error').text('{{ trans('lang.add_prepare_time_error') }}');
+                return false;
+            }
+            alert('Preparation time update is not available in this build.');
+            $('#addPreparationTimeModal').modal('hide');
+        });
+
+        async function callAjax() {
+            await $.ajax({
+                type: 'POST',
+                url: "<?php echo route('order-status-notification'); ?>",
+                data: {
+                    _token: '<?php echo csrf_token(); ?>',
+                    'fcm': manfcmTokenVendor,
+                    'vendorname': manname,
+                    'orderStatus': "restaurantorders Accepted",
+                    'subject': orderAcceptedSubject,
+                    'message': orderAcceptedMsg
+                },
+                success: function (data) {
+                    window.location.href = '{{ route('orders') }}';
+                }
+            });
+        }
+
+        $(".edit-form-btn").click(function () {
+            var clientName = $(".client_name").val();
+            var orderStatus = $("#order_status").val();
+
+            if (old_order_status != orderStatus) {
+                // Update order status via Laravel route
                 console.log('🔄 Updating order status:', { orderId: id, oldStatus: old_order_status, newStatus: orderStatus });
 
                 $.ajax({
@@ -1118,16 +1139,16 @@
                         alert('Error updating order status');
                     }
                 });
-                } else {
-                    // No status change, just close
-                    <?php if (isset($_GET['eid']) && $_GET['eid'] != '') { ?>
-                        window.location.href = "{{ route('restaurants.orders', $_GET['eid']) }}";
-                    <?php } else { ?>
-                        window.location.href = '{{ route('orders') }}';
-                    <?php } ?>
-                }
-                // Close click handler cleanly
-            });
+            } else {
+                // No status change, just close
+                <?php if (isset($_GET['eid']) && $_GET['eid'] != '') { ?>
+                    window.location.href = "{{ route('restaurants.orders', $_GET['eid']) }}";
+                <?php } else { ?>
+                    window.location.href = '{{ route('orders') }}';
+                <?php } ?>
+            }
+            // Close click handler cleanly
+        });
         // Initialize promotional pricing interceptor to catch any order loading
         function initializePromotionalPricingInterceptor() {
             console.log('🔄 ===== INITIALIZING PROMOTIONAL PRICING INTERCEPTOR =====');
@@ -2020,7 +2041,7 @@
 
             // Always show delivery charge for delivery orders (not takeaway)
             // Temporarily force show to debug
-             if (true) { // Force show for debugging
+            if (true) { // Force show for debugging
                 html = html +
                     '<tr><td class="seprater" colspan="2"><hr><span>{{ trans('lang.delivery_charge') }}</span></td></tr>';
 

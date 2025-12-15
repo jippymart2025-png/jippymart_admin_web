@@ -74,7 +74,7 @@
                                 </div>
                                 <div class="form-group row width-100">
                                     <label class="col-3 control-label">{{trans('lang.file_format')}}<span
-                                                class="required-field"></span></label>
+                                            class="required-field"></span></label>
                                     <div class="col-7">
                                         <select class="form-control file_format">
                                             <option value="">{{trans('lang.file_format')}}</option>
@@ -88,7 +88,7 @@
                     </div>
                     <div class="form-group col-12 text-center btm-btn">
                         <button type="submit" class="btn btn-primary do-not-download"><i
-                                    class="fa fa-save"></i> {{ trans('lang.download')}}</button>
+                                class="fa fa-save"></i> {{ trans('lang.download')}}</button>
                     </div>
                 </div>
             </div>
@@ -183,31 +183,38 @@
             doc.save('sales-report.pdf');
         }
         async function generateReport(orderData, headers, fileFormat) {
+
             const lowerFormat = String(fileFormat || '').toLowerCase();
+
+            // Handle PDF
             if (lowerFormat === 'pdf') {
-                document.title = "sales-report";
                 await exportAsPdf(orderData, headers);
                 return;
             }
-            if (lowerFormat !== 'csv' && lowerFormat !== 'xls' && lowerFormat !== 'xlsx') {
-                throw new Error('Unsupported export format: ' + fileFormat);
+
+            // Allowed formats
+            if (!['csv', 'xls', 'xlsx'].includes(lowerFormat)) {
+                throw new Error("Unsupported format: " + fileFormat);
             }
-            if (typeof objectExporter !== 'function') {
-                await loadScriptOnce("{{ asset('js/objectexporter.min.js') }}");
+
+            // Load exporter only once
+            if (typeof objectExporter !== "function") {
+                await loadScriptOnce("https://unpkg.com/object-exporter@3.2.1/dist/objectexporter.min.js");
             }
-            const normalizedType = (lowerFormat === 'csv') ? 'CSV' : 'XLS';
+
+            // Correct type
+            const normalizedType = (lowerFormat === "csv") ? "csv" : "excel";
+
             objectExporter({
-                type: normalizedType,
+                type: normalizedType,   // <-- FIXED
                 exportable: orderData,
                 headers: headers,
-                fileName: 'sales-report',
-                columnSeparator: ',',
-                headerStyle: 'font-weight: bold; padding: 5px; border: 1px solid #dddddd;',
-                cellStyle: 'border: 1px solid lightgray; margin-bottom: -1px;',
-                sheetName: 'sales-report',
-                documentTitle: '',
+                fileName: "sales-report",
+                columnSeparator: ",",
+                sheetName: "sales-report"
             });
         }
+
         function formatCurrency(v){
             v = parseFloat(v || 0).toFixed(decimal_degits);
             return symbolAtRight ? (v + currentCurrency) : (currentCurrency + v);
@@ -216,12 +223,14 @@
             return {
                 'restaurantorders ID': r.order_id,
                 'Restaurant Name': r.restaurant,
-                'Driver Name': r.driver_name,
-                'Driver Email': (r.driver_email||''),
-                'Driver Phone': (r.driver_phone||''),
-                'User Name': r.user_name,
-                'User Email': (r.user_email||''),
-                'User Phone': (r.user_phone||''),
+                'Driver Name': r.driver_name || '',
+                'Driver Email': r.driver_email || '',
+                'Driver Phone': r.driver_phone || '',
+
+                'User Name': r.user_name || '',
+                'User Email': r.user_email || '',
+                'User Phone': r.user_phone || '',
+
                 'Date': r.date,
                 'Category': r.category,
                 'Payment Method': r.payment_method,
@@ -320,10 +329,10 @@
             $(".error_top").html("");
             if (fileFormat == 'xls' || fileFormat == 'csv' || fileFormat == "pdf") {
                 headers = headerArray;
-                var script = document.createElement("script");
-                script.setAttribute("src", "https://unpkg.com/object-exporter@3.2.1/dist/objectexporter.min.js");
+                // var script = document.createElement("script");
+                // script.setAttribute("src", "https://unpkg.com/object-exporter@3.2.1/dist/objectexporter.min.js");
                 var head = document.head;
-                head.insertBefore(script, head.firstChild);
+                // head.insertBefore(script, head.firstChild);
             } else {
                 for (var k = 0; k < headerArray.length; k++) {
                     headers.push({

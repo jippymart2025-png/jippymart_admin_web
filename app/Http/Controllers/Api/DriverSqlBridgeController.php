@@ -85,44 +85,56 @@ class DriverSqlBridgeController extends FirestoreUtilsController
         $request->validate([
             'id' => 'nullable|string',
             'firebase_id' => 'nullable|string',
+            'wallet_amount' => 'nullable|numeric',
+            'deliveryAmount' => 'nullable|numeric',
         ]);
 
-        // Prefer firebase_id → else use id
         $identifier = $request->firebase_id ?? $request->id;
 
-        if(!$identifier){
+        if (!$identifier) {
             return response()->json([
                 "success" => false,
                 "message" => "id or firebase_id is required"
-            ],422);
+            ], 422);
         }
 
-        // Fetch using either one
         $user = User::where('firebase_id', $identifier)->first();
 
         if (!$user) {
             return response()->json([
                 "success" => false,
                 "message" => "Driver not found"
-            ],404);
+            ], 404);
         }
 
         $columns = Schema::getColumnListing('users');
         $exclude = ['id','firebase_id','created_at','updated_at'];
-        $allowed = array_diff($columns,$exclude);
+        $allowed = array_diff($columns, $exclude);
         $incoming = $request->all();
 
-        if(isset($incoming['shippingAddress'])){
+        if (isset($incoming['shippingAddress'])) {
             $incoming['shippingAddress'] = json_encode($incoming['shippingAddress']);
         }
 
         $payload = array_intersect_key($incoming, array_flip($allowed));
 
-        if(empty($payload)){
+        /** 🔹 ADD wallet_amount */
+        if (isset($payload['wallet_amount'])) {
+            $payload['wallet_amount'] =
+                ($user->wallet_amount ?? 0) + $payload['wallet_amount'];
+        }
+
+        /** 🔹 ADD deliveryAmount */
+        if (isset($payload['deliveryAmount'])) {
+            $payload['deliveryAmount'] =
+                ($user->deliveryAmount ?? 0) + $payload['deliveryAmount'];
+        }
+
+        if (empty($payload)) {
             return response()->json([
                 "success" => false,
                 "message" => "No valid fields to update"
-            ],422);
+            ], 422);
         }
 
         $user->update($payload);
@@ -242,20 +254,29 @@ class DriverSqlBridgeController extends FirestoreUtilsController
             'amount' => 'required|numeric',
         ]);
 
-        $updated = User::query()
-            ->where('firebase_id', $request->user_id)
-            ->increment('deliveryAmount', (float) $request->amount);
+        $user = User::where('firebase_id', $request->user_id)->first();
 
-        if (!$updated) {
+        if (!$user) {
             return response()->json([
                 'success' => false,
                 'message' => 'Driver not found',
             ], 404);
         }
 
+        // Update deliveryAmount: add if positive, subtract if negative
+        $user->deliveryAmount = ($user->deliveryAmount ?? 0) + $request->amount;
+
+        // Optional: prevent negative deliveryAmount
+        if ($user->deliveryAmount < 0) {
+            $user->deliveryAmount = 0;
+        }
+
+        $user->save();
+
         return response()->json([
             'success' => true,
             'message' => 'Delivery amount updated',
+            'deliveryAmount' => $user->deliveryAmount, // return the updated amount
         ]);
     }
 

@@ -44,6 +44,11 @@
                                     </select>
                                 </div>
                                 <div class="select-box pl-3">
+                                    <select class="form-control zone_selector">
+                                        <option value="" disabled selected>{{trans('lang.select_zone')}}</option>
+                                    </select>
+                                </div>
+                                <div class="select-box pl-3">
                                     <div id="daterange"><i class="fa fa-calendar"></i>&nbsp;
                                         <span></span>&nbsp; <i class="fa fa-caret-down"></i>
                                     </div>
@@ -89,6 +94,7 @@
                                             <th>{{trans('lang.email')}}</th>
                                             <th>{{trans('lang.phone_number')}}</th>
                                             <th>{{trans('lang.date')}}</th>
+                                            <th>{{trans('lang.zone')}}</th>
                                             <th>{{trans('lang.document_plural')}}</th>
                                             <th>{{trans('lang.driver_active')}}</th>
                                             <th>{{trans('lang.driver_online')}}</th>
@@ -126,11 +132,54 @@
         // Load placeholder image from SQL
         placeholderImage = '{{ asset('images/placeholder.png') }}';
 
+        // Initialize zone variables
+        var zoneIdToName = {};
+        var zonesLoaded = false;
+
+        // Load zones from SQL
+        var loadZonesPromise = new Promise(function(resolve){
+            console.log('🔄 Loading zones from SQL...');
+            $.ajax({
+                url: '{{ route("drivers.zones") }}',
+                method: 'GET',
+                success: function(response) {
+                    console.log('📊 Zones API response:', response);
+                    if (response.success && response.data && response.data.length > 0) {
+                        response.data.forEach(function(zone) {
+                            zoneIdToName[zone.id] = zone.name;
+                            // Add zone to selector
+                            $('.zone_selector').append(
+                                $('<option></option>').val(zone.id).text(zone.name)
+                            );
+                        });
+                        console.log('✅ Zones loaded from SQL (' + response.data.length + ' zones):', zoneIdToName);
+                    } else {
+                        console.warn('⚠️ No zones found in database');
+                    }
+                    zonesLoaded = true;
+                    resolve(zoneIdToName);
+                },
+                error: function(xhr, status, error) {
+                    console.error('❌ Error loading zones:', error);
+                    console.error('Response:', xhr.responseText);
+                    zonesLoaded = true;
+                    resolve(zoneIdToName);
+                }
+            });
+        });
+
         $('.status_selector').select2({
             placeholder: "{{trans('lang.select_status')}}",
             minimumResultsForSearch: Infinity,
             allowClear: true
         });
+
+        $('.zone_selector').select2({
+            placeholder: "{{trans('lang.select_zone')}}",
+            minimumResultsForSearch: Infinity,
+            allowClear: true
+        });
+
         $('select').on("select2:unselecting", function(e) {
             var self = $(this);
             setTimeout(function() {
@@ -156,6 +205,9 @@
         }
         setDate();
         $('.filteredRecords').change(async function() {
+            $('#driverTable').DataTable().ajax.reload();
+        });
+        $('.zone_selector').change(async function() {
             $('#driverTable').DataTable().ajax.reload();
         });
         $(document).ready(function() {
@@ -193,6 +245,8 @@
 
                     // Get filter values
                     var status=$('.status_selector').val();
+                    var zoneValue = $('.zone_selector').val();
+
                     var daterangepicker = $('#daterange').data('daterangepicker');
                     var startDate = '';
                     var endDate = '';
@@ -224,6 +278,7 @@
                             length: length,
                             search: { value: searchValue },
                             isActive: status,
+                            zone:zoneValue,
                             isDocumentVerify: isDocumentVerify,
                             startDate: startDate,
                             endDate: endDate
@@ -258,6 +313,7 @@
 
                                 // Format date from SQL response
                                 var createdAt = childData.createdAt || '';
+                                var zoneName = childData.zone_name || childData.zone || '---';
 
                                 var driverImage=childData.profilePictureURL == '' || childData.profilePictureURL == null ? '<img alt="" width="100%" style="width:70px;height:70px;" src="' + placeholderImage + '" alt="image">' : '<img onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" alt="" width="100%" style="width:70px;height:70px;" src="' + childData.profilePictureURL + '" alt="image">'
                                 var shortedEmail = shortEmail(childData.email || '');
@@ -269,6 +325,7 @@
                                     shortedEmail,
                                     childData.phoneNumber? childData.phoneNumber:' ',
                                     createdAt,
+                                    zoneName,
                                     '<a href="'+document_list_view+'"><i class="fa fa-file"></i></a>',
                                     isActive? '<label class="switch"><input type="checkbox" checked id="'+id+'" name="isActive"><span class="slider round"></span></label>':'<label class="switch"><input type="checkbox" id="'+id+'" name="isActive"><span class="slider round"></span></label>',
                                     childData.isActive? '<label class="switch"><input type="checkbox" checked id="'+id+'" name="isOnline"><span class="slider round"></span></label>':'<label class="switch"><input type="checkbox" id="'+id+'" name="isOnline"><span class="slider round"></span></label>',
@@ -316,7 +373,7 @@
                             return data;
                         }
                     },
-                    {orderable: false,targets: (checkDeletePermission)? [0,5,6,7,8,9,10]:[4,5,6,7,8,9]},
+                    {orderable: false,targets: (checkDeletePermission)? [0,5,6,7,8,9,10,11]:[4,5,6,7,8,9,10]},
                 ],
                 "language": {
                     "zeroRecords": "{{trans("lang.no_record_found")}}",

@@ -127,16 +127,23 @@ class FirestoreUtilsController extends Controller
                 ->where('id', $orderId)
                 ->first();
 
+            // If no order found
             if (!$order) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Order not found'
+                    'message' => 'Order not found',
+                    'data' => null
                 ], 404);
             }
 
             $order = (array) $order;
 
-            // Fields that may contain JSON strings
+            // Convert takeAway: 0 → false, 1 → true
+            if (isset($order['takeAway'])) {
+                $order['takeAway'] = $order['takeAway'] == 1 ? true : false;
+            }
+
+            // Fields expected to contain JSON
             $jsonFields = [
                 'products',
                 'address',
@@ -150,11 +157,20 @@ class FirestoreUtilsController extends Controller
             ];
 
             foreach ($jsonFields as $field) {
-                if (!empty($order[$field]) && is_string($order[$field])) {
-                    $decoded = json_decode($order[$field], true);
+                if (!empty($order[$field])) {
 
-                    // Check if valid JSON before assigning
-                    if (json_last_error() === JSON_ERROR_NONE) {
+                    if (is_string($order[$field])) {
+                        $decoded = json_decode($order[$field], true);
+
+                        // If JSON decode fails → return error
+                        if (json_last_error() !== JSON_ERROR_NONE) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => "Invalid JSON format in field: $field",
+                                'data' => null
+                            ], 400);
+                        }
+
                         $order[$field] = $decoded;
                     }
                 }
@@ -162,14 +178,16 @@ class FirestoreUtilsController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $order,
+                'data' => $order
             ]);
 
         } catch (\Exception $e) {
             Log::error('getOrderByOrderId error: '.$e->getMessage());
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching order',
+                'data' => null
             ], 500);
         }
     }
@@ -1072,7 +1090,7 @@ class FirestoreUtilsController extends Controller
             // author = user_id (make sure this is correct)
             // ---------------------------------------------------------
             DB::table('users')
-                ->where('id', $request->author)
+                ->where('firebase_id', $request->author)
                 ->update([
                     'vendorID' => $data['id'],
                     '_updated_at' => now()
@@ -2173,27 +2191,23 @@ class FirestoreUtilsController extends Controller
     public function getAvalibleDrivers(Request $request)
     {
         try {
-            $vendorId = $request->input('vendorID') ?? $request->user()->vendorID ?? null;
-
-            if ($vendorId) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Vendor ID is required'
-                ], 400);
-            }
+            $zoneId = $request->input('zoneId'); // optional
 
             $drivers = DB::table('users')
                 ->where('role', 'driver')
                 ->where('active', true)
                 ->where('isActive', true)
+                ->when(!is_null($zoneId), function ($query) use ($zoneId) {
+                    $query->where('zoneId', $zoneId);
+                })
                 ->get();
 
             // Decode JSON fields
             $drivers = $drivers->map(function ($driver) {
-                $driver->userBankDetails = $driver->userBankDetails ? json_decode($driver->userBankDetails) : null;
+                $driver->userBankDetails   = $driver->userBankDetails ? json_decode($driver->userBankDetails) : null;
                 $driver->inProgressOrderID = $driver->inProgressOrderID ? json_decode($driver->inProgressOrderID) : [];
-                $driver->orderRequestData = $driver->orderRequestData ? json_decode($driver->orderRequestData) : [];
-                $driver->location = $driver->location ? json_decode($driver->location) : null;
+                $driver->orderRequestData  = $driver->orderRequestData ? json_decode($driver->orderRequestData) : [];
+                $driver->location          = $driver->location ? json_decode($driver->location) : null;
                 return $driver;
             });
 
@@ -2204,6 +2218,7 @@ class FirestoreUtilsController extends Controller
 
         } catch (\Exception $e) {
             Log::error('getAvalibleDrivers error: ' . $e->getMessage());
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching drivers'

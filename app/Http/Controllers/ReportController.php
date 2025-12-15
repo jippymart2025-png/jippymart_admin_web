@@ -112,10 +112,19 @@ class ReportController extends Controller
             WHEN STR_TO_DATE(o.createdAt, '%Y-%m-%d %H:%i:%s') IS NOT NULL THEN STR_TO_DATE(o.createdAt, '%Y-%m-%d %H:%i:%s')
             ELSE NULL END";
 
+        // Build query with proper joins that handle multiple ID formats (id, firebase_id, _id)
         $q = DB::table('restaurant_orders as o')
             ->leftJoin('vendors as v','v.id','=','o.vendorID')
-            ->leftJoin('users as d','d.id','=','o.driverID')
-            ->leftJoin('users as u','u.id','=','o.authorID')
+            ->leftJoin('users as d', function($join) {
+                $join->on('d.id', '=', 'o.driverID')
+                    ->orOn('d.firebase_id', '=', 'o.driverID')
+                    ->orOn('d._id', '=', 'o.driverID');
+            })
+            ->leftJoin('users as u', function($join) {
+                $join->on('u.id', '=', 'o.authorID')
+                    ->orOn('u.firebase_id', '=', 'o.authorID')
+                    ->orOn('u._id', '=', 'o.authorID');
+            })
             ->select(
                 'o.*',
                 'v.title as vendor_title',
@@ -145,8 +154,8 @@ class ReportController extends Controller
         if ($categoryId) {
             $q->where(function($qq) use ($categoryId) {
                 $qq->where('v.categoryID', $categoryId)
-                   ->orWhere('v.categoryID','like','%"'.$categoryId.'"%')
-                   ->orWhere('v.categoryID','like','%'.$categoryId.'%');
+                    ->orWhere('v.categoryID','like','%"'.$categoryId.'"%')
+                    ->orWhere('v.categoryID','like','%'.$categoryId.'%');
             });
         }
         if ($start && $end) {
@@ -194,8 +203,16 @@ class ReportController extends Controller
 
         $out = [];
         foreach ($rows as $r) {
-            $driverName = trim(($r->d_first ?? '').' '.($r->d_last ?? ''));
-            $userName = trim(($r->u_first ?? '').' '.($r->u_last ?? ''));
+            $driverName = trim(
+                ($r->d_first ?: '') . ' ' .
+                ($r->d_last ?: '')
+            );
+
+            $userName = trim(
+                ($r->u_first ?: '') . ' ' .
+                ($r->u_last ?: '')
+            );
+
             $rawDate = $r->parsed_created_at ?? $r->createdAt ?? '';
             $dateTxt = '';
             if (!empty($rawDate)) {

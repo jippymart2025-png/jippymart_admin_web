@@ -17,22 +17,16 @@ class DriverControllerLogin extends Controller
             "password" => "required"
         ]);
 
-        // Check if user exists
-        $user = User::where("email", $request->email)->first();
+        // Check if user exists and has driver role
+        $user = User::where("email", $request->email)
+            ->where("role", "driver")
+            ->first();
 
         if (!$user) {
             return response()->json([
                 "success" => false,
-                "message" => "No user found for that email."
+                "message" => "No driver account found for that email. Only users with driver role can login."
             ], 404);
-        }
-
-        // Check driver role only
-        if ($user->role !== "driver") {
-            return response()->json([
-                "success" => false,
-                "message" => "This user is not created in driver application."
-            ], 403);
         }
 
         // Check active
@@ -44,6 +38,14 @@ class DriverControllerLogin extends Controller
         }
 
         // Check password
+        if (empty($user->password)) {
+            return response()->json([
+                "success" => false,
+                "message" => "Password not set for this user. Please reset your password."
+            ], 401);
+        }
+
+        // Verify password
         if (!Hash::check($request->password, $user->password)) {
             return response()->json([
                 "success" => false,

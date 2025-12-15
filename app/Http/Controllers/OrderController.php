@@ -1177,36 +1177,61 @@ class OrderController extends Controller
                 ], 404);
             }
 
-            // Build driver JSON
-            $driverData = [
-                'id' => $driver->id,
-                'firstName' => $driver->firstName ?? '',
-                'lastName' => $driver->lastName ?? '',
-                'email' => $driver->email ?? '',
-                'phoneNumber' => $driver->phoneNumber ?? '',
-                'carName' => $driver->carName ?? '',
-                'carNumber' => $driver->carNumber ?? ''
-            ];
+            // IMPORTANT: Do NOT directly assign driverID to the order
+            // Instead, add order ID to driver's orderRequestData to trigger popup in driver app
+            // Driver must accept/reject through the app, then driverID will be set automatically
 
-            DB::table('restaurant_orders')
-                ->where('id', $id)
-                ->update([
-                    'driverID' => $driverId,
-                    'driver' => json_encode($driverData)
+            // Append this order ID to the driver's orderRequestData (JSON array) without duplicating
+            try {
+                $orderRequestData = [];
+                $raw = $driver->orderRequestData ?? '[]';
+                if (is_string($raw) && trim($raw) !== '') {
+                    $decoded = json_decode($raw, true);
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                        $orderRequestData = $decoded;
+                    }
+                } elseif (is_array($raw)) {
+                    $orderRequestData = $raw;
+                }
+
+                if (!in_array($id, $orderRequestData, true)) {
+                    $orderRequestData[] = $id;
+                    DB::table('users')
+                        ->where('id', $driverId)
+                        ->update(['orderRequestData' => json_encode($orderRequestData)]);
+
+                    // Log activity
+                    \Log::info('✅ Order request sent to driver (pending acceptance):', [
+                        'order_id' => $id,
+                        'driver_id' => $driverId,
+                        'driver_name' => ($driver->firstName ?? '') . ' ' . ($driver->lastName ?? '')
+                    ]);
+                } else {
+                    // Order already in request list
+                    \Log::info('ℹ️ Order already in driver request list:', [
+                        'order_id' => $id,
+                        'driver_id' => $driverId
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                \Log::error('❌ Could not update driver orderRequestData on manual assign', [
+                    'order_id' => $id,
+                    'driver_id' => $driverId,
+                    'error' => $e->getMessage()
                 ]);
 
-            // Log activity
-            \Log::info('✅ Driver assigned to order:', [
-                'order_id' => $id,
-                'driver_id' => $driverId,
-                'driver_name' => ($driver->firstName ?? '') . ' ' . ($driver->lastName ?? '')
-            ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error sending order request to driver: ' . $e->getMessage()
+                ], 500);
+            }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Driver assigned successfully',
+                'message' => 'Order request sent to driver. Driver will receive a notification to accept or reject the order.',
                 'driver_id' => $driverId,
-                'driver_name' => ($driver->firstName ?? '') . ' ' . ($driver->lastName ?? '')
+                'driver_name' => ($driver->firstName ?? '') . ' ' . ($driver->lastName ?? ''),
+                'pending_acceptance' => true
             ]);
 
         } catch (\Exception $e) {
@@ -1241,6 +1266,7 @@ class OrderController extends Controller
             $oldDriverData = !empty($order->driver) ? json_decode($order->driver, true) : [];
             $oldDriverName = ($oldDriverData['firstName'] ?? '') . ' ' . ($oldDriverData['lastName'] ?? '');
 
+            // Clear driver assignment from order
             DB::table('restaurant_orders')
                 ->where('id', $id)
                 ->update([
@@ -1248,16 +1274,101 @@ class OrderController extends Controller
                     'driver' => null
                 ]);
 
+            // Remove this order ID from driver's orderRequestData
+            // Case 1: Driver was already assigned (driverID is set)
+            if (!empty($oldDriverId)) {
+                try {
+                    $raw = DB::table('users')->where('id', $oldDriverId)->value('orderRequestData');
+                    $orderRequestData = [];
+                    if (is_string($raw) && trim($raw) !== '') {
+                        $decoded = json_decode($raw, true);
+                        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                            $orderRequestData = $decoded;
+                        }
+                    } elseif (is_array($raw)) {
+                        $orderRequestData = $raw;
+                    }
+
+                    $updated = array_values(array_filter($orderRequestData, function ($val) use ($id) {
+                        return (string) $val !== (string) $id;
+                    }));
+
+                    DB::table('users')
+                        ->where('id', $oldDriverId)
+                        ->update(['orderRequestData' => json_encode($updated)]);
+                } catch (\Throwable $e) {
+                    \Log::warning('⚠️ Could not clean orderRequestData on driver removal', [
+                        'order_id' => $id,
+                        'driver_id' => $oldDriverId,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            } else {
+                // Case 2: No driverID set (request was sent but not accepted yet)
+                // Find and remove order ID from any driver's orderRequestData
+                try {
+                    $drivers = DB::table('users')
+                        ->where('role', 'driver')
+                        ->whereNotNull('orderRequestData')
+                        ->get(['id', 'orderRequestData']);
+
+                    foreach ($drivers as $driver) {
+                        $raw = $driver->orderRequestData;
+                        $orderRequestData = [];
+                        if (is_string($raw) && trim($raw) !== '') {
+                            $decoded = json_decode($raw, true);
+                            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                                $orderRequestData = $decoded;
+                            }
+                        } elseif (is_array($raw)) {
+                            $orderRequestData = $raw;
+                        }
+
+                        // Check if this driver has the order ID in their request list
+                        if (in_array($id, $orderRequestData, true)) {
+                            $updated = array_values(array_filter($orderRequestData, function ($val) use ($id) {
+                                return (string) $val !== (string) $id;
+                            }));
+
+                            DB::table('users')
+                                ->where('id', $driver->id)
+                                ->update(['orderRequestData' => json_encode($updated)]);
+
+                            \Log::info('✅ Removed pending order request from driver:', [
+                                'order_id' => $id,
+                                'driver_id' => $driver->id
+                            ]);
+                            break; // Found and removed, no need to check other drivers
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    \Log::warning('⚠️ Could not remove pending order request from drivers', [
+                        'order_id' => $id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
             // Log activity
-            \Log::info('✅ Driver removed from order:', [
-                'order_id' => $id,
-                'driver_id' => $oldDriverId,
-                'driver_name' => $oldDriverName
-            ]);
+            if (!empty($oldDriverId)) {
+                \Log::info('✅ Driver removed from order:', [
+                    'order_id' => $id,
+                    'driver_id' => $oldDriverId,
+                    'driver_name' => $oldDriverName
+                ]);
+            } else {
+                \Log::info('✅ Pending order request cancelled:', [
+                    'order_id' => $id
+                ]);
+            }
+
+            $message = !empty($oldDriverId)
+                ? 'Driver removed successfully'
+                : 'Pending order request cancelled successfully';
 
             return response()->json([
                 'success' => true,
-                'message' => 'Driver removed successfully',
+                'message' => $message,
                 'old_driver_id' => $oldDriverId,
                 'old_driver_name' => $oldDriverName
             ]);

@@ -37,7 +37,6 @@ class UserProfileController extends Controller
             Log::info('getUserProfile: Fetching customer with firebase_id: ' . $firebase_id);
             // Find customer by firebase_id only
             $user = User::where('firebase_id', $firebase_id)
-                ->where('role', 'customer')
                 ->first();
 
             if (!$user) {

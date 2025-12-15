@@ -109,7 +109,7 @@ class MobileSqlBridgeController extends Controller
      */
     public function getUsedCoupons(Request $request): JsonResponse
     {
-        $userId = $this->resolveUserId($request);
+        $userId = $request->query('userId');
 
         if (!$userId) {
             return $this->error('User ID is required', 422);
@@ -122,13 +122,13 @@ class MobileSqlBridgeController extends Controller
             ->map(function ($row) {
                 return [
                     'couponId' => $row->couponId,
-                    'usedAt' => $row->usedAt,
+                    'usedAt'   => $row->usedAt,
                 ];
             })
             ->values();
 
         return $this->success([
-            'userId' => $userId,
+            'userId'  => $userId,
             'coupons' => $records,
         ]);
     }
